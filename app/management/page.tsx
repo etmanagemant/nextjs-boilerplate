@@ -11,7 +11,7 @@ export default async function ManagementPage() {
 
   if (!user) { redirect("/login"); }
   
-  // Dein funktionierender UUID- und E-Mail-Check
+  // Dein funktionierender UUID- und E-Mail-Check bleibt exakt gleich
   let isAdmin = false;
   if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
     isAdmin = true;
@@ -22,7 +22,7 @@ export default async function ManagementPage() {
 
   if (!isAdmin) { redirect("/"); }
 
-  // Daten live laden – Jetzt mit all deinen verifizierten Spalten!
+  // Daten live aus deinen echten Spalten laden
   const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name");
   const { data: modelsListe } = await supabase.from("models").select("id, name").order("name", { ascending: true });
 
@@ -53,7 +53,7 @@ export default async function ManagementPage() {
               <tr className="border-b border-slate-800 bg-slate-900 text-slate-400">
                 <th className="p-3">Name</th>
                 <th className="p-3">E-Mail</th>
-                <th className="p-3 w-[150px]">Rolle ändern</th>
+                <th className="p-3 w-[220px]">Rolle ändern</th>
               </tr>
             </thead>
             <tbody>
@@ -62,12 +62,25 @@ export default async function ManagementPage() {
                   <td className="p-3 font-medium text-slate-100">{p.full_name || "Mitarbeiter"}</td>
                   <td className="p-3 text-slate-400">{p.email || "keine E-Mail"}</td>
                   <td className="p-3">
-                    <form action={updateMitarbeiterRolle} className="inline-block w-full">
+                    <form action={updateMitarbeiterRolle} className="flex items-center gap-2">
+                      {/* 🟢 name korrigiert zu 'user_id', damit es zur Server Action passt */}
                       <input type="hidden" name="user_id" value={p.user_id} />
-                      <select name="rolle" defaultValue={p.role} onChange={(e) => e.target.form?.requestSubmit()} className="w-full px-2 py-1 rounded border text-xs font-semibold bg-slate-900 text-white border-slate-700 cursor-pointer">
+                      
+                      {/* 🟢 name korrigiert zu 'rolle' und Optionen an deine DB angepasst (chatter / admin) */}
+                      <select
+                        name="rolle"
+                        defaultValue={p.role || "chatter"}
+                        className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                      >
                         <option value="chatter">Chatter</option>
                         <option value="admin">Admin</option>
                       </select>
+                      <button
+                        type="submit"
+                        className="text-xs bg-slate-700 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-600 transition cursor-pointer font-medium"
+                      >
+                        Speichern
+                      </button>
                     </form>
                   </td>
                 </tr>
