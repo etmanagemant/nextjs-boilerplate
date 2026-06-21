@@ -11,8 +11,6 @@ type CreateShiftFormProps = {
 export default function CreateShiftForm({ sichereProfile, sichereModels }: CreateShiftFormProps) {
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  
-  // Zustand, um zu merken, welche Models gerade angehakt sind
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
 
   function handleCheckboxChange(modelName: string, isChecked: boolean) {
@@ -25,19 +23,24 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setLoading(false); // Verhindert endloses Hängen, falls etwas schiefläuft
     setLoading(true);
     setStatusMsg(null);
 
     const formData = new FormData(e.currentTarget);
     
     try {
-      await addShift(formData);
-      setStatusMsg({ type: "success", text: "✓ Schicht(en) mit Mass Messages erfolgreich angelegt!" });
-      e.currentTarget.reset();
-      setSelectedModels([]); // Setzt die Eingabefelder zurück
+      // 🟢 KORRIGIERT: Wir fangen die echte Antwort des Servers ab!
+      const res = await addShift(formData);
+      
+      if (res && res.success) {
+        setStatusMsg({ type: "success", text: "✓ Schicht(en) mit Mass Messages erfolgreich angelegt!" });
+        e.currentTarget.reset();
+        setSelectedModels([]);
+      } else {
+        setStatusMsg({ type: "error", text: `⚠ Fehler: ${res?.error || "Unbekannter Fehler"}` });
+      }
     } catch (err) {
-      setStatusMsg({ type: "error", text: "⚠ Fehler beim Anlegen der Schicht. Bitte erneut versuchen." });
+      setStatusMsg({ type: "error", text: "⚠ Netzwerkfehler beim Anlegen der Schicht. Bitte erneut versuchen." });
     } finally {
       setLoading(false);
     }
@@ -80,7 +83,7 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
         </div>
       </div>
 
-      {/* 🟢 NEU: DYNAMISCHE TEXTFELDER FÜR MASS MESSAGES */}
+      {/* DYNAMISCHE TEXTFELDER FÜR MASS MESSAGES */}
       {selectedModels.length > 0 && (
         <div className="space-y-3 bg-slate-900/60 p-4 rounded-md border border-slate-800">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mass Messages für ausgewählte Models eintragen:</h3>

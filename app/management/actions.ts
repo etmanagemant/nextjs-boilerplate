@@ -32,7 +32,7 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
-// 🟢 KORRIGIERT: Erfüllt die Pflichtfeld-Bedingung der 'shifts'-Tabelle zu 100%
+// 🟢 KORRIGIERT: Gibt jetzt eine unmissverständliche Antwort an den Browser zurück!
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 
   const dateStr = formData.get("date") as string; 
@@ -48,33 +48,32 @@ export async function addShift(formData: FormData) {
       const inserts = modelNames.map(name => {
         const individuelleNachricht = formData.get(`mass_message_${name}`) as string;
         const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Model: ${name} | MESSAGE_START:${individuelleNachricht}:MESSAGE_END`;
-        
-        // Generiert eine sichere Zufallszahl zwischen 1000 und 9999999 für das Pflichtfeld
         const zufallsSlotId = Math.floor(Math.random() * 9999000) + 1000;
 
         return {
-          shift_date: dateStr,      // Entspricht exakt deiner Spalte 'shift_date'
-          time_slot_id: zufallsSlotId, // 🟢 ERFÜLLT DAS PFLICHTFELD und verhindert Kollisionen!
-          notes: details            // Entspricht deiner Spalte 'notes'
+          shift_date: dateStr,
+          time_slot_id: zufallsSlotId,
+          notes: details
         };
       });
 
       await supabaseServer.from("shifts").insert(inserts);
     } else {
-      // Ohne Model
       const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Kein Model`;
       const zufallsSlotId = Math.floor(Math.random() * 9999000) + 1000;
 
       await supabaseServer.from("shifts").insert([
-        { 
-          shift_date: dateStr, 
-          time_slot_id: zufallsSlotId, 
-          notes: details 
-        }
+        { shift_date: dateStr, time_slot_id: zufallsSlotId, notes: details }
       ]);
     }
     
+    // Cache leeren
     revalidatePath("/management");
     revalidatePath("/");
+
+    // 🟢 HIER IST DIE ANTWORT FÜR DEN BROWSER:
+    return { success: true };
   }
+  
+  return { success: false, error: "Ungültige Formulardaten" };
 }
