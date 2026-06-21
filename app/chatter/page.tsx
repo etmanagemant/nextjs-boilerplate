@@ -10,6 +10,7 @@ type AssignmentRow = {
   model_id?: number | null;
   started_at: string | null;
   ended_at: string | null;
+  models?: { name: string } | null;
 };
 
 function toDurationHours(startedAt: string | null, endedAt: string | null) {
@@ -20,6 +21,30 @@ function toDurationHours(startedAt: string | null, endedAt: string | null) {
   return diffMs / (1000 * 60 * 60);
 }
 
+function LiveTimer({ startedAt }: { startedAt: string }) {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const calc = () => {
+      const diff = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+      setSeconds(diff);
+    };
+    calc();
+    const interval = setInterval(() => setSeconds(p => p + 1), 1000);
+    return () => clearInterval(interval);
+  }, [startedAt]);
+
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return (
+    <span className="text-emerald-400 font-mono font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded ml-2">
+      ⏱️ {pad(hrs)}:{pad(mins)}:{pad(secs)}
+    </span>
+  );
+}
 export default function ChatterPage() {
   const supabase = createClient();
   const [rows, setRows] = useState<AssignmentRow[]>([]);
@@ -39,47 +64,34 @@ export default function ChatterPage() {
 
   const refresh = useCallback(async () => {
     if (!currentUserEmail && !currentUserId) return;
-
     const { data, error } = await supabase
       .from("shift_assignments")
-      .select("id, shift_id, chatter_id, model_id, started_at, ended_at")
+      .select("id, shift_id, chatter_id, model_id, started_at, ended_at, models(name)")
       .or(`chatter_id.eq.${currentUserEmail},chatter_id.eq.${currentUserId}`)
       .order("id", { ascending: false })
       .limit(50);
 
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    setRows((data ?? []) as AssignmentRow[]);
+    if (error) { setErr(error.message); return; }
+    setRows((data ?? []) as any[]);
   }, [supabase, currentUserEmail, currentUserId]);
 
   useEffect(() => {
     if (!currentUserEmail && !currentUserId) return;
-    
     let isMounted = true;
     (async () => {
-      setLoading(true);
-      setErr(null);
-
+      setLoading(true); setErr(null);
       const { data, error } = await supabase
         .from("shift_assignments")
-        .select("id, shift_id, chatter_id, model_id, started_at, ended_at")
+        .select("id, shift_id, chatter_id, model_id, started_at, ended_at, models(name)")
         .or(`chatter_id.eq.${currentUserEmail},chatter_id.eq.${currentUserId}`)
         .order("id", { ascending: false })
         .limit(50);
 
       if (!isMounted) return;
-      if (error) {
-        setErr(error.message);
-        setRows([]);
-        setLoading(false);
-        return;
-      }
-      setRows((data ?? []) as AssignmentRow[]);
+      if (error) { setErr(error.message); setRows([]); setLoading(false); return; }
+      setRows((data ?? []) as any[]);
       setLoading(false);
     })();
-
     return () => { isMounted = false; };
   }, [supabase, currentUserEmail, currentUserId]);
 
@@ -90,46 +102,80 @@ export default function ChatterPage() {
   const activeShift = useMemo(() => {
     return rows.find(r => r.started_at && !r.ended_at);
   }, [rows]);
-
   async function triggerGlobalStart() {
     if (!currentUserEmail) {
       setErr("Benutzerdaten werden noch geladen. Bitte kurz warten.");
       return;
     }
     setErr(null);
-    const { error } = await supabase
-      .from("shift_assignments")
-      .insert([
-        {
-          shift_id: 1, 
-          chatter_id: currentUserEmail,
-          started_at: new Date().toISOString(),
-          ended_at: null
-        }
-      ]);
 
-    if (error) {
-      setErr(error.message);
+    const heuteISO = new Date().toISOString().split("T")[0];
+
+    // 1. Suche im Kalender nach geplanten Schichten für diesen Mitarbeiter am heutigen Tag
+    const { data: kalenderSchichten, error: kalenderError } = await supabase
+      .from("shifts")
+      .select("*")
+      .eq("shift_date", heuteISO);
+
+    if (kalenderError) { setErr(kalenderError.message); return; }
+
+    // Filtere alle Schichten, bei denen dieser Chatter im JSON steht
+    const meineGeplantenModels: string[] = [];
+    (kalenderSchichten || []).forEach((schicht) => {
+      try {
+        if (schicht.notes && schicht.notes.startsWith("{")) {
+          const parsed = JSON.parse(schicht.notes);
+          if (parsed.mitarbeiter === currentUserEmail && parsed.model) {
+            meineGeplantenModels.push(parsed.model);
+          }
+        }
+      } catch (e) {}
+    });
+
+    if (meineGeplantenModels.length === 0) {
+      setErr("⚠ Für heute wurden keine Schichten für dich im Kalender eingetragen. Bitte wende dich an einen Admin.");
       return;
     }
+
+    // 2. Hole die IDs der Models aus der Datenbank
+    const { data: dbModels } = await supabase
+      .from("models")
+      .select("id, name")
+      .in("name", meineGeplantenModels);
+
+    if (!dbModels || dbModels.length === 0) {
+      setErr("⚠ Die zugewiesenen Models wurden in der Datenbank nicht gefunden.");
+      return;
+    }
+
+    // 3. Stemple für jedes zugewiesene Model eine aktive Zeile in die Stechuhr ein
+    const nun = new Date().toISOString();
+    const eintraegeliste = dbModels.map((m) => ({
+      shift_id: 1,
+      chatter_id: currentUserEmail,
+      model_id: m.id,
+      started_at: nun,
+      ended_at: null
+    }));
+
+    const { error: insertError } = await supabase.from("shift_assignments").insert(eintraegeliste);
+    if (insertError) { setErr(insertError.message); return; }
+
     await refresh();
   }
 
   async function triggerGlobalEnd() {
-    if (!activeShift) {
-      setErr("Keine aktive Schicht zum Beenden gefunden.");
-      return;
-    }
+    if (!activeShift) { setErr("Keine aktive Schicht zum Beenden gefunden."); return; }
     setErr(null);
+    
+    // Beendet alle aktuell laufenden Schichteinträge dieses Chatters gleichzeitig
     const { error } = await supabase
       .from("shift_assignments")
       .update({ ended_at: new Date().toISOString() })
-      .eq("id", activeShift.id);
+      .eq("chatter_id", currentUserEmail)
+      .is("ended_at", null);
 
-    if (error) {
-      setErr(error.message);
-      return;
-    }
+    if (error) { setErr(error.message); return; }
     await refresh();
   }
 
@@ -152,10 +198,11 @@ export default function ChatterPage() {
         <button onClick={triggerGlobalEnd} disabled={!activeShift} className="rounded bg-red-600 px-4 py-2 text-sm hover:bg-red-700 disabled:opacity-40 font-semibold text-white transition cursor-pointer disabled:cursor-not-allowed">
           Ende Schicht
         </button>
-        {activeShift && (
-          <span className="text-xs text-emerald-400 font-medium animate-pulse ml-2">
-            ● Schicht läuft gerade...
-          </span>
+        {activeShift && activeShift.started_at && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-emerald-400 font-medium animate-pulse ml-2">● Schichten laufen laut Plan...</span>
+            <LiveTimer startedAt={activeShift.started_at} />
+          </div>
         )}
       </div>
 
@@ -174,6 +221,7 @@ export default function ChatterPage() {
             {rows.map((r) => {
               const hours = toDurationHours(r.started_at, r.ended_at);
               const isLaufend = r.started_at && !r.ended_at;
+              const modelName = r.models?.name || "—";
               return (
                 <div key={r.id} className={`rounded border p-4 bg-black/20 ${isLaufend ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10"}`}>
                   <div className="flex items-center justify-between gap-3">
@@ -183,15 +231,15 @@ export default function ChatterPage() {
                     <div className="text-sm font-semibold text-slate-300">{hours.toFixed(2)} h</div>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-white/60 border-t border-white/5 pt-2">
-                    <div><span className="text-white/40">Nutzer:</span> <span className="text-blue-400 font-medium">{r.chatter_id.includes("@") ? r.chatter_id : "Dein Account"}</span></div>
-                    <div><span className="text-white/40">Modell-ID:</span> {r.model_id ?? "—"}</div>
+                    <div><span className="text-white/40">Nutzer:</span> <span className="text-blue-400 font-medium">{r.chatter_id}</span></div>
+                    <div><span className="text-white/40">Zugeordnetes Model:</span> <span className="text-amber-400 font-semibold">{modelName}</span></div>
                     <div><span className="text-white/40">Beginn:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
                     <div><span className="text-white/40">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
                   </div>
                 </div>
               );
             })}
-            {rows.length === 0 && <div className="text-sm text-slate-500 py-4 italic text-center border border-white/5 rounded bg-black/10">Noch keine Schichten auf diesem Account erfasst.</div>}
+            {rows.length === 0 && <div className="text-sm text-slate-500 py-4 italic text-center border border-white/5 rounded bg-black/10">Noch keine Schichten erfasst.</div>}
           </div>
         )}
       </div>
