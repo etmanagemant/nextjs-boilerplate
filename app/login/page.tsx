@@ -8,11 +8,13 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
+  const [isRegister, setIsRegister] = useState(false); // Schaltet zwischen Login und Registrierung um
   const [redirectTo, setRedirectTo] = useState("/");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const nextParam = new URLSearchParams(window.location.search).get("next");
@@ -23,27 +25,47 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
 
-    // Login ausführen (Der Browser-Client setzt das Token, die Middleware wandelt es in ein Cookie um)
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    if (isRegister) {
+      // 🟢 REGISTRIERUNG
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
 
-    if (error) {
-      setErrorMsg(error.message);
+      if (error) {
+        setErrorMsg(error.message);
+        setLoading(false);
+        return;
+      }
+
+      setSuccessMsg("Registrierung erfolgreich! Du kannst dich jetzt einloggen.");
+      setIsRegister(false);
       setLoading(false);
-      return;
-    }
+    } else {
+      // 🔵 LOGIN
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    // Nach erfolgreichem Login weiterleiten
-    router.refresh(); // WICHTIG: Erzwingt, dass Next.js die Server-Komponenten mit den neuen Cookies lädt!
-    router.replace(redirectTo);
+      if (error) {
+        setErrorMsg(error.message);
+        setLoading(false);
+        return;
+      }
+
+      router.refresh(); 
+      router.replace(redirectTo);
+    }
   }
 
   return (
     <div className="max-w-md mx-auto pt-10 px-4">
-      <h1 className="text-2xl font-bold mb-6">Login</h1>
+      <h1 className="text-2xl font-bold mb-6">
+        {isRegister ? "Registrieren (Neuer Mitarbeiter)" : "Login"}
+      </h1>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1">
@@ -53,7 +75,7 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             type="email"
             autoComplete="email"
-            className="w-full rounded-md border p-2"
+            className="w-full rounded-md border p-2 text-slate-900 bg-white"
             required
           />
         </div>
@@ -65,24 +87,35 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             type="password"
             autoComplete="current-password"
-            className="w-full rounded-md border p-2"
+            className="w-full rounded-md border p-2 text-slate-900 bg-white"
             required
           />
         </div>
 
-        {errorMsg && <div className="text-sm text-red-500">{errorMsg}</div>}
+        {errorMsg && <div className="text-sm text-red-500 font-medium">{errorMsg}</div>}
+        {successMsg && <div className="text-sm text-green-600 font-medium">{successMsg}</div>}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition"
         >
-          {loading ? "Bitte warten..." : "Einloggen"}
+          {loading ? "Bitte warten..." : isRegister ? "Konto erstellen" : "Einloggen"}
         </button>
       </form>
 
-      <div className="mt-6 text-sm text-gray-500">
-        Wenn du neu bist: Mitarbeiter werden über das Dashboard freigeschaltet.
+      <div className="mt-6 text-sm text-center">
+        <button
+          type="button"
+          onClick={() => {
+            setIsRegister(!isRegister);
+            setErrorMsg(null);
+            setSuccessMsg(null);
+          }}
+          className="text-blue-600 hover:underline font-medium"
+        >
+          {isRegister ? "Bereits registriert? Hier einloggen" : "Neu hier? Jetzt als Mitarbeiter registrieren"}
+        </button>
       </div>
     </div>
   );
