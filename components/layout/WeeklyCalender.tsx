@@ -2,33 +2,26 @@
 
 import { useMemo, useState } from "react";
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
+type WeeklyCalendarProps = {
+  sichereShifts: any[];
+  role: string;
+  userEmail: string | null;
+  userId: string;
+};
 
-function formatDateISO(d: Date) {
-  // YYYY-MM-DD in lokaler Zeit
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
+function pad2(n: number) { return String(n).padStart(2, "0"); }
+function formatDateISO(d: Date) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 function startOfWeekMonday(date: Date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-
-  // JS: 0=Sunday, 1=Monday, ..., 6=Saturday
-  const day = d.getDay();
-  const diffToMonday = (day + 6) % 7; // Sunday -> 6, Monday -> 0
-  d.setDate(d.getDate() - diffToMonday);
-  return d;
+  const d = new Date(date); d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); const diffToMonday = (day + 6) % 7;
+  d.setDate(d.getDate() - diffToMonday); return d;
 }
-
 function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
+  const d = new Date(date); d.setDate(d.getDate() + days); return d;
 }
 
-export default function HomePage() {
+export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId }: WeeklyCalendarProps) {
+  // Zustand für das dynamische Wechseln der Wochen
   const [baseWeekStart, setBaseWeekStart] = useState(() => startOfWeekMonday(new Date()));
 
   const days = useMemo(() => {
@@ -42,17 +35,10 @@ export default function HomePage() {
     return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
   }, [days]);
 
-  function goPrevWeek() {
-    setBaseWeekStart((d) => addDays(d, -7));
-  }
-
-  function goNextWeek() {
-    setBaseWeekStart((d) => addDays(d, 7));
-  }
-
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between gap-4">
+    <div className="max-w-7xl mx-auto">
+      {/* DIE INTERAKTIVEN NAVIGATIONSPFEILE */}
+      <div className="flex items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-xl font-semibold text-white">Weekly Calendar</h1>
           <div className="mt-1 text-sm text-white/70">{weekLabel}</div>
@@ -61,62 +47,71 @@ export default function HomePage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={goPrevWeek}
-            className="rounded bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20"
+            onClick={() => setBaseWeekStart((d) => addDays(d, -7))}
+            className="rounded bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20 cursor-pointer font-medium"
           >
             ←
           </button>
-
           <button
             type="button"
             onClick={() => setBaseWeekStart(startOfWeekMonday(new Date()))}
-            className="rounded bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20"
+            className="rounded bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20 cursor-pointer font-medium"
           >
             Heute
           </button>
-
           <button
             type="button"
-            onClick={goNextWeek}
-            className="rounded bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20"
+            onClick={() => setBaseWeekStart((d) => addDays(d, 7))}
+            className="rounded bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20 cursor-pointer font-medium"
           >
             →
           </button>
         </div>
       </div>
 
-      <div className="mt-6 rounded border border-white/10 bg-black/20 p-4">
+      {/* KALENDER GRID */}
+      <div className="rounded border border-white/10 bg-black/20 p-4">
         <div className="grid grid-cols-7 gap-3">
           {days.map((d) => {
-            const isToday = formatDateISO(d) === formatDateISO(new Date());
+            const dateKey = formatDateISO(d);
+            const isToday = dateKey === formatDateISO(new Date());
+
+            // Dein unveränderter Datenschutz-Filter für die Schichten
+            const schichtenAnDiesemTag = sichereShifts.filter((s) => {
+              const istGleicherTag = s.date === dateKey;
+              if (role === "admin") {
+                return istGleicherTag;
+              } else {
+                return istGleicherTag && (s.chatter_id === userEmail || s.chatter_id === userId);
+              }
+            });
 
             return (
-              <div
-                key={formatDateISO(d)}
-                className={`rounded p-3 border ${
-                  isToday ? "border-gold.primary/70 bg-gold.primary/10" : "border-white/10 bg-black/10"
-                }`}
-              >
-                <div className="text-xs text-white/70">
-                  {d.toLocaleDateString(undefined, { weekday: "short" })}
-                </div>
+              <div key={dateKey} className={`rounded p-3 border min-h-[300px] ${isToday ? "border-amber-500/50 bg-amber-500/10" : "border-white/10 bg-black/10"}`}>
+                <div className="text-xs text-white/70">{d.toLocaleDateString(undefined, { weekday: "short" })}</div>
+                <div className="mt-1 text-lg font-semibold text-white">{d.toLocaleDateString(undefined, { day: "2-digit" })}</div>
+                <div className="mt-1 text-xs text-white/60 mb-3">{d.toLocaleDateString(undefined, { month: "short" })}</div>
 
-                <div className="mt-1 text-lg font-semibold text-white">
-                  {d.toLocaleDateString(undefined, { day: "2-digit" })}
-                </div>
-
-                <div className="mt-1 text-xs text-white/60">
-                  {d.toLocaleDateString(undefined, { month: "short" })}
-                </div>
-
-                <div className="mt-3 text-xs text-white/70">
-                  {/* Placeholder Slots: kommt später (08-12, 12-16, 16-20, 20-24) */}
-                  <div className="space-y-2">
-                    <div className="rounded bg-white/5 px-2 py-1">08–12</div>
-                    <div className="rounded bg-white/5 px-2 py-1">12–16</div>
-                    <div className="rounded bg-white/5 px-2 py-1">16–20</div>
-                    <div className="rounded bg-white/5 px-2 py-1">20–24</div>
-                  </div>
+                <div className="space-y-2 mt-2">
+                  {schichtenAnDiesemTag.map((schicht) => (
+                    <div key={schicht.id} className="rounded bg-blue-600/20 border border-blue-500/30 p-2 text-left">
+                      <div className="text-[11px] font-bold text-blue-400 truncate">
+                        👤 {schicht.chatter_id.includes("@") ? schicht.chatter_id.split("@")[0] : "Mitarbeiter"}
+                      </div>
+                      <div className="text-[10px] text-slate-300 mt-0.5">
+                        ⏰ {schicht.time_slot}
+                      </div>
+                      {schicht.models?.name && (
+                        <div className="text-[10px] text-emerald-400 mt-0.5 font-medium truncate">
+                          💃 Model: {schicht.models.name}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {schichtenAnDiesemTag.length === 0 && (
+                    <div className="text-[10px] text-slate-600 italic text-center pt-8">Keine Schichten</div>
+                  )}
                 </div>
               </div>
             );
