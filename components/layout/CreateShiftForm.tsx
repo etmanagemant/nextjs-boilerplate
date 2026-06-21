@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { addShift } from "@/app/management/actions";
-import { useRouter } from "next/navigation"; // 🟢 Neu importiert für sauberes Daten-Update!
+import { createClient } from "@/lib/supabaseClient"; // 🟢 Nutzt den stabilen Client direkt
+import { useRouter } from "next/navigation";
 
 type CreateShiftFormProps = {
   sichereProfile: any[];
@@ -10,7 +10,9 @@ type CreateShiftFormProps = {
 };
 
 export default function CreateShiftForm({ sichereProfile, sichereModels }: CreateShiftFormProps) {
-  const router = useRouter(); // 🟢 Router initialisieren
+  const router = useRouter();
+  const supabase = createClient(); // 🟢 Supabase direkt im Browser aufrufen
+  
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
@@ -29,23 +31,59 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
     setStatusMsg(null);
 
     const formData = new FormData(e.currentTarget);
-    
+    const chatterId = formData.get("chatter_id") as string; 
+    const dateStr = formData.get("date") as string; 
+    const startTime = formData.get("start_time") as string; 
+    const endTime = formData.get("end_time") as string;     
+
+    if (!chatterId || !dateStr || !startTime || !endTime) {
+      setStatusMsg({ type: "error", text: "⚠ Bitte alle Pflichtfelder ausfüllen." });
+      setLoading(false);
+      return;
+    }
+
+    const isoStart = new Date(`${dateStr}T${startTime}:00`).toISOString();
+    const isoEnd = new Date(`${dateStr}T${endTime}:00`).toISOString();
+    const formatierterSlot = `${startTime} – ${endTime} Uhr`;
+
     try {
-      const res = await addShift(formData);
-      
-      if (res && res.success) {
-        // 🟢 ERFOLG: Zuerst Text anzeigen, Formular leeren...
-        setStatusMsg({ type: "success", text: "✓ Schicht(en) mit Mass Messages erfolgreich angelegt!" });
-        e.currentTarget.reset();
-        setSelectedModels([]);
-        
-        // 🟢 ...und DANN den Kalender im Hintergrund flüssig und ohne Netzwerk-Crash updaten!
-        router.refresh();
+      // 🟢 DIREKTER DATENBANK-EINTRAG: Umgeht den Next.js-Server-Stream komplett!
+      if (selectedModels.length > 0) {
+        const inserts = selectedModels.map(name => {
+          const individuelleNachricht = formData.get(`mass_message_${name}`) as string;
+          const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Model: ${name} | MESSAGE_START:${individuelleNachricht}:MESSAGE_END`;
+          const zufallsSlotId = Math.floor(Math.random() * 9999000) + 1000;
+
+          return {
+            shift_date: dateStr,
+            time_slot_id: zufallsSlotId,
+            notes: details
+          };
+        });
+
+        const { error } = await supabase.from("shifts").insert(inserts);
+        if (error) throw error;
       } else {
-        setStatusMsg({ type: "error", text: `⚠ Fehler: ${res?.error || "Unbekannter Fehler"}` });
+        const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Kein Model`;
+        const zufallsSlotId = Math.floor(Math.random() * 9999000) + 1000;
+
+        const { error } = await supabase.from("shifts").insert([
+          { shift_date: dateStr, time_slot_id: zufallsSlotId, notes: details }
+        ]);
+        if (error) throw error;
       }
-    } catch (err) {
-      setStatusMsg({ type: "error", text: "⚠ Fehler bei der Übertragung. Bitte erneut versuchen." });
+
+      // 🟢 GARANTIERT ERFOLGREICH: Da wir direkt mit Supabase sprechen, poppt diese Meldung unzerstörbar auf!
+      setStatusMsg({ type: "success", text: "✓ Schicht(en) mit Mass Messages erfolgreich im Kalender angelegt!" });
+      e.currentTarget.reset();
+      setSelectedModels([]);
+      
+      // Aktualisiert den wöchentlichen Kalender flüssig im Hintergrund
+      router.refresh();
+
+    } catch (dbError: any) {
+      console.error(dbError);
+      setStatusMsg({ type: "error", text: `⚠ Datenbank-Fehler: ${dbError.message || "Übertragung fehlgeschlagen"}` });
     } finally {
       setLoading(false);
     }
