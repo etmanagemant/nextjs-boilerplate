@@ -6,12 +6,11 @@ import { createClient } from "@/lib/supabaseClient";
 type AssignmentRow = {
   id: number;
   shift_id: number;
-  chatter_id: string; // Hier steht jetzt die UUID drin
+  chatter_id: string;
   model_id?: number | null;
   started_at: string | null;
   ended_at: string | null;
   models?: { name: string } | null;
-  profiles?: { email: string; full_name: string } | null; // Erweitert für E-Mail Anzeige via Join
 };
 
 function toDurationHours(startedAt: string | null, endedAt: string | null) {
@@ -67,8 +66,8 @@ export default function ChatterPage() {
     if (!currentUserId) return;
     const { data, error } = await supabase
       .from("shift_assignments")
-      .select("id, shift_id, chatter_id, model_id, started_at, ended_at, models(name), profiles(email, full_name)")
-      .eq("chatter_id", currentUserId) // Filtert jetzt sauber nach der UUID
+      .select("id, shift_id, chatter_id, model_id, started_at, ended_at, models(name)")
+      .eq("chatter_id", currentUserId)
       .order("id", { ascending: false })
       .limit(50);
 
@@ -83,7 +82,7 @@ export default function ChatterPage() {
       setLoading(true); setErr(null);
       const { data, error } = await supabase
         .from("shift_assignments")
-        .select("id, shift_id, chatter_id, model_id, started_at, ended_at, models(name), profiles(email, full_name)")
+        .select("id, shift_id, chatter_id, model_id, started_at, ended_at, models(name)")
         .eq("chatter_id", currentUserId)
         .order("id", { ascending: false })
         .limit(50);
@@ -111,21 +110,19 @@ export default function ChatterPage() {
     setErr(null);
 
     const heuteISO = new Date().toISOString().split("T")[0];
+    const nun = new Date().toISOString();
 
-    // 1. Suche im Kalender nach geplanten Schichten für diese E-Mail am heutigen Tag
-    const { data: kalenderSchichten, error: kalenderError } = await supabase
+    // 1. Versuche geplante Models aus dem Kalender zu lesen
+    const { data: kalenderSchichten } = await supabase
       .from("shifts")
       .select("*")
       .eq("shift_date", heuteISO);
-
-    if (kalenderError) { setErr(kalenderError.message); return; }
 
     const meineGeplantenModels: string[] = [];
     (kalenderSchichten || []).forEach((schicht) => {
       try {
         if (schicht.notes && schicht.notes.startsWith("{")) {
           const parsed = JSON.parse(schicht.notes);
-          // Der Kalender speichert den Vollnamen oder die E-Mail ab
           if (parsed.mitarbeiter === currentUserEmail && parsed.model) {
             meineGeplantenModels.push(parsed.model);
           }
@@ -133,35 +130,39 @@ export default function ChatterPage() {
       } catch (e) {}
     });
 
-    if (meineGeplantenModels.length === 0) {
-      setErr("⚠ Für heute wurden keine Schichten für dich im Kalender eingetragen. Bitte wende dich an einen Admin.");
-      return;
+    // 2. Wenn Models geplant sind, hole deren IDs. Wenn NICHT, erstelle eine freie Schicht!
+    if (meineGeplantenModels.length > 0) {
+      const { data: dbModels } = await supabase
+        .from("models")
+        .select("id, name")
+        .in("name", meineGeplantenModels);
+
+      if (dbModels && dbModels.length > 0) {
+        const eintraegeliste = dbModels.map((m) => ({
+          shift_id: 1,
+          chatter_id: currentUserId,
+          model_id: m.id,
+          started_at: nun,
+          ended_at: null
+        }));
+        await supabase.from("shift_assignments").insert(eintraegeliste);
+        await refresh();
+        return;
+      }
     }
 
-    // 2. Hole die IDs der Models aus der Datenbank
-    const { data: dbModels } = await supabase
-      .from("models")
-      .select("id, name")
-      .in("name", meineGeplantenModels);
+    // FALLBACK (Immer-Erlaubt-Start): Keine Schicht geplant -> Stemple als freie Arbeitszeit ein!
+    const { error: freeError } = await supabase.from("shift_assignments").insert([
+      {
+        shift_id: 1,
+        chatter_id: currentUserId,
+        model_id: null, // Kein spezifisches Model zugeteilt
+        started_at: nun,
+        ended_at: null
+      }
+    ]);
 
-    if (!dbModels || dbModels.length === 0) {
-      setErr("⚠ Die zugewiesenen Models wurden in der Datenbank nicht gefunden.");
-      return;
-    }
-
-    // 3. Stemple mit der korrekten UUID (currentUserId) ein
-    const nun = new Date().toISOString();
-    const eintraegeliste = dbModels.map((m) => ({
-      shift_id: 1,
-      chatter_id: currentUserId, // 🛡️ HIER STEHT JETZT DIE UUID STATT DER EMAIL!
-      model_id: m.id,
-      started_at: nun,
-      ended_at: null
-    }));
-
-    const { error: insertError } = await supabase.from("shift_assignments").insert(eintraegeliste);
-    if (insertError) { setErr(insertError.message); return; }
-
+    if (freeError) { setErr(freeError.message); return; }
     await refresh();
   }
 
@@ -200,7 +201,7 @@ export default function ChatterPage() {
         </button>
         {activeShift && activeShift.started_at && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-emerald-400 font-medium animate-pulse ml-2">● Schichten laufen laut Plan...</span>
+            <span className="text-xs text-emerald-400 font-medium animate-pulse ml-2">● Schicht läuft aktiv...</span>
             <LiveTimer startedAt={activeShift.started_at} />
           </div>
         )}
@@ -221,8 +222,7 @@ export default function ChatterPage() {
             {rows.map((r) => {
               const hours = toDurationHours(r.started_at, r.ended_at);
               const isLaufend = r.started_at && !r.ended_at;
-              const modelName = r.models?.name || "—";
-              const userDisplayEmail = r.profiles?.email || currentUserEmail;
+              const modelName = r.models?.name || "Freie Arbeitszeit (Kein Model)";
 
               return (
                 <div key={r.id} className={`rounded border p-4 bg-black/20 ${isLaufend ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10"}`}>
@@ -233,7 +233,7 @@ export default function ChatterPage() {
                     <div className="text-sm font-semibold text-slate-300">{hours.toFixed(2)} h</div>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-white/60 border-t border-white/5 pt-2">
-                    <div><span className="text-white/40">Nutzer:</span> <span className="text-blue-400 font-medium">{userDisplayEmail}</span></div>
+                    <div><span className="text-white/40">Nutzer:</span> <span className="text-blue-400 font-medium">{currentUserEmail || "Dein Account"}</span></div>
                     <div><span className="text-white/40">Zugeordnetes Model:</span> <span className="text-amber-400 font-semibold">{modelName}</span></div>
                     <div><span className="text-white/40">Beginn:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
                     <div><span className="text-white/40">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
