@@ -139,7 +139,6 @@ export default function ChatterPage() {
 
       if (dbModels && dbModels.length > 0) {
         const eintraegeliste = dbModels.map((m) => ({
-          shift_id: 1,
           chatter_id: currentUserId,
           model_id: m.id,
           started_at: nun,
@@ -154,9 +153,8 @@ export default function ChatterPage() {
     // FALLBACK (Immer-Erlaubt-Start): Keine Schicht geplant -> Stemple als freie Arbeitszeit ein!
     const { error: freeError } = await supabase.from("shift_assignments").insert([
       {
-        shift_id: 1,
         chatter_id: currentUserId,
-        model_id: null, // Kein spezifisches Model zugeteilt
+        model_id: null,
         started_at: nun,
         ended_at: null
       }
