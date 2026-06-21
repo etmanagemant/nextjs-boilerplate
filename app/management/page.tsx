@@ -12,43 +12,30 @@ export default async function ManagementPage() {
 
   const supabase = await createClient();
   
-  const { data: mitarbeiterListe } = await supabase
-    .from("mitarbeiter")
-    .select("*")
-    .order("created_at", { ascending: false });
+  // Holt alle registrierten Mitarbeiter aus deiner echten 'profiles' Tabelle
+  const { data: profilListe } = await supabase
+    .from("profiles")
+    .select("*");
 
+  // Holt die Models aus deiner echten 'models' Tabelle
   const { data: modelsListe } = await supabase
     .from("models")
     .select("*")
     .order("name", { ascending: true });
 
-  // 🟢 Server Action: Ändert die Rolle eines Mitarbeiters live
+  // Server Action: Ändert die Rolle in der profiles-Tabelle live
   async function updateMitarbeiterRolle(formData: FormData) {
     "use server";
-    const id = formData.get("id");
+    const profileId = formData.get("id");
     const neueRolle = formData.get("rolle") as string;
     
-    if (id && neueRolle) {
+    if (profileId && neueRolle) {
       const supabaseServer = await createClient();
       await supabaseServer
-        .from("mitarbeiter")
-        .update({ rolle: neueRolle })
-        .eq("id", id);
+        .from("profiles")
+        .update({ role: neueRolle })
+        .eq("id", profileId);
       
-      revalidatePath("/management");
-    }
-  }
-
-  // Server Action: Neuen Mitarbeiter manuell eintragen
-  async function addMitarbeiter(formData: FormData) {
-    "use server";
-    const email = formData.get("email") as string;
-    const name = formData.get("name") as string;
-    const initialRole = formData.get("rolle") as string;
-    
-    if (email && name) {
-      const supabaseServer = await createClient();
-      await supabaseServer.from("mitarbeiter").insert([{ email, name, rolle: initialRole }]);
       revalidatePath("/management");
     }
   }
@@ -80,54 +67,31 @@ export default async function ManagementPage() {
       {/* BEREICH 1: MITARBEITER-VERWALTUNG */}
       <section className="bg-white p-6 rounded-lg border mb-8 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-700">Mitarbeiter & Rollen modifizieren</h2>
-        
-        {/* Mitarbeiter manuell hinzufügen */}
-        <form action={addMitarbeiter} className="flex gap-3 mb-6 flex-wrap items-end">
-          <div className="flex-1 min-w-[150px]">
-            <label className="block text-xs font-medium text-slate-500 mb-1">E-Mail</label>
-            <input type="email" name="email" required className="w-full px-3 py-2 border rounded-md text-sm text-slate-900 bg-white" />
-          </div>
-          <div className="flex-1 min-w-[150px]">
-            <label className="block text-xs font-medium text-slate-500 mb-1">Name</label>
-            <input type="text" name="name" required className="w-full px-3 py-2 border rounded-md text-sm text-slate-900 bg-white" />
-          </div>
-          <div className="w-[120px]">
-            <label className="block text-xs font-medium text-slate-500 mb-1">Rolle</label>
-            <select name="rolle" className="w-full px-3 py-2 border rounded-md text-sm text-slate-900 bg-white">
-              <option value="chatter">Chatter</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 h-[38px]">
-            Hinzufügen
-          </button>
-        </form>
+        <p className="text-xs text-slate-500 mb-4">Hier siehst du alle registrierten Profile aus deiner Datenbank.</p>
 
-        {/* Tabelle mit Live-Rollenmodifikation */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="border-b bg-slate-50 text-slate-500">
-                <th className="p-2">Name</th>
-                <th className="p-2">E-Mail</th>
+                <th className="p-2">Profil-ID / Name</th>
                 <th className="p-2 w-[150px]">Rolle ändern</th>
               </tr>
             </thead>
             <tbody>
-              {mitarbeiterListe?.map((m) => (
-                <tr key={m.id} className="border-b hover:bg-slate-50">
-                  <td className="p-2 font-medium text-slate-900">{m.name}</td>
-                  <td className="p-2 text-slate-600">{m.email}</td>
+              {profilListe?.map((p) => (
+                <tr key={p.id} className="border-b hover:bg-slate-50">
+                  <td className="p-2 font-medium text-slate-900">
+                    {p.display_name || p.username || `User #${p.id}`}
+                  </td>
                   <td className="p-2">
-                    {/* Dieses Formular schickt die Rollenänderung beim Auswählen sofort ab */}
                     <form action={updateMitarbeiterRolle} className="inline-block w-full">
-                      <input type="hidden" name="id" value={m.id} />
+                      <input type="hidden" name="id" value={p.id} />
                       <select 
                         name="rolle" 
-                        defaultValue={m.rolle}
-                        onChange={(e) => e.target.form?.requestSubmit()} // Schickt die Action automatisch ab!
+                        defaultValue={p.role}
+                        onChange={(e) => e.target.form?.requestSubmit()}
                         className={`w-full px-2 py-1 rounded border text-xs font-semibold ${
-                          m.rolle === 'admin' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'
+                          p.role === 'admin' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'
                         }`}
                       >
                         <option value="chatter">Chatter</option>
@@ -137,6 +101,11 @@ export default async function ManagementPage() {
                   </td>
                 </tr>
               ))}
+              {(!profilListe || profilListe.length === 0) && (
+                <tr>
+                  <td colSpan={2} className="p-4 text-center text-slate-500">Noch keine Profile registriert.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
