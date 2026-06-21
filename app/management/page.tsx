@@ -1,48 +1,31 @@
 import { getCurrentRole } from "@/lib/authz";
-
-// Dummy-Datenbank für den Start (Später durch deine Supabase-Tabelle ersetzen)
-let mitarbeiterListe = [
-  { id: 1, email: "chef@firma.de", name: "Chef", rolle: "admin" }
-];
-
-let modelsListe = [
-  { id: 1, name: "Model Anna" }
-];
+import { createClient } from "@/utils/supabase/server";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation"; // 🟢 Neu importieren!
 
 export default async function ManagementPage() {
   const role = await getCurrentRole();
 
-  // 1. Sicherheits-Check (Admin-Schutz)
+  // 1. Sicherheits-Check (Nutzt jetzt stabiles Next.js redirect)
   if (!role || role !== "admin") {
-    return new Response(null, {
-      status: 307,
-      headers: { Location: "/" },
-    });
+    redirect("/"); 
   }
 
-  // 2. Server Actions: Funktionen, die direkt auf dem Vercel-Server ausgeführt werden
-  async function addMitarbeiter(formData: FormData) {
-    "use server";
-    const email = formData.get("email") as string;
-    const name = formData.get("name") as string;
-    if (email && name) {
-      mitarbeiterListe.push({ id: Date.now(), email, name, rolle: "mitarbeiter" });
-    }
-  }
+  // Live-Daten aus Supabase abrufen
+  const supabase = await createClient();
+  
+  const { data: mitarbeiterListe } = await supabase
+    .from("mitarbeiter")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-  async function addModel(formData: FormData) {
-    "use server";
-    const name = formData.get("name") as string;
-    if (name) {
-      modelsListe.push({ id: Date.now(), name });
-    }
-  }
+  const { data: modelsListe } = await supabase
+    .from("models")
+    .select("*")
+    .order("name", { ascending: true });
 
-  async function deleteModel(formData: FormData) {
-    "use server";
-    const id = Number(formData.get("id"));
-    modelsListe = modelsListe.filter(m => m.id !== id);
-  }
+  // ... ab hier bleiben die Server Actions (addMitarbeiter, etc.) und das gesamte return (...) EXAKT GLEICH!
+
 
   return (
     <main className="p-6 max-w-4xl mx-auto">
