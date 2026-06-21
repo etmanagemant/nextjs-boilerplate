@@ -13,7 +13,7 @@ export default async function ManagementPage() {
   
   // 🟢 DEIN E-MAIL-HARDCODE (Aus den vorherigen Schritten exakt beibehalten)
   let isAdmin = false;
-  if (user.email === "DEINE_ECHTE_EMAIL@HIER_EINTRAGEN.de") {
+  if (user.email === "etmanagemant@gmail.com") {
     isAdmin = true;
   }
 
