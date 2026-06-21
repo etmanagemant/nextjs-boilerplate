@@ -23,7 +23,7 @@ export async function proxy(request: NextRequest) {
   const url = request.nextUrl.clone()
   const isLoginPath = url.pathname === '/login'
 
-  // 1. Wenn nicht eingeloggt -> Login-Zwang
+  // 1. Login-Zwang
   if (!user) {
     if (!isLoginPath) {
       url.pathname = '/login'
@@ -35,7 +35,6 @@ export async function proxy(request: NextRequest) {
   // 2. Rollen-Ermittlung
   let role = 'chatter'
 
-  // Dein unverrückbarer Admin-Hardcode (Trage hier deine E-Mail oder UUID ein)
   if (user.email === 'tobias@beispiel.de' || user.id === '35498c92-2c4d-4720-a6f7-cc187a4c5fc4') {
     role = 'admin'
   } else {
@@ -50,17 +49,14 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // 3. Wenn der User die nackte URL "/" aufruft, leiten wir ihn auf seine Standard-Arbeitsseite
-  if (url.pathname === '/') {
-    if (role === 'admin') {
-      url.pathname = '/management'
-    } else {
-      url.pathname = '/chatter'
-    }
+  // 3. Automatisches Weiterleiten korrigiert: 
+  // NUR normale Chatter fliegen automatisch nach /chatter. Admins dürfen auf "/" bleiben, um den Kalender zu sehen!
+  if (url.pathname === '/' && role !== 'admin') {
+    url.pathname = '/chatter'
     return NextResponse.redirect(url)
   }
 
-  // 4. Schutz: NUR Chatter fliegen von der Management-Seite. Admins dürfen ÜBERALL hin!
+  // 4. Schutz: Chatter dürfen nicht in das Management-Dashboard
   if (url.pathname.startsWith('/management') && role !== 'admin') {
     url.pathname = '/chatter'
     return NextResponse.redirect(url)

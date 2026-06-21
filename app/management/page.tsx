@@ -1,6 +1,9 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import Link from "next/link"; // 🟢 Neu importiert für fehlerfreie Navigation!
+import Link from "next/link";
+
+// 🟢 ERZWIINGT DYNAMISCHES RENDERING: Schaltet den Vercel-Cache für diese Seite komplett aus!
+export const dynamic = "force-dynamic";
 
 export default async function ManagementPage() {
   let profilListe: any[] = [];
@@ -15,7 +18,7 @@ export default async function ManagementPage() {
       profilListe = pData;
     }
 
-    // Models auslesen (Wird jetzt dank der SQL-Policy Daten liefern)
+    // Models auslesen
     const { data: mData } = await supabase.from("models").select("*").order("name", { ascending: true });
     if (mData && Array.isArray(mData)) {
       modelsListe = mData;
@@ -74,12 +77,11 @@ export default async function ManagementPage() {
 
   return (
     <main className="p-6 max-w-4xl mx-auto min-h-screen bg-slate-900 text-white rounded-lg my-6 border border-slate-800">
-      {/* HEADER NAVI FÜR EINFACHEN SEITENWECHSEL */}
+      {/* HEADER NAVI */}
       <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4 flex-wrap gap-4">
         <div className="flex items-center gap-6">
           <h1 className="text-3xl font-bold text-white">Management</h1>
           <nav className="flex gap-3 text-sm">
-            {/* 🟢 Geändert von <a> zu <Link> für clientseitiges Next.js Routing */}
             <Link href="/" className="text-slate-400 hover:text-white px-3 py-1.5 rounded bg-slate-800 font-medium transition">
               Startseite (Kalender)
             </Link>
@@ -95,7 +97,7 @@ export default async function ManagementPage() {
         </form>
       </div>
 
-      {/* BEREICH 1: MITARBEITER-VERWALTUNG */}
+      {/* MITARBEITER-VERWALTUNG */}
       <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 mb-8 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-200">Mitarbeiter & Rollen modifizieren</h2>
 
@@ -142,7 +144,7 @@ export default async function ManagementPage() {
         </div>
       </section>
 
-      {/* BEREICH 2: MODELS VERWALTEN */}
+      {/* MODELS VERWALTEN */}
       <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-200">Models (Schichtplanung)</h2>
         
