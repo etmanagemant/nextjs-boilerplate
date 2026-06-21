@@ -96,21 +96,23 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
       router.refresh();
     }
   }
+
   return (
-    <div className="w-[98%] mx-auto mt-4">
-      <div className="flex items-center justify-between gap-4 mb-6">
+    <div className="w-[98%] mx-auto mt-4 text-[#F3E5AB]">
+      {/* Kopfzeile im edlen Gold-Look */}
+      <div className="flex items-center justify-between gap-4 mb-6 bg-[#0A0A0A] p-4 rounded-xl border border-[#AA7C11]/20 shadow-lg">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-wide">Weekly Schedule Calendar</h1>
-          <div className="mt-1 text-base text-slate-400 font-medium">{weekLabel}</div>
+          <h1 className="text-2xl font-black tracking-wide bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase">Weekly Schedule Calendar</h1>
+          <div className="mt-1 text-sm text-[#D4AF37]/80 font-mono font-semibold">{weekLabel}</div>
         </div>
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 7); return startOfWeekMonday(n); })} className="rounded bg-slate-800 border border-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-700 cursor-pointer font-semibold transition">← Letzte Woche</button>
-          <button type="button" onClick={() => setBaseWeekStart(startOfWeekMonday(new Date()))} className="rounded bg-slate-800 border border-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-700 cursor-pointer font-semibold transition">Heute</button>
-          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 7); return startOfWeekMonday(n); })} className="rounded bg-slate-800 border border-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-700 cursor-pointer font-semibold transition">Nächste Woche →</button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 7); return startOfWeekMonday(n); })} className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-xs font-bold text-black shadow-md transition-all cursor-pointer">← Letzte Woche</button>
+          <button type="button" onClick={() => setBaseWeekStart(startOfWeekMonday(new Date()))} className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-xs font-bold text-black shadow-md transition-all cursor-pointer">Heute</button>
+          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 7); return startOfWeekMonday(n); })} className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-xs font-bold text-black shadow-md transition-all cursor-pointer">Nächste Woche →</button>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-6 shadow-2xl backdrop-blur-md">
+      <div className="rounded-xl border border-[#AA7C11]/20 bg-[#0A0A0A]/60 p-6 shadow-2xl backdrop-blur-md">
         <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
           {days.map((d) => {
             const dateKey = formatDateISO(d);
@@ -118,16 +120,18 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
             const schichtenAnDiesemTag = sichereShifts.filter((s) => s.shift_date && s.shift_date === dateKey);
 
             return (
-              <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[480px] ${isToday ? "border-amber-500/40 bg-amber-500/5 shadow-lg shadow-amber-500/5" : "border-slate-800/80 bg-slate-900/40"}`}>
+              <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[480px] ${
+                isToday ? "border-[#D4AF37] bg-[#D4AF37]/5 shadow-lg shadow-[#D4AF37]/5" : "border-[#AA7C11]/20 bg-black/40"
+              }`}>
                 <div>
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-                    <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
-                    <span className={`text-base font-bold px-2 py-0.5 rounded-md ${isToday ? "bg-amber-500 text-slate-950" : "text-white"}`}>{d.toLocaleDateString(undefined, { day: "2-digit" })}</span>
+                  <div className="flex items-center justify-between border-b border-[#AA7C11]/10 pb-2 mb-3">
+                    <span className="text-xs font-bold uppercase tracking-widest text-[#D4AF37]/70">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
+                    <span className={`text-base font-mono font-bold px-2 py-0.5 rounded-md ${isToday ? "bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black" : "text-[#F3E5AB]"}`}>{d.toLocaleDateString(undefined, { day: "2-digit" })}</span>
                   </div>
 
                   <div className="space-y-3">
                     {schichtenAnDiesemTag.length === 0 ? (
-                      <div className="text-xs text-slate-500 italic p-2 text-center border border-dashed border-slate-800/60 rounded-lg">Keine Schichten geplant</div>
+                      <div className="text-xs text-slate-500 italic p-2 text-center border border-dashed border-[#AA7C11]/10 rounded-lg">Keine Schichten</div>
                     ) : (
                       schichtenAnDiesemTag.map((schicht) => {
                         let parsedNotes = { mitarbeiter: "Mitarbeiter", von: "00:00", bis: "00:00", model: "Kein Model", nachricht: "" };
@@ -136,66 +140,66 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                           else { parsedNotes.mitarbeiter = schicht.notes || "Geplant"; }
                         } catch (e) { parsedNotes.mitarbeiter = "Geplant"; }
                         return (
-                          <div key={schicht.id} className="rounded-lg bg-slate-900 border border-slate-800 p-3 shadow-md relative group hover:border-slate-700 transition">
+                          <div key={schicht.id} className="rounded-lg bg-[#050505] border border-[#AA7C11]/20 p-3 shadow-md relative group hover:border-[#D4AF37]/50 transition">
                             {role === "admin" && editingShiftId !== schicht.id && (
                               <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button type="button" onClick={() => startEditing(schicht)} className="p-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-[10px] font-bold cursor-pointer">✏️</button>
-                                <button type="button" onClick={() => handleDeleteShift(schicht.id)} className="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 text-[10px] font-bold cursor-pointer">🗑️</button>
+                                <button type="button" onClick={() => startEditing(schicht)} className="p-1 bg-[#D4AF37]/10 text-[#D4AF37] rounded hover:bg-[#D4AF37]/20 text-[10px] font-bold cursor-pointer">✏️</button>
+                                <button type="button" onClick={() => handleDeleteShift(schicht.id)} className="p-1 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 text-[10px] font-bold cursor-pointer">🗑️</button>
                               </div>
                             )}
 
                             {editingShiftId === schicht.id ? (
-                              <div className="space-y-2.5 mt-1 bg-slate-950 p-2.5 rounded-md border border-slate-800">
-                                <span className="text-[10px] font-bold text-blue-400 block tracking-wider uppercase">Schicht anpassen</span>
+                              <div className="space-y-2.5 mt-1 bg-black p-2.5 rounded-md border border-[#AA7C11]/30">
+                                <span className="text-[10px] font-bold text-[#D4AF37] block tracking-wider uppercase">Schicht anpassen</span>
                                 <div>
-                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Datum</label>
-                                  <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                  <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Datum</label>
+                                  <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
                                 </div>
                                 <div>
-                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Mitarbeiter</label>
-                                  <input type="text" value={editMitarbeiter} onChange={(e) => setEditMitarbeiter(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                  <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Mitarbeiter</label>
+                                  <input type="text" value={editMitarbeiter} onChange={(e) => setEditMitarbeiter(e.target.value)} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-1.5">
                                   <div>
-                                    <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Von</label>
-                                    <input type="text" placeholder="12:00" value={editVon} onChange={(e) => setEditVon(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                    <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Von</label>
+                                    <input type="text" placeholder="12:00" value={editVon} onChange={(e) => setEditVon(e.target.value)} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
                                   </div>
                                   <div>
-                                    <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Bis</label>
-                                    <input type="text" placeholder="16:00" value={editBis} onChange={(e) => setEditBis(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                    <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Bis</label>
+                                    <input type="text" placeholder="16:00" value={editBis} onChange={(e) => setEditBis(e.target.value)} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
                                   </div>
                                 </div>
                                 <div>
-                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Model auswählen</label>
-                                  <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none cursor-pointer">
-                                    <option value="Kein Model" className="bg-slate-950 text-white">Kein Model</option>
+                                  <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Model auswählen</label>
+                                  <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none cursor-pointer">
+                                    <option value="Kein Model" className="bg-[#050505] text-white">Kein Model</option>
                                     {(modelsListe || []).map((m) => (
-                                      <option key={m.id} value={m.name} className="bg-slate-950 text-white">{m.name}</option>
+                                      <option key={m.id} value={m.name} className="bg-[#050505] text-white">{m.name}</option>
                                     ))}
                                   </select>
                                 </div>
                                 <div>
-                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Nachricht (optional)</label>
-                                  <textarea value={editNachricht} onChange={(e) => setEditNachricht(e.target.value)} rows={2} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none resize-none" />
+                                  <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Nachricht (optional)</label>
+                                  <textarea value={editNachricht} onChange={(e) => setEditNachricht(e.target.value)} rows={2} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none resize-none" />
                                 </div>
-                                <div className="flex gap-1.5 justify-end pt-1 border-t border-slate-800">
+                                <div className="flex gap-1.5 justify-end pt-1 border-t border-[#AA7C11]/10">
                                   <button type="button" onClick={() => setEditingShiftId(null)} className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-[10px] font-semibold hover:bg-slate-700 cursor-pointer">Abbrechen</button>
-                                  <button type="button" onClick={() => handleSaveEdit(schicht.id)} className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-bold hover:bg-emerald-500 cursor-pointer">Sichern</button>
+                                  <button type="submit" onClick={() => handleSaveEdit(schicht.id)} className="px-2 py-1 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black rounded text-[10px] font-bold hover:from-[#E5C158] cursor-pointer">Sichern</button>
                                 </div>
                               </div>
                             ) : (
                               <div className="text-xs text-slate-300 space-y-1">
-                                <div className="font-semibold text-white">{parsedNotes.mitarbeiter}</div>
+                                <div className="font-semibold text-[#F3E5AB] text-sm">{parsedNotes.mitarbeiter}</div>
                                 {parsedNotes.von && parsedNotes.bis && (
-                                  <div className="text-[11px] text-slate-400">{parsedNotes.von} - {parsedNotes.bis} Uhr</div>
+                                  <div className="text-[11px] text-slate-400 font-medium font-mono">{parsedNotes.von} - {parsedNotes.bis} Uhr</div>
                                 )}
                                 {parsedNotes.model && parsedNotes.model !== "Kein Model" && (
-                                  <div className="text-[10px] text-amber-400/80">Model: {parsedNotes.model}</div>
+                                  <div className="text-[10px] text-[#D4AF37] font-bold bg-[#AA7C11]/10 border border-[#AA7C11]/30 rounded px-1.5 py-0.5 inline-block mt-0.5">Model: {parsedNotes.model}</div>
                                 )}
                                 {parsedNotes.nachricht && (
-                                  <div className="text-[10px] text-slate-400 bg-slate-950/40 rounded p-1.5 border border-slate-800/40 relative group/msg mt-1.5 break-words">
+                                  <div className="text-[10px] text-slate-400 bg-black/60 rounded p-1.5 border border-[#AA7C11]/10 relative group/msg mt-1.5 break-words">
                                     <span>{parsedNotes.nachricht}</span>
-                                    <button type="button" onClick={() => handleCopyText(parsedNotes.nachricht, schicht.id)} className="absolute bottom-1 right-1 opacity-0 group-hover/msg:opacity-100 bg-slate-800 border border-slate-700 text-[10px] px-1 rounded text-slate-300 hover:text-white transition cursor-pointer">
+                                    <button type="button" onClick={() => handleCopyText(parsedNotes.nachricht, schicht.id)} className="absolute bottom-1 right-1 opacity-0 group-hover/msg:opacity-100 bg-[#050505] border border-[#AA7C11]/40 text-[10px] px-1 rounded text-slate-300 hover:text-[#D4AF37] transition cursor-pointer">
                                       {copiedId === schicht.id ? "✔️" : "📋"}
                                     </button>
                                   </div>

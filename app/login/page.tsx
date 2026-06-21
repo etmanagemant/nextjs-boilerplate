@@ -28,32 +28,58 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) { setErrorMsg(error.message); setLoading(false); return; }
       
-      // 🟢 Schickt dich direkt und ohne Middleware-Verzögerung auf die Startseite!
+      // 🟢 Bleibt absolut flüssig
       window.location.href = "/";
     }
   }
-
   return (
-    <div className="max-w-md mx-auto pt-20 px-4 text-white">
-      <h1 className="text-2xl font-bold mb-6 text-center">{isRegister ? "Registrieren" : "Login"}</h1>
-      <form onSubmit={onSubmit} className="space-y-4 bg-slate-900 border border-slate-800 p-6 rounded-lg shadow-md">
+    <div className="max-w-md mx-auto pt-28 px-4 text-[#F3E5AB]">
+      {/* Überschrift im edlen Marken-Look */}
+      <h1 className="text-3xl font-black mb-6 text-center tracking-wider bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase">
+        {isRegister ? "Registrieren" : "Login"}
+      </h1>
+      
+      <form onSubmit={onSubmit} className="space-y-4 bg-[#0A0A0A] border border-[#AA7C11]/30 p-6 rounded-xl shadow-2xl shadow-black/80">
         <div>
-          <label className="text-sm font-medium block mb-1">E-Mail</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="w-full rounded-md border border-slate-700 p-2 text-slate-900 bg-white" required />
+          <label className="text-xs uppercase font-bold tracking-wider text-slate-400 block mb-1">E-Mail Adresse</label>
+          <input 
+            value={email} 
+            onChange={(e) => setEmail(e.target.value)} 
+            type="email" 
+            className="w-full rounded-md border border-[#AA7C11]/30 p-2 text-white bg-[#050505] focus:border-[#D4AF37] outline-none text-sm transition-all" 
+            required 
+          />
         </div>
         <div>
-          <label className="text-sm font-medium block mb-1">Passwort</label>
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="w-full rounded-md border border-slate-700 p-2 text-slate-900 bg-white" required />
+          <label className="text-xs uppercase font-bold tracking-wider text-slate-400 block mb-1">Passwort</label>
+          <input 
+            value={password} 
+            onChange={(e) => setPassword(e.target.value)} 
+            type="password" 
+            className="w-full rounded-md border border-[#AA7C11]/30 p-2 text-white bg-[#050505] focus:border-[#D4AF37] outline-none text-sm transition-all" 
+            required 
+          />
         </div>
-        {errorMsg && <div className="text-sm text-red-500 font-medium">{errorMsg}</div>}
-        {successMsg && <div className="text-sm text-green-500 font-medium">{successMsg}</div>}
-        <button type="submit" disabled={loading} className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition cursor-pointer">
+
+        {errorMsg && <div className="text-sm text-red-400 font-semibold bg-red-500/10 border border-red-500/20 p-2 rounded text-center">{errorMsg}</div>}
+        {successMsg && <div className="text-sm text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 p-2 rounded text-center">{successMsg}</div>}
+
+        <button 
+          type="submit" 
+          disabled={loading} 
+          className="w-full rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-sm font-bold text-black shadow-md shadow-amber-950/20 transition-all cursor-pointer disabled:opacity-40"
+        >
           {loading ? "Bitte warten..." : isRegister ? "Konto erstellen" : "Einloggen"}
         </button>
       </form>
+
       <div className="mt-6 text-sm text-center">
-        <button type="button" onClick={() => { setIsRegister(!isRegister); setErrorMsg(null); setSuccessMsg(null); }} className="text-blue-400 hover:underline font-medium cursor-pointer">
-          {isRegister ? "Hier einloggen" : "Jetzt registrieren"}
+        <button 
+          type="button" 
+          onClick={() => { setIsRegister(!isRegister); setErrorMsg(null); setSuccessMsg(null); }} 
+          className="text-[#D4AF37] hover:text-[#E5C158] transition font-semibold cursor-pointer outline-none"
+        >
+          {isRegister ? "Bereits ein Konto? Hier einloggen" : "Noch kein Zugang? Jetzt registrieren"}
         </button>
       </div>
     </div>

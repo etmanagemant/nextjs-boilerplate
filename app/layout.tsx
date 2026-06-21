@@ -30,7 +30,7 @@ export default function RootLayout({
             {/* MITTE: ETManagement eng geschrieben und perfekt zentriert */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <span className="text-lg font-black tracking-normal uppercase text-transparent bg-clip-text bg-gradient-to-r from-[#F3E5AB] via-[#D4AF37] to-[#AA7C11] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                ETManagement
+                ET Management
               </span>
             </div>
 

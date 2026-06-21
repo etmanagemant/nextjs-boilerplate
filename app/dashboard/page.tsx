@@ -54,38 +54,35 @@ export default async function DashboardPage() {
   const userStatsArray = Object.values(statsPerUser);
   const gesamtUmsatzAgentur = revenues.reduce((sum, r) => sum + Number(r.amount || 0), 0);
   return (
-    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-slate-950 text-white my-6 rounded-xl border border-slate-800 shadow-2xl">
-      {/* Dashboard Header mit Navigation */}
-      <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-4 flex-wrap gap-4 bg-slate-900 p-4 rounded-xl">
-        <div>
-          <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 tracking-wide">ET Dashboard</h1>
-          <p className="text-xs text-slate-400 font-medium mt-0.5">Umsatzleistung & Stechuhr-Analysen</p>
-        </div>
-        <nav className="flex gap-2 text-sm bg-slate-950 p-1 rounded-lg border border-slate-800">
-          <a href="/" className="text-slate-300 hover:text-white px-3 py-1.5 rounded-md hover:bg-slate-900 font-medium transition">Kalender</a>
-          <a href="/management" className="text-slate-300 hover:text-white px-3 py-1.5 rounded-md hover:bg-slate-900 font-medium transition">Management</a>
-          <a href="/chatter" className="text-slate-300 hover:text-white px-3 py-1.5 rounded-md hover:bg-slate-900 font-medium transition">Stechuhr</a>
-        </nav>
+    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
+      {/* Dashboard Header */}
+      <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
+        <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">ET Dashboard</h1>
+        <p className="text-xs text-slate-400 mt-1">Umsatzleistung & Performance-Analysen im Überblick</p>
       </div>
 
-      {/* Globale Übersichtskarten */}
+      {/* Globale Übersichtskarten im Black & Gold Design */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        <div className="bg-slate-900 p-6 rounded-xl border border-slate-800/60 shadow-lg text-center">
+        <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Gesamtumsatz Agentur</div>
-          <div className="text-4xl font-black text-emerald-400 mt-2 tracking-wide">${gesamtUmsatzAgentur.toFixed(2)}</div>
+          <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#F3E5AB] via-[#D4AF37] to-[#AA7C11] mt-2 tracking-wide font-mono">
+            ${gesamtUmsatzAgentur.toFixed(2)}
+          </div>
         </div>
-        <div className="bg-slate-900 p-6 rounded-xl border border-slate-800/60 shadow-lg text-center">
+        <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Erfasste Profile</div>
-          <div className="text-4xl font-black text-blue-400 mt-2 tracking-wide">{userStatsArray.length}</div>
+          <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#F3E5AB] via-[#D4AF37] to-[#AA7C11] mt-2 tracking-wide font-mono">
+            {userStatsArray.length}
+          </div>
         </div>
       </div>
-      {/* Performance Tabelle */}
-      <section className="bg-slate-900 p-6 rounded-xl border border-slate-800/60 shadow-lg">
-        <h2 className="text-xl font-bold mb-4 text-slate-200 tracking-wide">Mitarbeiter Umsatzleistung</h2>
+      {/* Performance Tabelle im edlen Corporate Design */}
+      <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg">
+        <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">Mitarbeiter Umsatzleistung</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-950 text-slate-400 font-semibold uppercase text-[11px] tracking-wider">
+              <tr className="border-b border-[#AA7C11]/10 bg-[#050505] text-[#D4AF37] font-semibold text-xs uppercase tracking-wider">
                 <th className="p-3">Mitarbeiter</th>
                 <th className="p-3">E-Mail</th>
                 <th className="p-3">Arbeitszeit</th>
@@ -97,10 +94,10 @@ export default async function DashboardPage() {
               {userStatsArray.map((user, idx) => {
                 const usdPerHr = user.hours > 0 ? user.revenue / user.hours : 0;
                 return (
-                  <tr key={idx} className="border-b border-slate-800/40 hover:bg-slate-950/40 transition">
-                    <td className="p-3 font-semibold text-slate-100">{user.name}</td>
-                    <td className="p-3 text-slate-400 text-xs">{user.email}</td>
-                    <td className="p-3 font-mono font-medium text-slate-300">{user.hours.toFixed(2)} h</td>
+                  <tr key={idx} className="border-b border-[#AA7C11]/5 hover:bg-black/20 transition">
+                    <td className="p-3 font-semibold text-white tracking-wide">{user.name}</td>
+                    <td className="p-3 text-slate-400 font-mono text-xs">{user.email}</td>
+                    <td className="p-3 font-mono text-slate-300">{user.hours.toFixed(2)} h</td>
                     <td className="p-3 font-mono font-bold text-slate-200">${user.revenue.toFixed(2)}</td>
                     <td className="p-3 font-mono font-black text-emerald-400">${usdPerHr.toFixed(2)}/h</td>
                   </tr>
