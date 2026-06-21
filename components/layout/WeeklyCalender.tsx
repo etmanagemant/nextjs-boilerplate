@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { createClient } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
 
 type WeeklyCalendarProps = {
   sichereShifts: any[];
@@ -16,13 +18,16 @@ function startOfWeekMonday(date: Date) {
   const day = d.getDay(); const diffToMonday = (day + 6) % 7;
   d.setDate(d.getDate() - diffToMonday); return d;
 }
-function addDays(date: Date, days: number) {
-  const d = new Date(date); d.setHours(0, 0, 0, 0); return d;
-}
 
-export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId }: WeeklyCalendarProps) {
+export default function WeeklyCalender({ sichereShifts, role, userEmail, userId }: WeeklyCalendarProps) {
+  const router = useRouter();
+  const supabase = createClient();
   const [baseWeekStart, setBaseWeekStart] = useState(() => startOfWeekMonday(new Date()));
   const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  const [editingShiftId, setEditingShiftId] = useState<number | null>(null);
+  const [editNotes, setEditNotes] = useState("");
+  const [editDate, setEditDate] = useState("");
 
   const days = useMemo(() => {
     return Array.from({ length: 7 }).map((_, i) => {
@@ -32,63 +37,75 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
     });
   }, [baseWeekStart]);
 
-  // 🟢 FIXED: weekLabel nutzt jetzt das Tobias-Original mit days[0] und days[6] ohne Array-Absturz!
   const weekLabel = useMemo(() => {
     if (days.length === 0) return "";
     const opts: Intl.DateTimeFormatOptions = { month: "short", day: "2-digit" };
     return `${days[0].toLocaleDateString(undefined, opts)} – ${days[6].toLocaleDateString(undefined, opts)}`;
   }, [days]);
 
-  // Funktion zum schnellen Kopieren der Mass Message
   function handleCopyText(textToCopy: string, id: number) {
     navigator.clipboard.writeText(textToCopy);
     setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000); // Setzt den Text nach 2 Sek zurück
+    setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  async function handleDeleteShift(id: number) {
+    if (!window.confirm("Möchtest du diese Schicht wirklich unwiderruflich löschen?")) return;
+    const { error } = await supabase.from("shifts").delete().eq("id", id);
+    if (!error) {
+      router.refresh();
+    }
+  }
+
+  async function handleSaveEdit(id: number) {
+    const { error } = await supabase
+      .from("shifts")
+      .update({ notes: editNotes, shift_date: editDate })
+      .eq("id", id);
+      
+    if (!error) {
+      setEditingShiftId(null);
+      router.refresh();
+    }
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="w-[98%] mx-auto mt-4">
       <div className="flex items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-white">Weekly Calendar</h1>
-          <div className="mt-1 text-sm text-white/70">{weekLabel}</div>
+          <h1 className="text-2xl font-bold text-white tracking-wide">Weekly Schedule Calendar</h1>
+          <div className="mt-1 text-base text-slate-400 font-medium">{weekLabel}</div>
         </div>
-
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 7); return startOfWeekMonday(n); })} className="rounded bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20 cursor-pointer font-medium">←</button>
-          <button type="button" onClick={() => setBaseWeekStart(startOfWeekMonday(new Date()))} className="rounded bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20 cursor-pointer font-medium">Heute</button>
-          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 7); return startOfWeekMonday(n); })} className="rounded bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/20 cursor-pointer font-medium">→</button>
+          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 7); return startOfWeekMonday(n); })} className="rounded bg-slate-800 border border-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-700 cursor-pointer font-semibold transition">← Letzte Woche</button>
+          <button type="button" onClick={() => setBaseWeekStart(startOfWeekMonday(new Date()))} className="rounded bg-slate-800 border border-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-700 cursor-pointer font-semibold transition">Heute</button>
+          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 7); return startOfWeekMonday(n); })} className="rounded bg-slate-800 border border-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-700 cursor-pointer font-semibold transition">Nächste Woche →</button>
         </div>
       </div>
 
-      <div className="rounded border border-white/10 bg-black/20 p-4">
-        <div className="grid grid-cols-7 gap-3">
+      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-6 shadow-2xl backdrop-blur-md">
+        <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
           {days.map((d) => {
             const dateKey = formatDateISO(d);
             const isToday = dateKey === formatDateISO(new Date());
 
             const schichtenAnDiesemTag = sichereShifts.filter((s) => {
               if (!s.shift_date) return false;
-              const istGleicherTag = s.shift_date === dateKey;
-              
-              if (role === "admin") {
-                return istGleicherTag;
-              } else {
-                // Ein Chatter sieht nur seine Schichten im Text gefiltert
-                return istGleicherTag && userEmail && s.notes?.includes(`Mitarbeiter: ${userEmail}`);
-              }
+              return s.shift_date === dateKey;
             });
 
             return (
-              <div key={dateKey} className={`rounded p-3 border min-h-[330px] flex flex-col justify-between ${isToday ? "border-amber-500/50 bg-amber-500/10" : "border-white/10 bg-black/10"}`}>
+              <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[450px] ${
+                isToday ? "border-amber-500/40 bg-amber-500/5 shadow-lg shadow-amber-500/5" : "border-slate-800/80 bg-slate-900/40"
+              }`}>
                 <div>
-                  <div className="text-xs text-white/70">{d.toLocaleDateString(undefined, { weekday: "short" })}</div>
-                  <div className="mt-1 text-lg font-semibold text-white">{d.toLocaleDateString(undefined, { day: "2-digit" })}</div>
-                  <div className="mt-1 text-xs text-white/60 mb-3">{d.toLocaleDateString(undefined, { month: "short" })}</div>
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                    <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
+                    <span className={`text-base font-bold px-2 py-0.5 rounded-md ${isToday ? "bg-amber-500 text-slate-950" : "text-white"}`}>{d.toLocaleDateString(undefined, { day: "2-digit" })}</span>
+                  </div>
 
-                  <div className="space-y-2 mt-2">
+                  <div className="space-y-3">
                     {schichtenAnDiesemTag.map((schicht) => {
-                      // Schneidet die Mass Message sauber aus der Textkette heraus
                       const textData = schicht.notes || "";
                       const cleanInfo = textData.split(" | MESSAGE_START:")[0] || textData;
                       
@@ -98,25 +115,38 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
                       }
 
                       return (
-                        <div key={schicht.id} className="rounded bg-blue-600/20 border border-blue-500/30 p-2 text-left text-[11px] text-slate-200">
-                          <div className="font-medium whitespace-pre-wrap">{cleanInfo}</div>
-                          
-                          {/* 🟢 DER KOPiER-BUTTON FÜR DIE MASS MESSAGE */}
-                          {massMessageText && (
-                            <div className="mt-2 bg-black/40 p-1.5 rounded border border-white/5 flex flex-col gap-1">
-                              <span className="text-[10px] text-emerald-400 font-bold">Mass Message:</span>
-                              <div className="text-[10px] text-slate-300 italic truncate mb-1">"{massMessageText}"</div>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyText(massMessageText, schicht.id)}
-                                className={`w-full text-center text-[10px] rounded py-1 font-bold transition cursor-pointer ${
-                                  copiedId === schicht.id 
-                                    ? "bg-green-600 text-white" 
-                                    : "bg-blue-600 text-white hover:bg-blue-700"
-                                }`}
-                              >
-                                {copiedId === schicht.id ? "✓ Kopiert!" : "Text kopieren"}
-                              </button>
+                        <div key={schicht.id} className="rounded-lg bg-slate-900 border border-slate-800 p-3 shadow-md relative group hover:border-slate-700 transition">
+                          {role === "admin" && editingShiftId !== schicht.id && (
+                            <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button type="button" onClick={() => { setEditingShiftId(schicht.id); setEditNotes(schicht.notes); setEditDate(schicht.shift_date); }} className="p-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-[10px] font-bold cursor-pointer">✏️</button>
+                              <button type="button" onClick={() => handleDeleteShift(schicht.id)} className="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 text-[10px] font-bold cursor-pointer">🗑️</button>
+                            </div>
+                          )}
+
+                          {editingShiftId === schicht.id ? (
+                            <div className="space-y-2 mt-1">
+                              <span className="text-[10px] font-bold text-blue-400 block">Schicht modifizieren:</span>
+                              <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-xs text-white" />
+                              <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={4} className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-[11px] text-white resize-none" />
+                              <div className="flex gap-1.5 justify-end">
+                                <button type="button" onClick={() => setEditingShiftId(null)} className="px-2 py-1 bg-slate-800 rounded text-[10px] cursor-pointer">Abbrechen</button>
+                                <button type="button" onClick={() => handleSaveEdit(schicht.id)} className="px-2 py-1 bg-emerald-600 rounded text-[10px] font-bold cursor-pointer">Sichern</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-[11px] space-y-1">
+                              <div className="font-medium text-slate-300 whitespace-pre-wrap">{cleanInfo}</div>
+                              {massMessageText && (
+                                <div className="mt-2.5 bg-slate-950 p-2 rounded border border-slate-800/60 flex flex-col gap-1.5">
+                                  <span className="text-[10px] text-pink-400 font-bold tracking-wider uppercase">Mass Message:</span>
+                                  <div className="text-[10px] text-slate-300 italic whitespace-pre-wrap leading-relaxed max-h-[80px] overflow-y-auto pr-1">
+                                    {massMessageText}
+                                  </div>
+                                  <button type="button" onClick={() => handleCopyText(massMessageText, schicht.id)} className={`w-full text-center text-[10px] rounded py-1 font-bold transition cursor-pointer mt-1 ${copiedId === schicht.id ? "bg-green-600 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
+                                    {copiedId === schicht.id ? "✓ Kopiert!" : "Text kopieren"}
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -124,7 +154,7 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
                     })}
                   </div>
                 </div>
-                {schichtenAnDiesemTag.length === 0 && <div className="text-[10px] text-slate-600 italic text-center pb-8">Keine Schichten</div>}
+                {schichtenAnDiesemTag.length === 0 && <div className="text-[11px] text-slate-600 italic text-center pt-16">Keine Schichten geplant</div>}
               </div>
             );
           })}

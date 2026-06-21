@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabaseClient"; // 🟢 Nutzt den stabilen Client direkt
+import { createClient } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
 type CreateShiftFormProps = {
@@ -11,7 +11,7 @@ type CreateShiftFormProps = {
 
 export default function CreateShiftForm({ sichereProfile, sichereModels }: CreateShiftFormProps) {
   const router = useRouter();
-  const supabase = createClient(); // 🟢 Supabase direkt im Browser aufrufen
+  const supabase = createClient();
   
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -42,21 +42,17 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
       return;
     }
 
-    const isoStart = new Date(`${dateStr}T${startTime}:00`).toISOString();
-    const isoEnd = new Date(`${dateStr}T${endTime}:00`).toISOString();
     const formatierterSlot = `${startTime} – ${endTime} Uhr`;
 
     try {
-      // 🟢 DIREKTER DATENBANK-EINTRAG: Umgeht den Next.js-Server-Stream komplett!
       if (selectedModels.length > 0) {
         const inserts = selectedModels.map(name => {
           const individuelleNachricht = formData.get(`mass_message_${name}`) as string;
           const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Model: ${name} | MESSAGE_START:${individuelleNachricht}:MESSAGE_END`;
-          const zufallsSlotId = Math.floor(Math.random() * 9999000) + 1000;
 
           return {
             shift_date: dateStr,
-            time_slot_id: zufallsSlotId,
+            time_slot_id: 1, // 🟢 FIXED: Nutzt die garantiert existierende ID 1 der time_slots Tabelle!
             notes: details
           };
         });
@@ -65,20 +61,16 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
         if (error) throw error;
       } else {
         const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Kein Model`;
-        const zufallsSlotId = Math.floor(Math.random() * 9999000) + 1000;
 
         const { error } = await supabase.from("shifts").insert([
-          { shift_date: dateStr, time_slot_id: zufallsSlotId, notes: details }
+          { shift_date: dateStr, time_slot_id: 1, notes: details } // 🟢 FIXED ALSO HERE
         ]);
         if (error) throw error;
       }
 
-      // 🟢 GARANTIERT ERFOLGREICH: Da wir direkt mit Supabase sprechen, poppt diese Meldung unzerstörbar auf!
       setStatusMsg({ type: "success", text: "✓ Schicht(en) mit Mass Messages erfolgreich im Kalender angelegt!" });
       e.currentTarget.reset();
       setSelectedModels([]);
-      
-      // Aktualisiert den wöchentlichen Kalender flüssig im Hintergrund
       router.refresh();
 
     } catch (dbError: any) {
@@ -107,7 +99,6 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
         </div>
       </div>
 
-      {/* MODEL AUSWAHL CHECKBOXEN */}
       <div>
         <label className="block text-xs font-medium text-slate-400 mb-2">Models zuteilen (Mehrfachauswahl möglich)</label>
         <div className="grid grid-cols-2 gap-2 bg-slate-900 p-3 rounded-md border border-slate-700 max-h-[120px] overflow-y-auto">
@@ -126,7 +117,6 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
         </div>
       </div>
 
-      {/* DYNAMISCHE TEXTFELDER FÜR MASS MESSAGES */}
       {selectedModels.length > 0 && (
         <div className="space-y-3 bg-slate-900/60 p-4 rounded-md border border-slate-800">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mass Messages für ausgewählte Models eintragen:</h3>
@@ -135,7 +125,7 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
               <label className="block text-xs text-emerald-400 font-medium">Mass Message für {modelName}:</label>
               <textarea 
                 name={`mass_message_${modelName}`} 
-                placeholder={`Hier die Nachricht für ${modelName} eintragen...`}
+                placeholder={`Hier die Nachricht für {modelName} eintragen...`}
                 required
                 rows={2}
                 className="w-full px-3 py-2 border border-slate-700 rounded-md text-white bg-slate-950 focus:outline-none focus:border-blue-500 text-xs resize-none"
