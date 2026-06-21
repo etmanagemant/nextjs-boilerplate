@@ -1,14 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
 export default function LoginPage() {
-  const router = useRouter();
   const supabase = createClient();
 
-  const [isRegister, setIsRegister] = useState(false); // Schaltet zwischen Login und Registrierung um
+  const [isRegister, setIsRegister] = useState(false);
   const [redirectTo, setRedirectTo] = useState("/");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,7 +26,6 @@ export default function LoginPage() {
     setSuccessMsg(null);
 
     if (isRegister) {
-      // 🟢 REGISTRIERUNG
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -44,7 +41,6 @@ export default function LoginPage() {
       setIsRegister(false);
       setLoading(false);
     } else {
-      // 🔵 LOGIN
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -56,20 +52,21 @@ export default function LoginPage() {
         return;
       }
 
-      router.refresh(); 
-      router.replace(redirectTo);
+      // 🟢 HARTER RESET-LINK HINZUGEFÜGT: Erzwingt, dass der Browser die Seite komplett neu einliest 
+      // und die neuen Cookies an proxy.ts übergibt!
+      window.location.href = redirectTo;
     }
   }
 
   return (
-    <div className="max-w-md mx-auto pt-10 px-4">
-      <h1 className="text-2xl font-bold mb-6">
+    <div className="max-w-md mx-auto pt-10 px-4 text-slate-800">
+      <h1 className="text-2xl font-bold mb-6 text-white">
         {isRegister ? "Registrieren (Neuer Mitarbeiter)" : "Login"}
       </h1>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium">E-Mail</label>
+          <label className="text-sm font-medium text-slate-300">E-Mail</label>
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -81,7 +78,7 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium">Passwort</label>
+          <label className="text-sm font-medium text-slate-300">Passwort</label>
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -98,7 +95,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition"
+          className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition cursor-pointer"
         >
           {loading ? "Bitte warten..." : isRegister ? "Konto erstellen" : "Einloggen"}
         </button>
@@ -112,7 +109,7 @@ export default function LoginPage() {
             setErrorMsg(null);
             setSuccessMsg(null);
           }}
-          className="text-blue-600 hover:underline font-medium"
+          className="text-blue-400 hover:underline font-medium cursor-pointer"
         >
           {isRegister ? "Bereits registriert? Hier einloggen" : "Neu hier? Jetzt als Mitarbeiter registrieren"}
         </button>
