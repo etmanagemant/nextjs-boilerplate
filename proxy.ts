@@ -19,11 +19,12 @@ export async function proxy(request: NextRequest) {
     }
   )
 
+  // 1. Authentifizierung abfragen
   const { data: { user } } = await supabase.auth.getUser()
   const url = request.nextUrl.clone()
   const isLoginPath = url.pathname === '/login'
 
-  // 1. Login-Zwang: Unangemeldete User müssen zum Login
+  // Wenn nicht eingeloggt -> Zum Login zwingen
   if (!user) {
     if (!isLoginPath) {
       url.pathname = '/login'
@@ -32,17 +33,27 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse
   }
 
-  // 2. Rollen-Abfrage korrigiert: Sucht in 'profiles' über 'user_id'
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('user_id', user.id)
-    .maybeSingle()
+  // 2. Rollen-Ermittlung
+  let role = 'chatter'
 
-  // Holt die Rolle aus der Spalte 'role' (Standard ist 'chatter', falls nichts gefunden wird)
-  const role = profile?.role || 'chatter'
+  // 🔥 ABSOLUTER ADMIN-HARDCODE FÜR DICH (Dein Sicherheitsnetz):
+  // Ersetze 'tobias@beispiel.de' mit deiner echten Registrierungs-E-Mail!
+  if (user.email === 'etmanagemant@gmail.com' || user.id === '35498c92-2c4d-4720-a6f7-cc187a4c5fc4') {
+    role = 'admin'
+  } else {
+    // Für alle anderen: Normaler Datenbank-Lookup
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      
+    if (profile?.role) {
+      role = profile.role
+    }
+  }
 
-  // 3. Automatisches Weiterleiten je nach Rolle bei Aufruf von "/"
+  // 3. Automatisches Weiterleiten bei Aufruf der Startseite "/"
   if (url.pathname === '/') {
     if (role === 'admin') {
       url.pathname = '/management'
@@ -52,7 +63,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // 4. Schutz: Chatter dürfen nicht auf die Management-Seite
+  // 4. Schutz: Wer kein Admin ist, fliegt unweigerlich zurück zu /chatter
   if (url.pathname.startsWith('/management') && role !== 'admin') {
     url.pathname = '/chatter'
     return NextResponse.redirect(url)
