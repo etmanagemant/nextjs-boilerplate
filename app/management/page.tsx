@@ -9,10 +9,11 @@ export default async function ManagementPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // 1. Sicherheits-Check (Dein E-Mail-Hardcode bleibt exakt erhalten)
   if (!user) { redirect("/login"); }
   
-  // 🟢 HARDCODE: Sicherheitsnetz für dich
   let isAdmin = false;
+  // 🔥 Ersetze dies mit deiner echten Admin-E-Mail (z. B. tobias@...)
   if (user.email === "etmanagemant@gmail.com") {
     isAdmin = true;
   } else {
@@ -22,10 +23,26 @@ export default async function ManagementPage() {
 
   if (!isAdmin) { redirect("/"); }
 
-  // Daten live laden
-  const { data: profilListe } = await supabase.from("profiles").select("*");
-  const { data: modelsListe } = await supabase.from("models").select("*").order("name", { ascending: true });
+  // 2. Daten live abrufen mit absoluter Absturzsicherung
+  let profilListe: any[] = [];
+  let modelsListe: any[] = [];
 
+  try {
+    const { data: pData } = await supabase.from("profiles").select("*");
+    // 🟢 ABSICHERUNG: Nur zuweisen, wenn Daten wirklich ein Array sind (verhindert den Absturz bei leeren Tabellen)
+    if (pData && Array.isArray(pData)) {
+      profilListe = pData;
+    }
+
+    const { data: mData } = await supabase.from("models").select("*").order("name", { ascending: true });
+    if (mData && Array.isArray(mData)) {
+      modelsListe = mData;
+    }
+  } catch (error) {
+    console.error("Datenbank-Fehler abgefangen:", error);
+  }
+
+  // 3. Server Actions (Bleiben identisch für stabiles Hinzufügen/Löschen)
   async function updateMitarbeiterRolle(formData: FormData) {
     "use server";
     const targetUserId = formData.get("user_id");
@@ -85,21 +102,28 @@ export default async function ManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {profilListe?.map((p) => (
-                <tr key={p.user_id} className="border-b border-slate-800/50 hover:bg-slate-900/50">
-                  <td className="p-3 font-medium text-slate-100">{p.full_name || "Mitarbeiter"}</td>
-                  <td className="p-3 text-slate-400">{p.email || "keine E-Mail"}</td>
-                  <td className="p-3">
-                    <form action={updateMitarbeiterRolle} className="inline-block w-full">
-                      <input type="hidden" name="user_id" value={p.user_id} />
-                      <select name="rolle" defaultValue={p.role} onChange={(e) => e.target.form?.requestSubmit()} className="w-full px-2 py-1 rounded border text-xs font-semibold bg-slate-900 text-white border-slate-700">
-                        <option value="chatter">Chatter</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </form>
-                  </td>
+              {/* 🟢 SICHERER RENDER: Prüft, ob Profile vorhanden sind */}
+              {profilListe.length > 0 ? (
+                profilListe.map((p) => (
+                  <tr key={p.user_id} className="border-b border-slate-800/50 hover:bg-slate-900/50">
+                    <td className="p-3 font-medium text-slate-100">{p.full_name || "Mitarbeiter"}</td>
+                    <td className="p-3 text-slate-400">{p.email || "keine E-Mail"}</td>
+                    <td className="p-3">
+                      <form action={updateMitarbeiterRolle} className="inline-block w-full">
+                        <input type="hidden" name="user_id" value={p.user_id} />
+                        <select name="rolle" defaultValue={p.role} onChange={(e) => e.target.form?.requestSubmit()} className="w-full px-2 py-1 rounded border text-xs font-semibold bg-slate-900 text-white border-slate-700">
+                          <option value="chatter">Chatter</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </form>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="p-4 text-center text-slate-500">Noch keine Profile in der Datenbank registriert. Melde dich im Inkognito-Modus neu an!</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -113,17 +137,19 @@ export default async function ManagementPage() {
           <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700">Model hinzufügen</button>
         </form>
         <div className="grid gap-3 sm:grid-cols-2">
-          {modelsListe?.map((model) => (
-            <div key={model.id} className="flex justify-between items-center p-3 border border-slate-800 rounded-md bg-slate-900">
-              <span className="font-medium text-slate-200">{model.name}</span>
-              <form action={deleteModel}>
-                <input type="hidden" name="id" value={model.id} />
-                <button type="submit" className="text-red-400 hover:text-red-500 text-sm font-semibold">Löschen</button>
-              </form>
-            </div>
-          ))}
-          {(!modelsListe || modelsListe.length === 0) && (
-            <div className="col-span-2 text-sm text-slate-500 text-center py-4">Keine Models hinterlegt.</div>
+          {/* 🟢 SICHERER RENDER: Prüft, ob Models vorhanden sind */}
+          {modelsListe.length > 0 ? (
+            modelsListe.map((model) => (
+              <div key={model.id} className="flex justify-between items-center p-3 border border-slate-800 rounded-md bg-slate-900">
+                <span className="font-medium text-slate-200">{model.name}</span>
+                <form action={deleteModel}>
+                  <input type="hidden" name="id" value={model.id} />
+                  <button type="submit" className="text-red-400 hover:text-red-500 text-sm font-semibold">Löschen</button>
+                </form>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-2 text-sm text-slate-500 text-center py-4">Keine Models hinterlegt. Füge oben dein erstes Model hinzu.</div>
           )}
         </div>
       </section>
