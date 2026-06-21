@@ -12,16 +12,25 @@ export default async function ManagementPage() {
 
   const supabase = await createClient();
   
-  // Holt alle registrierten Profile
-  const { data: profilListe } = await supabase
+  // Abfragen mit Fehler-Catch absichern, damit die Seite nicht abstürzt
+  const { data: rawProfiles, error: profError } = await supabase
     .from("profiles")
     .select("*");
-
-  // Holt die Models
-  const { data: modelsListe } = await supabase
+    
+  const { data: rawModels, error: modelError } = await supabase
     .from("models")
-    .select("*")
-    .order("name", { ascending: true });
+    .select("*");
+
+  // Wenn ein Fehler auftritt, nutzen wir eine leere Liste als Fallback
+  const profilListe = rawProfiles || [];
+  const modelsListe = rawModels || [];
+
+  // Falls in Supabase etwas schiefläuft, loggen wir es im Server-Terminal
+  if (profError) console.error("Supabase Profiles Fehler:", profError.message);
+  if (modelError) console.error("Supabase Models Fehler:", modelError.message);
+
+  // ... ab hier folgen deine Server Actions (updateMitarbeiterRolle, etc.) und das return (...) komplett unverändert!
+
 
   // 🟢 Server Action nutzt jetzt korrekt die 'user_id' zum Updaten!
   async function updateMitarbeiterRolle(formData: FormData) {
