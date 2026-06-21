@@ -6,46 +6,43 @@ import { redirect } from "next/navigation";
 export default async function ManagementPage() {
   const role = await getCurrentRole();
 
+  // Sicherheits-Check
   if (!role || role !== "admin") {
     redirect("/");
   }
 
-  const supabase = await createClient();
-  
-  // Abfragen mit Fehler-Catch absichern, damit die Seite nicht abstürzt
-  const { data: rawProfiles, error: profError } = await supabase
-    .from("profiles")
-    .select("*");
+  let profilListe: any[] = [];
+  let modelsListe: any[] = [];
+
+  // Der absolute Absturz-Schutz: Fängt jeden Datenbankfehler ab
+  try {
+    const supabase = await createClient();
     
-  const { data: rawModels, error: modelError } = await supabase
-    .from("models")
-    .select("*");
+    const { data: pData } = await supabase.from("profiles").select("*");
+    if (pData) profilListe = pData;
 
-  // Wenn ein Fehler auftritt, nutzen wir eine leere Liste als Fallback
-  const profilListe = rawProfiles || [];
-  const modelsListe = rawModels || [];
+    const { data: mData } = await supabase.from("models").select("*").order("name", { ascending: true });
+    if (mData) modelsListe = mData;
+  } catch (e) {
+    console.error("Kritischer Datenbank-Ladefehler:", e);
+  }
 
-  // Falls in Supabase etwas schiefläuft, loggen wir es im Server-Terminal
-  if (profError) console.error("Supabase Profiles Fehler:", profError.message);
-  if (modelError) console.error("Supabase Models Fehler:", modelError.message);
-
-  // ... ab hier folgen deine Server Actions (updateMitarbeiterRolle, etc.) und das return (...) komplett unverändert!
-
-
-  // 🟢 Server Action nutzt jetzt korrekt die 'user_id' zum Updaten!
   async function updateMitarbeiterRolle(formData: FormData) {
     "use server";
     const targetUserId = formData.get("user_id");
     const neueRolle = formData.get("rolle") as string;
     
     if (targetUserId && neueRolle) {
-      const supabaseServer = await createClient();
-      await supabaseServer
-        .from("profiles")
-        .update({ role: neueRolle })
-        .eq("user_id", targetUserId); // Fix von id zu user_id
-      
-      revalidatePath("/management");
+      try {
+        const supabaseServer = await createClient();
+        await supabaseServer
+          .from("profiles")
+          .update({ role: neueRolle })
+          .eq("user_id", targetUserId);
+        revalidatePath("/management");
+      } catch (err) {
+        console.error(err);
+      }
     }
   }
 
@@ -53,9 +50,13 @@ export default async function ManagementPage() {
     "use server";
     const name = formData.get("name") as string;
     if (name) {
-      const supabaseServer = await createClient();
-      await supabaseServer.from("models").insert([{ name }]);
-      revalidatePath("/management");
+      try {
+        const supabaseServer = await createClient();
+        await supabaseServer.from("models").insert([{ name }]);
+        revalidatePath("/management");
+      } catch (err) {
+        console.error(err);
+      }
     }
   }
 
@@ -63,48 +64,54 @@ export default async function ManagementPage() {
     "use server";
     const id = formData.get("id");
     if (id) {
-      const supabaseServer = await createClient();
-      await supabaseServer.from("models").delete().eq("id", id);
-      revalidatePath("/management");
+      try {
+        const supabaseServer = await createClient();
+        await supabaseServer.from("models").delete().eq("id", id);
+        revalidatePath("/management");
+      } catch (err) {
+        console.error(err);
+      }
     }
   }
 
   return (
-    <main className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6 text-slate-800">Management Dashboard</h1>
+    <main className="p-6 max-w-4xl mx-auto min-h-screen bg-slate-900 text-white rounded-lg my-6 border border-slate-800">
+      <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+        <h1 className="text-3xl font-bold text-white">Management Dashboard</h1>
+        <form action="/api/logout" method="POST">
+          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition">
+            Abmelden
+          </button>
+        </form>
+      </div>
 
       {/* BEREICH 1: MITARBEITER-VERWALTUNG */}
-      <section className="bg-white p-6 rounded-lg border mb-8 shadow-sm">
-        <h2 className="text-xl font-semibold mb-4 text-slate-700">Mitarbeiter & Rollen modifizieren</h2>
+      <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 mb-8 shadow-sm">
+        <h2 className="text-xl font-semibold mb-4 text-slate-200">Mitarbeiter & Rollen modifizieren</h2>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b bg-slate-50 text-slate-500">
-                <th className="p-2">Name</th>
-                <th className="p-2">E-Mail</th>
-                <th className="p-2 w-[150px]">Rolle ändern</th>
+              <tr className="border-b border-slate-800 bg-slate-900 text-slate-400">
+                <th className="p-3">Name</th>
+                <th className="p-3">E-Mail</th>
+                <th className="p-3 w-[150px]">Rolle ändern</th>
               </tr>
             </thead>
             <tbody>
-              {profilListe?.map((p) => (
-                <tr key={p.user_id} className="border-b hover:bg-slate-50">
-                  <td className="p-2 font-medium text-slate-900">
-                    {p.full_name || "Mitarbeiter"}
-                  </td>
-                  <td className="p-2 text-slate-600">
-                    {p.email || <span className="text-slate-400 italic">keine E-Mail</span>}
-                  </td>
-                  <td className="p-2">
+              {profilListe.map((p) => (
+                <tr key={p.user_id} className="border-b border-slate-800/50 hover:bg-slate-900/50">
+                  <td className="p-3 font-medium text-slate-100">{p.full_name || "Mitarbeiter"}</td>
+                  <td className="p-3 text-slate-400">{p.email || "keine E-Mail"}</td>
+                  <td className="p-3">
                     <form action={updateMitarbeiterRolle} className="inline-block w-full">
-                      {/* 🟢 Übergibt die korrekte user_id an die Server Action */}
                       <input type="hidden" name="user_id" value={p.user_id} />
                       <select 
                         name="rolle" 
                         defaultValue={p.role}
                         onChange={(e) => e.target.form?.requestSubmit()}
-                        className={`w-full px-2 py-1 rounded border text-xs font-semibold ${
-                          p.role === 'admin' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'
+                        className={`w-full px-2 py-1 rounded border text-xs font-semibold bg-slate-900 text-white ${
+                          p.role === 'admin' ? 'border-red-500/50 text-red-400' : 'border-green-500/50 text-green-400'
                         }`}
                       >
                         <option value="chatter">Chatter</option>
@@ -114,7 +121,7 @@ export default async function ManagementPage() {
                   </td>
                 </tr>
               ))}
-              {(!profilListe || profilListe.length === 0) && (
+              {profilListe.length === 0 && (
                 <tr>
                   <td colSpan={3} className="p-4 text-center text-slate-500">Noch keine Profile registriert.</td>
                 </tr>
@@ -125,8 +132,8 @@ export default async function ManagementPage() {
       </section>
 
       {/* BEREICH 2: MODELS VERWALTEN */}
-      <section className="bg-white p-6 rounded-lg border mb-8 shadow-sm">
-        <h2 className="text-xl font-semibold mb-4 text-slate-700">Models (Schichtplanung)</h2>
+      <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 shadow-sm">
+        <h2 className="text-xl font-semibold mb-4 text-slate-200">Models (Schichtplanung)</h2>
         
         <form action={addModel} className="flex gap-3 mb-6">
           <input 
@@ -134,25 +141,28 @@ export default async function ManagementPage() {
             name="name" 
             placeholder="Model Name" 
             required 
-            className="flex-1 px-3 py-2 border rounded-md text-sm text-slate-900 bg-white"
+            className="flex-1 px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900 focus:outline-none focus:border-blue-500"
           />
-          <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700">
+          <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition">
             Model hinzufügen
           </button>
         </form>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          {modelsListe?.map((model) => (
-            <div key={model.id} className="flex justify-between items-center p-3 border rounded-md bg-slate-50">
-              <span className="font-medium text-slate-800">{model.name}</span>
+          {modelsListe.map((model) => (
+            <div key={model.id} className="flex justify-between items-center p-3 border border-slate-800 rounded-md bg-slate-900">
+              <span className="font-medium text-slate-200">{model.name}</span>
               <form action={deleteModel}>
                 <input type="hidden" name="id" value={model.id} />
-                <button type="submit" className="text-red-500 hover:text-red-700 text-sm font-semibold">
+                <button type="submit" className="text-red-400 hover:text-red-500 text-sm font-semibold transition">
                   Löschen
                 </button>
               </form>
             </div>
           ))}
+          {modelsListe.length === 0 && (
+            <div className="col-span-2 text-sm text-slate-500 text-center py-2">Keine Models hinterlegt.</div>
+          )}
         </div>
       </section>
     </main>
