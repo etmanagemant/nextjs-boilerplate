@@ -4,11 +4,9 @@ import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
-// Hier kannst du alle deine verfügbaren Models eintragen:
-const AVAILABLE_MODELS = ["Kein Model", "SweetJules", "Leon", "Model3", "Model4"];
-
 type WeeklyCalendarProps = {
   sichereShifts: any[];
+  modelsListe: any[]; // 👈 Hier kommen deine dynamischen Models aus der DB rein
   role: string;
   userEmail: string | null;
   userId: string;
@@ -22,7 +20,7 @@ function startOfWeekMonday(date: Date) {
   d.setDate(d.getDate() - diffToMonday); return d;
 }
 
-export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId }: WeeklyCalendarProps) {
+export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userEmail, userId }: WeeklyCalendarProps) {
   const router = useRouter();
   const supabase = createClient();
   const [baseWeekStart, setBaseWeekStart] = useState(() => startOfWeekMonday(new Date()));
@@ -171,8 +169,9 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
                                 <div>
                                   <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Model auswählen</label>
                                   <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none cursor-pointer">
-                                    {AVAILABLE_MODELS.map((m) => (
-                                      <option key={m} value={m} className="bg-slate-950 text-white">{m}</option>
+                                    <option value="Kein Model" className="bg-slate-950 text-white">Kein Model</option>
+                                    {(modelsListe || []).map((m) => (
+                                      <option key={m.id} value={m.name} className="bg-slate-950 text-white">{m.name}</option>
                                     ))}
                                   </select>
                                 </div>

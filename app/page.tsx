@@ -1,51 +1,43 @@
-// app/page.tsx
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-// 🟢 KORRIGIERT: Greift jetzt exakt auf deine reale Datei mit 'er' am Ende zu!
-import WeeklyCalendar from "@/components/layout/WeeklyCalender"; 
+import WeeklyCalendar from "@/components/layout/WeeklyCalender";
 
-export default async function HomePage() {
+export const dynamic = "force-dynamic";
+
+export default async function CalendarPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) { redirect("/login"); }
+  if (!user) {
+    redirect("/login");
+  }
 
-  // Deine funktionierende Admin-Erkennung (UUID- und E-Mail-Check)
-  let role = "chatter";
+  // 1. Rolle des Benutzers ermitteln
+  let role = "mitarbeiter";
   if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
     role = "admin";
   } else {
     const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
-    if (profile && profile.role === "admin") role = "admin";
+    if (profile && profile.role === "admin") {
+      role = "admin";
+    }
   }
 
-  // Holt die Daten live aus deiner Tabelle 'shifts'
-  const { data: shiftsData } = await supabase.from("shifts").select("*");
-  const sichereShifts = shiftsData || [];
+  // 2. Schichten abrufen
+  const { data: shifts } = await supabase.from("shifts").select("*");
+  
+  // 3. Echte Models live aus der Tabelle laden!
+  const { data: models } = await supabase.from("models").select("id, name").order("name", { ascending: true });
 
   return (
-    <div className="p-6 min-h-screen bg-slate-950 text-white">
-      {/* HEADER BAR */}
-      <div className="max-w-7xl mx-auto flex items-center justify-between mb-6 border-b border-white/10 pb-4">
-        <div className="flex items-center gap-4">
-          <span className="text-sm font-semibold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">
-            Status: {role.toUpperCase()} ({user.email})
-          </span>
-          <nav className="flex gap-2">
-            {role === "admin" && (
-              <a href="/management" className="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-700 transition font-medium">Management</a>
-            )}
-            <a href="/chatter" className="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-700 transition font-medium">Meine Stechuhr</a>
-          </nav>
-        </div>
-        <form action="/api/logout" method="POST">
-          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition cursor-pointer font-medium">
-            Abmelden
-          </button>
-        </form>
-      </div>
-
-      <WeeklyCalendar sichereShifts={sichereShifts} role={role} userEmail={user.email || null} userId={user.id} />
-    </div>
+    <main className="min-h-screen bg-slate-950 p-4">
+      <WeeklyCalendar 
+        sichereShifts={shifts || []} 
+        modelsListe={models || []} 
+        role={role} 
+        userEmail={user.email || ""} 
+        userId={user.id} 
+      />
+    </main>
   );
 }
