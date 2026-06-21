@@ -61,8 +61,7 @@ function LiveTimer({ startedAt }: { startedAt: string }) {
       ⏱️ {pad2(hrs)}:{pad2(mins)}:{pad2(secs)}
     </span>
   );
-}
-export default function ChatterPage() {
+}export default function ChatterPage() {
   const supabase = createClient();
   const [rows, setRows] = useState<AssignmentRow[]>([]);
   const [alleKalenderSchichten, setAlleKalenderSchichten] = useState<any[]>([]);
@@ -74,7 +73,6 @@ export default function ChatterPage() {
   const [copiedShiftId, setCopiedShiftId] = useState<number | null>(null);
   const [jetztZeit, setJetztZeit] = useState("");
 
-  // Taktet jede Sekunde, um das Live-Umschalten der Models im UI zu erzwingen
   useEffect(() => {
     const calcZeit = () => {
       const d = new Date();
@@ -139,12 +137,18 @@ export default function ChatterPage() {
 
   const naechsteZweiSchichten = useMemo(() => {
     const heuteStr = getHeuteISOString();
-    return meineGeplantenSchichten.filter(s => s.datum >= heuteStr).slice(0, 2);
-  }, [meineGeplantenSchichten]);
+    const zukuenftige = meineGeplantenSchichten.filter(s => {
+      if (s.datum > heuteStr) return true;
+      if (s.datum === heuteStr) {
+        return s.bis > jetztZeit;
+      }
+      return false;
+    });
+    return zukuenftige.slice(0, 2);
+  }, [meineGeplantenSchichten, jetztZeit]);
 
   const totalHours = useMemo(() => rows.reduce((sum, r) => sum + toDurationHours(r.started_at, r.ended_at), 0), [rows]);
   const activeShift = useMemo(() => rows.find(r => r.started_at && !r.ended_at), [rows]);
-  // Rechnet sekundengenau aus, ob JETZT gerade ein Model aktiv ist oder Freie Arbeitszeit gilt
   const aktiveLiveModels = useMemo(() => {
     const heuteStr = getHeuteISOString();
     const treffer = meineGeplantenSchichten.filter(s => s.datum === heuteStr && jetztZeit >= s.von && jetztZeit <= s.bis);
@@ -156,7 +160,6 @@ export default function ChatterPage() {
     if (!currentUserId) { setErr("Benutzerdaten laden noch."); return; }
     setErr(null);
     
-    // 🛡️ REINE ZEITERFASSUNG: Trägt exakt EINE Zeile ein. Die Models werden live oben im UI berechnet!
     const { error } = await supabase.from("shift_assignments").insert([
       {
         chatter_id: currentUserId,
@@ -216,9 +219,9 @@ export default function ChatterPage() {
         Deine Gesamtstunden: <span className="text-white font-semibold">{totalHours.toFixed(2)} h</span>
       </div>
 
-      {/* 📋 VORSCHAU: Die nächsten 2 Schichten nebeneinander */}
+      {/* 📋 VORSCHAU: Geplante Schichten */}
       <div className="mb-8">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Deine nächsten 2 geplanten Schichten</h3>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Deine aktuellen Schicht-Zuteilungen</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {naechsteZweiSchichten.map((s) => (
             <div key={s.id} className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-between min-h-[140px]">
@@ -241,7 +244,7 @@ export default function ChatterPage() {
             </div>
           ))}
           {naechsteZweiSchichten.length === 0 && (
-            <div className="col-span-2 text-xs text-slate-500 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Aktuell keine Schichten im Kalender geplant.</div>
+            <div className="col-span-2 text-xs text-slate-500 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Aktuell keine aktiven oder anstehenden Schichten geplant.</div>
           )}
         </div>
       </div>
