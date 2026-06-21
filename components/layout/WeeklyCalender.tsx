@@ -4,6 +4,9 @@ import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
+// Hier kannst du alle deine verfügbaren Models eintragen:
+const AVAILABLE_MODELS = ["Kein Model", "SweetJules", "Leon", "Model3", "Model4"];
+
 type WeeklyCalendarProps = {
   sichereShifts: any[];
   role: string;
@@ -166,8 +169,12 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
                                   </div>
                                 </div>
                                 <div>
-                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Model</label>
-                                  <input type="text" value={editModel} onChange={(e) => setEditModel(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Model auswählen</label>
+                                  <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none cursor-pointer">
+                                    {AVAILABLE_MODELS.map((m) => (
+                                      <option key={m} value={m} className="bg-slate-950 text-white">{m}</option>
+                                    ))}
+                                  </select>
                                 </div>
                                 <div>
                                   <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Nachricht (optional)</label>
