@@ -32,7 +32,7 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
-// 🟢 KORRIGIERT: Keine Netzwerk-Abbrüche mehr durch serverseitiges revalidatePath!
+// 🟢 CRASH-PROOF VERBINDUNG: Liefert jetzt eine reine, ungestörte JSON-Antwort an das Formular
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 
   const dateStr = formData.get("date") as string; 
@@ -67,7 +67,9 @@ export async function addShift(formData: FormData) {
       ]);
     }
     
-    // 🟢 Rückmeldung wird sofort gesendet, OHNE den Stream abzubrechen!
+    // 🟢 REVALIDATE ENTFERNT! Das verhindert, dass der Antwort-Stream vorzeitig beschädigt wird.
+    // Das Formular auf der Client-Seite übernimmt das Aktualisieren flüssig per router.refresh().
+
     return { success: true };
   }
   
