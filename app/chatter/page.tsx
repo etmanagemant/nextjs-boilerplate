@@ -28,11 +28,9 @@ function getHeuteISOString() {
   const d = new Date();
   const options = { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" } as const;
   const parts = new Intl.DateTimeFormat("en-US", options).formatToParts(d);
-  
   const year = parts.find(p => p.type === "year")?.value;
   const month = parts.find(p => p.type === "month")?.value;
   const day = parts.find(p => p.type === "day")?.value;
-  
   return `${year}-${month}-${day}`;
 }
 
@@ -73,13 +71,20 @@ export default function ChatterPage() {
   const [err, setErr] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string>("");
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [currentUserFullName, setCurrentUserFullName] = useState<string>("");
   const [copiedShiftId, setCopiedShiftId] = useState<number | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       if (data?.user) {
         setCurrentUserEmail(data.user.email || "");
         setCurrentUserId(data.user.id);
+        
+        // Holt den echten Namen aus den Profilen für den Kalender-Abgleich
+        const { data: prof } = await supabase.from("profiles").select("full_name").eq("user_id", data.user.id).maybeSingle();
+        if (prof?.full_name) {
+          setCurrentUserFullName(prof.full_name);
+        }
       }
     });
   }, [supabase]);
@@ -107,9 +112,13 @@ export default function ChatterPage() {
       try {
         if (s.notes && s.notes.startsWith("{")) {
           const parsed = JSON.parse(s.notes);
+          const kalenderMitarbeiter = String(parsed.mitarbeiter).toLowerCase().trim();
+
+          // 🛡️ MATCHT JETZT ALLES: Vollname, E-Mail oder ID!
           const matchtMitarbeiter = 
-            String(parsed.mitarbeiter).toLowerCase().trim() === currentUserEmail.toLowerCase().trim() ||
-            String(parsed.mitarbeiter).trim() === currentUserId.trim();
+            kalenderMitarbeiter === currentUserEmail.toLowerCase().trim() ||
+            kalenderMitarbeiter === currentUserId.trim() ||
+            (currentUserFullName && kalenderMitarbeiter === currentUserFullName.toLowerCase().trim());
 
           if (matchtMitarbeiter) {
             listen.push({
@@ -125,7 +134,7 @@ export default function ChatterPage() {
       } catch (e) {}
     });
     return listen.sort((a, b) => `${a.datum}T${a.von}`.localeCompare(`${b.datum}T${b.von}`));
-  }, [alleKalenderSchichten, currentUserEmail, currentUserId]);
+  }, [alleKalenderSchichten, currentUserEmail, currentUserId, currentUserFullName]);
 
   const naechsteZweiSchichten = useMemo(() => {
     const heuteStr = getHeuteISOString();
@@ -148,10 +157,12 @@ export default function ChatterPage() {
     setErr(null);
     const nun = new Date().toISOString();
 
+    // Wenn für heute Models im Kalender stehen (auch mehrere!)
     if (heuteGeplanteModelNamen.length > 0) {
       const { data: dbModels } = await supabase.from("models").select("id, name").in("name", heuteGeplanteModelNamen);
 
       if (dbModels && dbModels.length > 0) {
+        // Erstellt automatisch Einträge für ALLE zugeteilten Models parallel
         const eintraegeliste = dbModels.map((m) => ({
           chatter_id: currentUserId,
           model_id: m.id,
@@ -165,6 +176,7 @@ export default function ChatterPage() {
       }
     }
 
+    // Fallback: Keine geplante Schicht gefunden
     const { error: freeError } = await supabase.from("shift_assignments").insert([
       { chatter_id: currentUserId, model_id: null, started_at: nun, ended_at: null }
     ]);
@@ -175,6 +187,7 @@ export default function ChatterPage() {
   async function triggerGlobalEnd() {
     if (!activeShift) { setErr("Keine aktive Schicht gefunden."); return; }
     setErr(null);
+    // Beendet alle parallel laufenden Models dieser Schicht zeitgleich
     const { error } = await supabase.from("shift_assignments").update({ ended_at: new Date().toISOString() }).eq("chatter_id", currentUserId).is("ended_at", null);
     if (error) { setErr(error.message); return; }
     await refresh();
@@ -212,7 +225,7 @@ export default function ChatterPage() {
         Deine Gesamtstunden: <span className="text-white font-semibold">{totalHours.toFixed(2)} h</span>
       </div>
 
-      {/* 📋 VORSCHAU: Die nächsten 2 Schichten nebeneinander (Querformat) */}
+      {/* 📋 VORSCHAU: Die nächsten 2 Schichten nebeneinander */}
       <div className="mb-8">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Deine nächsten 2 geplanten Schichten</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
