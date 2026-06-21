@@ -31,3 +31,28 @@ export async function deleteModel(formData: FormData) {
     revalidatePath("/management");
   }
 }
+
+// 🟢 NEU: Schichterstellungs-Aktion für die 'shifts' Tabelle
+export async function addShift(formData: FormData) {
+  const chatterId = formData.get("chatter_id") as string;
+  const modelId = formData.get("model_id") ? Number(formData.get("model_id")) : null;
+  const dateStr = formData.get("date") as string; // YYYY-MM-DD
+  const slot = formData.get("slot") as string; // z.B. "08-12"
+
+  if (chatterId && dateStr && slot) {
+    const supabaseServer = await createClient();
+    
+    await supabaseServer.from("shifts").insert([
+      {
+        chatter_id: chatterId,
+        model_id: modelId,
+        date: dateStr,
+        time_slot: slot,
+        status: "geplant"
+      }
+    ]);
+    
+    revalidatePath("/management");
+    revalidatePath("/"); // Aktualisiert den Kalender auf der Startseite
+  }
+}
