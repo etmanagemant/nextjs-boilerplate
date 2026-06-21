@@ -15,8 +15,8 @@ type AssignmentRow = {
 type GeplanteSchicht = {
   id: number;
   datum: string;
-  von: string; // "12:00"
-  bis: string; // "16:00"
+  von: string;
+  bis: string;
   model: string;
   nachricht: string;
 };
@@ -27,9 +27,11 @@ function getHeuteISOString() {
   const d = new Date();
   const options = { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" } as const;
   const parts = new Intl.DateTimeFormat("en-US", options).formatToParts(d);
+  
   const year = parts.find(p => p.type === "year")?.value;
   const month = parts.find(p => p.type === "month")?.value;
   const day = parts.find(p => p.type === "day")?.value;
+  
   return `${year}-${month}-${day}`;
 }
 
@@ -72,12 +74,14 @@ export default function ChatterPage() {
   const [copiedShiftId, setCopiedShiftId] = useState<number | null>(null);
   const [jetztZeit, setJetztZeit] = useState("");
 
-  // Live-Uhrzeit für den sekundengenauen Model-Wechsel im UI aktualisieren
+  // Taktet jede Sekunde, um das Live-Umschalten der Models im UI zu erzwingen
   useEffect(() => {
-    const interval = setInterval(() => {
+    const calcZeit = () => {
       const d = new Date();
       setJetztZeit(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`);
-    }, 1000);
+    };
+    calcZeit();
+    const interval = setInterval(calcZeit, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -140,7 +144,7 @@ export default function ChatterPage() {
 
   const totalHours = useMemo(() => rows.reduce((sum, r) => sum + toDurationHours(r.started_at, r.ended_at), 0), [rows]);
   const activeShift = useMemo(() => rows.find(r => r.started_at && !r.ended_at), [rows]);
-  // Rechnet live aus, welche Models JETZT GERADE in dieser Minute aktiv sind
+  // Rechnet sekundengenau aus, ob JETZT gerade ein Model aktiv ist oder Freie Arbeitszeit gilt
   const aktiveLiveModels = useMemo(() => {
     const heuteStr = getHeuteISOString();
     const treffer = meineGeplantenSchichten.filter(s => s.datum === heuteStr && jetztZeit >= s.von && jetztZeit <= s.bis);
@@ -152,11 +156,11 @@ export default function ChatterPage() {
     if (!currentUserId) { setErr("Benutzerdaten laden noch."); return; }
     setErr(null);
     
-    // 🛡️ EINZIGARTIGER EINTRAG: Es wird immer nur EINE Schicht ohne feste Modelbindung gestempelt!
+    // 🛡️ REINE ZEITERFASSUNG: Trägt exakt EINE Zeile ein. Die Models werden live oben im UI berechnet!
     const { error } = await supabase.from("shift_assignments").insert([
       {
         chatter_id: currentUserId,
-        model_id: null, // Die Zuordnung regelt das Backend vollautomatisch über die Uhrzeit!
+        model_id: null, 
         started_at: new Date().toISOString(),
         ended_at: null
       }
