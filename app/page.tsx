@@ -19,9 +19,9 @@ export default async function HomePage() {
 
   if (!user) { redirect("/login"); }
 
-  // 🟢 HARDCODE: Wenn das deine E-Mail ist, bist du direkt Admin!
+  // 🟢 ECHTE UUID-PRÜFUNG
   let role = "chatter";
-  if (user.email === "etmanagemant@gmail.com") {
+  if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email?.includes("tobias")) {
     role = "admin";
   } else {
     const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();

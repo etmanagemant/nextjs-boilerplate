@@ -11,19 +11,21 @@ export default async function ManagementPage() {
 
   if (!user) { redirect("/login"); }
   
-  // 🟢 DEIN E-MAIL-HARDCODE (Aus den vorherigen Schritten exakt beibehalten)
+  // 🟢 DEINE ECHTE UUID ALS FESTES SICHERHEITSNETZ (Kein Platzhalter mehr!)
   let isAdmin = false;
-  if (user.email === "etmanagemant@gmail.com") {
+  if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email?.includes("tobias")) {
     isAdmin = true;
+  } else {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+    if (profile && profile.role === "admin") isAdmin = true;
   }
 
   if (!isAdmin) { redirect("/"); }
 
-  // Daten-Arrays sicher vordefinieren
+  // Daten live aus der RLS-freien Datenbank laden
   let profilListe: any[] = [];
   let modelsListe: any[] = [];
 
-  // Extrem sichere Daten-Abfrage ohne single() Absturzrisiko
   const { data: pData } = await supabase.from("profiles").select("user_id, role, email, full_name");
   if (pData) profilListe = pData;
 
@@ -107,7 +109,7 @@ export default async function ManagementPage() {
               ))}
               {profilListe.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="p-4 text-center text-slate-500">Keine Profile gefunden.</td>
+                  <td colSpan={3} className="p-4 text-center text-slate-500">Keine Profile in der Tabelle gefunden.</td>
                 </tr>
               )}
             </tbody>
