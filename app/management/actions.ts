@@ -13,6 +13,17 @@ export async function updateMitarbeiterRolle(formData: FormData) {
   }
 }
 
+// 👤 NEU: Ermöglicht das direkte Ändern des Mitarbeiternamens in der DB
+export async function updateMitarbeiterName(formData: FormData) {
+  const targetUserId = formData.get("user_id");
+  const neuerName = formData.get("full_name") as string;
+  if (targetUserId && neuerName) {
+    const supabaseServer = await createClient();
+    await supabaseServer.from("profiles").update({ full_name: neuerName.trim() }).eq("user_id", targetUserId);
+    revalidatePath("/management");
+  }
+}
+
 export async function addModel(formData: FormData) {
   const name = formData.get("name") as string;
   if (name) {
@@ -75,9 +86,6 @@ export async function addShift(formData: FormData) {
       ]);
     }
     
-    // 🟢 REVALIDATE ENTFERNT! Das verhindert, dass der Antwort-Stream vorzeitig beschädigt wird.
-    // Das Formular auf der Client-Seite übernimmt das Aktualisieren flüssig per router.refresh().
-
     return { success: true };
   }
   

@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { updateMitarbeiterRolle, addModel, deleteModel, updateModelName } from "./actions";
+import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel } from "./actions";
+// 🟢 BEIDE IMPORTE JETZT EXAKT AUF DEINEN LAYOUT-ORDNER AUSGERICHTET!
 import CreateShiftForm from "@/components/layout/CreateShiftForm"; 
 import RoleSelect from "@/components/layout/RoleSelect"; 
 
@@ -26,15 +27,13 @@ export default async function ManagementPage() {
   const { data: modelsListe } = await supabase.from("models").select("id, name").order("name", { ascending: true });
   const { data: alleSchichten } = await supabase.from("shift_assignments").select("*");
 
-  // 🛡️ DIE ABSOLUTE BUILD-SICHERUNG (Falls Supabase undefined liefert)
   const sichereProfile = profilListe || [];
   const sichereModels = modelsListe || [];
   const sichereSchichten = alleSchichten || [];
 
   let gesamtStundenAllerUser = 0;
-  // Hier nutzen wir jetzt die sichere Variable, damit es beim Build niemals filtert/mappt wenn es leer ist
   sichereSchichten.forEach((s) => {
-    if (s && s.started_at && s.ended_at) {
+    if (s.started_at && s.ended_at) {
       const start = new Date(s.started_at).getTime();
       const end = new Date(s.ended_at).getTime();
       if (end > start) {
@@ -67,6 +66,7 @@ export default async function ManagementPage() {
         <h2 className="text-xl font-semibold mb-4 text-slate-200">Neue Schicht zuteilen & planen</h2>
         <CreateShiftForm sichereProfile={sichereProfile} sichereModels={sichereModels} />
       </section>
+
       {/* MITARBEITER-VERWALTUNG */}
       <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 mb-8 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-200">Mitarbeiter & Rollen modifizieren</h2>
@@ -82,7 +82,13 @@ export default async function ManagementPage() {
             <tbody>
               {sichereProfile.map((p) => (
                 <tr key={p.user_id} className="border-b border-slate-800/50 hover:bg-slate-900/50">
-                  <td className="p-3 font-medium text-slate-100">{p.full_name || "Mitarbeiter"}</td>
+                  <td className="p-3">
+                    <form action={updateMitarbeiterName} className="flex gap-2">
+                      <input type="hidden" name="user_id" value={p.user_id} />
+                      <input type="text" name="full_name" defaultValue={p.full_name || ""} required className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm text-slate-200 focus:border-blue-500 outline-none w-full max-w-[160px]" />
+                      <button type="submit" className="text-[11px] bg-blue-600/20 text-blue-400 border border-blue-500/20 px-2 py-1 rounded hover:bg-blue-600/40 font-semibold transition cursor-pointer">Speichern</button>
+                    </form>
+                  </td>
                   <td className="p-3 text-slate-400">{p.email || "keine E-Mail"}</td>
                   <td className="p-3">
                     <RoleSelect 
@@ -97,7 +103,6 @@ export default async function ManagementPage() {
           </table>
         </div>
       </section>
-
       {/* MODELS VERWALTEN */}
       <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-200">Models (Schichtplanung)</h2>
@@ -107,12 +112,8 @@ export default async function ManagementPage() {
         </form>
         <div className="grid gap-3 sm:grid-cols-2">
           {sichereModels.map((model) => (
-            <div key={model.id} className="flex justify-between items-center p-3 border border-slate-800 rounded-md bg-slate-900 gap-3">
-              <form action={updateModelName} className="flex-1 flex gap-2">
-                <input type="hidden" name="id" value={model.id} />
-                <input type="text" name="name" defaultValue={model.name} required className="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm text-slate-200 focus:border-blue-500 outline-none" />
-                <button type="submit" className="text-[11px] bg-blue-600/20 text-blue-400 border border-blue-500/20 px-2 py-1 rounded hover:bg-blue-600/40 font-semibold transition cursor-pointer">Ändern</button>
-              </form>
+            <div key={model.id} className="flex justify-between items-center p-3 border border-slate-800 rounded-md bg-slate-900">
+              <span className="font-medium text-slate-200">{model.name}</span>
               <form action={deleteModel}>
                 <input type="hidden" name="id" value={model.id} />
                 <button type="submit" className="text-red-400 hover:text-red-500 text-sm font-semibold transition cursor-pointer">Löschen</button>
