@@ -1,10 +1,12 @@
 // app/login/page.tsx
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [redirectTo, setRedirectTo] = useState("/");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
