@@ -16,10 +16,10 @@ export default function RootLayout({
     <html lang="de" className="dark">
       <body className="min-h-screen bg-[#050505] text-[#F3E5AB] antialiased tracking-wide selection:bg-[#AA7C11]/30 selection:text-white">
         <header className="fixed top-0 left-0 right-0 z-50 h-20 border-b border-[#AA7C11]/30 bg-[#0A0A0A]/90 backdrop-blur px-6 shadow-lg shadow-black/50">
-          <div className="grid grid-cols-3 h-full items-center w-full">
+          <div className="flex h-full items-center justify-between w-full relative">
             
-            {/* LINKS: Alle Navigations-Buttons inklusive umbenanntem Archiv */}
-            <nav className="flex items-center gap-2 justify-self-start flex-wrap">
+            {/* LINKS: Alle Navigations-Buttons */}
+            <nav className="flex items-center gap-2 flex-wrap z-10">
               <a href="/" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#C59B27] px-3 py-1.5 text-xs font-bold text-black shadow-md transition-all outline-none">
                 Start
               </a>
@@ -37,24 +37,23 @@ export default function RootLayout({
               </a>
             </nav>
 
-            {/* MITTE: Großes, edel präsentiertes Logo im Zentrum */}
-            <div className="text-center justify-self-center flex items-center justify-center">
-              <div className="relative group p-1 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] rounded-full shadow-md shadow-black/80">
+            {/* MITTE: Absolut zentriertes, ungestauchtes Logo */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="pointer-events-auto p-0.5 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] rounded-full shadow-lg shadow-black/80 flex items-center justify-center h-14 w-14">
                 <img
                   src="/images/logo.png"
                   alt="ET Management Logo"
-                  className="h-14 w-14 rounded-full object-cover block bg-black"
+                  className="h-full w-full rounded-full object-cover block bg-black"
                 />
               </div>
             </div>
 
             {/* RECHTS: Platzhalter für Symmetrie */}
-            <div className="justify-self-end"></div>
+            <div className="w-20 z-10"></div>
 
           </div>
         </header>
-        {/* Durch den größeren Header passen wir das Padding-Top auf pt-20 an */}
-        <main className="pt-20 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
+        <main className="pt-24 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
           {children}
         </main>
       </body>

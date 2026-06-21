@@ -22,13 +22,14 @@ export default function MassMessageListClient({ nachrichten }: { nachrichten: an
           <div>
             <div className="flex justify-between items-center border-b border-[#AA7C11]/10 pb-2 mb-2">
               <span className="text-xs font-black text-[#D4AF37] uppercase tracking-wide">Model: {n.model_name}</span>
+              <span className="text-[10px] text-slate-500 font-medium">{n.datum}</span>
               
-              {/* Bearbeiten & Löschen Icons oben rechts */}
+              {/* Bearbeiten & Löschen */}
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button type="button" onClick={() => { setEditingId(n.id); setEditText(n.message_text); }} className="text-[11px] text-blue-400 hover:text-blue-300 font-bold cursor-pointer">✏️</button>
                 <form action={deleteMassMessage}>
                   <input type="hidden" name="id" value={n.id} />
-                  <button type="submit" onClick={(e) => { if (!window.confirm("Vorlage unwiderruflich löschen?")) e.preventDefault(); }} className="text-[11px] text-red-400 hover:text-red-300 font-bold cursor-pointer">🗑️</button>
+                  <button type="submit" onClick={(e) => { if (!window.confirm("Diese Nachricht aus dem Archiv löschen?")) e.preventDefault(); }} className="text-[11px] text-red-400 hover:text-red-300 font-bold cursor-pointer">🗑️</button>
                 </form>
               </div>
             </div>
@@ -58,7 +59,7 @@ export default function MassMessageListClient({ nachrichten }: { nachrichten: an
         </div>
       ))}
       {nachrichten.length === 0 && (
-        <div className="col-span-2 text-xs text-slate-500 italic p-6 text-center">Keine gespeicherten Vorlagen vorhanden.</div>
+        <div className="col-span-2 text-xs text-slate-500 italic p-6 text-center">Keine genutzten Mass Messages im Kalender gefunden.</div>
       )}
     </div>
   );

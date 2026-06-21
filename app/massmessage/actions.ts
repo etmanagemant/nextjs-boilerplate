@@ -3,24 +3,22 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 
-export async function saveMassMessage(formData: FormData) {
-  const supabase = await createClient();
-  const modelName = formData.get("model_name") as string;
-  const messageText = formData.get("message_text") as string;
-
-  if (modelName && messageText) {
-    await supabase.from("saved_mass_messages").insert([{ model_name: modelName, message_text: messageText }]);
-    revalidatePath("/massmessage");
-  }
-}
-
 export async function deleteMassMessage(formData: FormData) {
   const supabase = await createClient();
   const id = formData.get("id");
 
   if (id) {
-    await supabase.from("saved_mass_messages").delete().eq("id", id);
-    revalidatePath("/massmessage");
+    // Holt die aktuelle Schicht, um das bestehende JSON zu lesen
+    const { data: shift } = await supabase.from("shifts").select("notes").eq("id", id).single();
+    
+    if (shift && shift.notes) {
+      const parsed = JSON.parse(shift.notes);
+      // Leert nur das Nachrichtenfeld im JSON
+      parsed.nachricht = "";
+
+      await supabase.from("shifts").update({ notes: JSON.stringify(parsed) }).eq("id", id);
+      revalidatePath("/massmessage");
+    }
   }
 }
 
@@ -30,7 +28,15 @@ export async function updateMassMessage(formData: FormData) {
   const messageText = formData.get("message_text") as string;
 
   if (id && messageText) {
-    await supabase.from("saved_mass_messages").update({ message_text: messageText }).eq("id", id);
-    revalidatePath("/massmessage");
+    const { data: shift } = await supabase.from("shifts").select("notes").eq("id", id).single();
+    
+    if (shift && shift.notes) {
+      const parsed = JSON.parse(shift.notes);
+      // Aktualisiert den Nachrichtentext im JSON
+      parsed.nachricht = messageText.trim();
+
+      await supabase.from("shifts").update({ notes: JSON.stringify(parsed) }).eq("id", id);
+      revalidatePath("/massmessage");
+    }
   }
 }
