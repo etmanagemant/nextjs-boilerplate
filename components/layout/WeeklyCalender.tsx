@@ -26,8 +26,12 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
   const [editingShiftId, setEditingShiftId] = useState<number | null>(null);
-  const [editNotes, setEditNotes] = useState("");
   const [editDate, setEditDate] = useState("");
+  const [editMitarbeiter, setEditMitarbeiter] = useState("");
+  const [editVon, setEditVon] = useState("00:00");
+  const [editBis, setEditBis] = useState("00:00");
+  const [editModel, setEditModel] = useState("Kein Model");
+  const [editNachricht, setEditNachricht] = useState("");
 
   const days = useMemo(() => {
     return Array.from({ length: 7 }).map((_, i) => {
@@ -48,27 +52,49 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   }
-
   async function handleDeleteShift(id: number) {
     if (!window.confirm("Möchtest du diese Schicht wirklich unwiderruflich löschen?")) return;
     const { error } = await supabase.from("shifts").delete().eq("id", id);
-    if (!error) {
-      router.refresh();
+    if (!error) { router.refresh(); }
+  }
+
+  function startEditing(schicht: any) {
+    setEditingShiftId(schicht.id);
+    setEditDate(schicht.shift_date || "");
+    let parsed = { mitarbeiter: "Mitarbeiter", von: "00:00", bis: "00:00", model: "Kein Model", nachricht: "" };
+    try {
+      if (schicht.notes && schicht.notes.startsWith("{")) {
+        parsed = JSON.parse(schicht.notes);
+      } else {
+        parsed.mitarbeiter = schicht.notes || "Geplant";
+      }
+    } catch (e) {
+      parsed.mitarbeiter = "Geplant";
     }
+    setEditMitarbeiter(parsed.mitarbeiter);
+    setEditVon(parsed.von || "00:00");
+    setEditBis(parsed.bis || "00:00");
+    setEditModel(parsed.model || "Kein Model");
+    setEditNachricht(parsed.nachricht || "");
   }
 
   async function handleSaveEdit(id: number) {
+    const finalJsonObj = {
+      mitarbeiter: editMitarbeiter,
+      von: editVon,
+      bis: editBis,
+      model: editModel,
+      nachricht: editNachricht
+    };
     const { error } = await supabase
       .from("shifts")
-      .update({ notes: editNotes, shift_date: editDate })
+      .update({ notes: JSON.stringify(finalJsonObj), shift_date: editDate })
       .eq("id", id);
-      
     if (!error) {
       setEditingShiftId(null);
       router.refresh();
     }
   }
-
   return (
     <div className="w-[98%] mx-auto mt-4">
       <div className="flex items-center justify-between gap-4 mb-6">
@@ -88,16 +114,10 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
           {days.map((d) => {
             const dateKey = formatDateISO(d);
             const isToday = dateKey === formatDateISO(new Date());
-
-            const schichtenAnDiesemTag = sichereShifts.filter((s) => {
-              if (!s.shift_date) return false;
-              return s.shift_date === dateKey;
-            });
+            const schichtenAnDiesemTag = sichereShifts.filter((s) => s.shift_date && s.shift_date === dateKey);
 
             return (
-              <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[480px] ${
-                isToday ? "border-amber-500/40 bg-amber-500/5 shadow-lg shadow-amber-500/5" : "border-slate-800/80 bg-slate-900/40"
-              }`}>
+              <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[480px] ${isToday ? "border-amber-500/40 bg-amber-500/5 shadow-lg shadow-amber-500/5" : "border-slate-800/80 bg-slate-900/40"}`}>
                 <div>
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
                     <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
@@ -106,38 +126,56 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
 
                   <div className="space-y-3">
                     {schichtenAnDiesemTag.length === 0 ? (
-                      <div className="text-xs text-slate-500 italic p-2">Keine Schichten geplant</div>
+                      <div className="text-xs text-slate-500 italic p-2 text-center border border-dashed border-slate-800/60 rounded-lg">Keine Schichten geplant</div>
                     ) : (
                       schichtenAnDiesemTag.map((schicht) => {
                         let parsedNotes = { mitarbeiter: "Mitarbeiter", von: "00:00", bis: "00:00", model: "Kein Model", nachricht: "" };
-                        
                         try {
-                          if (schicht.notes && schicht.notes.startsWith("{")) {
-                            parsedNotes = JSON.parse(schicht.notes);
-                          } else {
-                            parsedNotes.mitarbeiter = schicht.notes || "Geplant";
-                          }
-                        } catch (e) {
-                          parsedNotes.mitarbeiter = "Geplant";
-                        }
+                          if (schicht.notes && schicht.notes.startsWith("{")) { parsedNotes = JSON.parse(schicht.notes); }
+                          else { parsedNotes.mitarbeiter = schicht.notes || "Geplant"; }
+                        } catch (e) { parsedNotes.mitarbeiter = "Geplant"; }
 
                         return (
                           <div key={schicht.id} className="rounded-lg bg-slate-900 border border-slate-800 p-3 shadow-md relative group hover:border-slate-700 transition">
                             {role === "admin" && editingShiftId !== schicht.id && (
                               <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button type="button" onClick={() => { setEditingShiftId(schicht.id); setEditNotes(schicht.notes); setEditDate(schicht.shift_date); }} className="p-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-[10px] font-bold cursor-pointer">✏️</button>
+                                <button type="button" onClick={() => startEditing(schicht)} className="p-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-[10px] font-bold cursor-pointer">✏️</button>
                                 <button type="button" onClick={() => handleDeleteShift(schicht.id)} className="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 text-[10px] font-bold cursor-pointer">🗑️</button>
                               </div>
                             )}
 
                             {editingShiftId === schicht.id ? (
-                              <div className="space-y-2 mt-1">
-                                <span className="text-[10px] font-bold text-blue-400 block">Schicht modifizieren:</span>
-                                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-xs text-white" />
-                                <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={5} className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-[10px] font-mono text-white resize-none" />
-                                <div className="flex gap-1.5 justify-end">
-                                  <button type="button" onClick={() => setEditingShiftId(null)} className="px-2 py-1 bg-slate-800 rounded text-[10px] cursor-pointer">Abbrechen</button>
-                                  <button type="button" onClick={() => handleSaveEdit(schicht.id)} className="px-2 py-1 bg-emerald-600 rounded text-[10px] font-bold cursor-pointer">Sichern</button>
+                              <div className="space-y-2.5 mt-1 bg-slate-950 p-2.5 rounded-md border border-slate-800">
+                                <span className="text-[10px] font-bold text-blue-400 block tracking-wider uppercase">Schicht anpassen</span>
+                                <div>
+                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Datum</label>
+                                  <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                </div>
+                                <div>
+                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Mitarbeiter</label>
+                                  <input type="text" value={editMitarbeiter} onChange={(e) => setEditMitarbeiter(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Von</label>
+                                    <input type="text" placeholder="12:00" value={editVon} onChange={(e) => setEditVon(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                  </div>
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Bis</label>
+                                    <input type="text" placeholder="16:00" value={editBis} onChange={(e) => setEditBis(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Model</label>
+                                  <input type="text" value={editModel} onChange={(e) => setEditModel(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                </div>
+                                <div>
+                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Nachricht (optional)</label>
+                                  <textarea value={editNachricht} onChange={(e) => setEditNachricht(e.target.value)} rows={2} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none resize-none" />
+                                </div>
+                                <div className="flex gap-1.5 justify-end pt-1 border-t border-slate-800">
+                                  <button type="button" onClick={() => setEditingShiftId(null)} className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-[10px] font-semibold hover:bg-slate-700 cursor-pointer">Abbrechen</button>
+                                  <button type="button" onClick={() => handleSaveEdit(schicht.id)} className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-bold hover:bg-emerald-500 cursor-pointer">Sichern</button>
                                 </div>
                               </div>
                             ) : (
@@ -146,7 +184,7 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
                                 {parsedNotes.von && parsedNotes.bis && (
                                   <div className="text-[11px] text-slate-400">{parsedNotes.von} - {parsedNotes.bis} Uhr</div>
                                 )}
-                                {parsedNotes.model !== "Kein Model" && (
+                                {parsedNotes.model && parsedNotes.model !== "Kein Model" && (
                                   <div className="text-[10px] text-amber-400/80">Model: {parsedNotes.model}</div>
                                 )}
                                 {parsedNotes.nachricht && (
