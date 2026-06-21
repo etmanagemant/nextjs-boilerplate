@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 type WeeklyCalendarProps = {
   sichereShifts: any[];
-  modelsListe: any[]; // 👈 Hier kommen deine dynamischen Models aus der DB rein
+  modelsListe: any[];
   role: string;
   userEmail: string | null;
   userId: string;
@@ -135,7 +135,6 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                           if (schicht.notes && schicht.notes.startsWith("{")) { parsedNotes = JSON.parse(schicht.notes); }
                           else { parsedNotes.mitarbeiter = schicht.notes || "Geplant"; }
                         } catch (e) { parsedNotes.mitarbeiter = "Geplant"; }
-
                         return (
                           <div key={schicht.id} className="rounded-lg bg-slate-900 border border-slate-800 p-3 shadow-md relative group hover:border-slate-700 transition">
                             {role === "admin" && editingShiftId !== schicht.id && (
@@ -194,7 +193,12 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                                   <div className="text-[10px] text-amber-400/80">Model: {parsedNotes.model}</div>
                                 )}
                                 {parsedNotes.nachricht && (
-                                  <div className="text-[10px] text-slate-400 italic mt-1 border-t border-slate-800/60 pt-1">{parsedNotes.nachricht}</div>
+                                  <div className="text-[10px] text-slate-400 bg-slate-950/40 rounded p-1.5 border border-slate-800/40 relative group/msg mt-1.5 break-words">
+                                    <span>{parsedNotes.nachricht}</span>
+                                    <button type="button" onClick={() => handleCopyText(parsedNotes.nachricht, schicht.id)} className="absolute bottom-1 right-1 opacity-0 group-hover/msg:opacity-100 bg-slate-800 border border-slate-700 text-[10px] px-1 rounded text-slate-300 hover:text-white transition cursor-pointer">
+                                      {copiedId === schicht.id ? "✔️" : "📋"}
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             )}
