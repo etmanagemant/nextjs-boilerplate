@@ -17,7 +17,7 @@ export default function RootLayout({
         <header className="fixed top-0 left-0 right-0 z-50 h-16 flex items-center px-6 border-b border-line-subtle bg-bg-base/70 backdrop-blur">
   <div className="flex items-center gap-4">
     <img
-      src="/images/logo.png"
+      src="/public/images/logo.png"
       alt="ET Management"
       className="h-10 w-auto block"
     />
