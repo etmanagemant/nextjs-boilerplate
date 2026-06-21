@@ -118,16 +118,27 @@ export default function ChatterPage() {
   }
 
   return (
-    <div className="p-6">
-      <h1 className="text-xl font-semibold">Chatter — Stechuhr</h1>
+    <div className="p-6 min-h-screen bg-slate-950 text-white">
+      {/* 🟢 NAVIGATION MIT LOGOUT-BUTTON HINZUGEFÜGT */}
+      <div className="flex justify-between items-center border-b border-white/10 pb-4 mb-6">
+        <h1 className="text-xl font-semibold text-white">Chatter — Stechuhr</h1>
+        <form action="/api/logout" method="POST">
+          <button 
+            type="submit" 
+            className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition font-medium"
+          >
+            Abmelden (Logout)
+          </button>
+        </form>
+      </div>
 
       <div className="mt-2 text-sm text-white/70">
         Gesamtstunden (Summe aller offenen/geschlossenen Sessions):{" "}
-        <span className="text-white">{totalHours.toFixed(2)} h</span>
+        <span className="text-white font-semibold">{totalHours.toFixed(2)} h</span>
       </div>
 
       {err && (
-        <div className="mt-3 text-sm text-red-400">
+        <div className="mt-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 p-2 rounded">
           Supabase Fehler: {err}
         </div>
       )}
@@ -155,7 +166,7 @@ export default function ChatterPage() {
                   </div>
                 </div>
 
-                <div className="mt-2 text-xs text-white/70">
+                <div className="mt-2 text-xs text-white/70 line-height-relaxed">
                   shift_id: {r.shift_id} <br />
                   model_id: {r.model_id ?? "—"} <br />
                   started_at: {r.started_at ?? "—"} <br />
@@ -164,7 +175,7 @@ export default function ChatterPage() {
 
                 <div className="mt-3 flex gap-3">
                   <button
-                    className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20 disabled:opacity-50"
+                    className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20 disabled:opacity-50 text-white transition font-medium"
                     onClick={() => startAssignment(r.id)}
                     disabled={started && !ended}
                   >
@@ -172,7 +183,7 @@ export default function ChatterPage() {
                   </button>
 
                   <button
-                    className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20 disabled:opacity-50"
+                    className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20 disabled:opacity-50 text-white transition font-medium"
                     onClick={() => endAssignment(r.id)}
                     disabled={!started || ended}
                   >
