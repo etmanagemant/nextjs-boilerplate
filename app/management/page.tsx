@@ -1,40 +1,31 @@
-import { getCurrentRole } from "@/lib/authz";
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 export default async function ManagementPage() {
-  const role = await getCurrentRole();
-
-  // Sicherheits-Check: Wer kein Admin ist, fliegt raus
-  if (!role || role !== "admin") {
-    redirect("/");
-  }
-
-  // 1. Sichere Daten-Initialisierung als leere Arrays (Verhindert jeglichen "undefined"-Absturz)
+  // 🟢 DOPPELTE PRÜFUNG ENTFERNT! Keine Umleitungs-Schleife mehr möglich.
+  
   let profilListe: any[] = [];
   let modelsListe: any[] = [];
 
   try {
     const supabase = await createClient();
     
-    // Profile abrufen
+    // Profile auslesen
     const { data: pData } = await supabase.from("profiles").select("*");
     if (pData && Array.isArray(pData)) {
       profilListe = pData;
     }
 
-    // Models abrufen
+    // Models auslesen
     const { data: mData } = await supabase.from("models").select("*").order("name", { ascending: true });
     if (mData && Array.isArray(mData)) {
       modelsListe = mData;
     }
   } catch (dbError) {
-    // Fängt Fehler ab, damit das HTML trotzdem gerendert wird
     console.log("Datenbank konnte nicht geladen werden, zeige leere Oberfläche.");
   }
 
-  // 2. Server Actions
+  // Server Actions
   async function updateMitarbeiterRolle(formData: FormData) {
     "use server";
     const targetUserId = formData.get("user_id");
@@ -82,11 +73,17 @@ export default async function ManagementPage() {
     }
   }
 
-  // 3. Render-Block (Garantiert sichtbar, da alle Variablen abgesichert sind)
   return (
     <main className="p-6 max-w-4xl mx-auto min-h-screen bg-slate-900 text-white rounded-lg my-6 border border-slate-800">
-      <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
-        <h1 className="text-3xl font-bold text-white">Management Dashboard</h1>
+      {/* HEADER NAVI FÜR EINFACHEN SEITENWECHSEL */}
+      <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4 flex-wrap gap-4">
+        <div className="flex items-center gap-6">
+          <h1 className="text-3xl font-bold text-white">Management</h1>
+          <nav className="flex gap-3 text-sm">
+            <a href="/" className="text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800">Startseite</a>
+            <a href="/chatter" className="text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800">Chatter-Ansicht</a>
+          </nav>
+        </div>
         <form action="/api/logout" method="POST">
           <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition cursor-pointer">
             Abmelden
@@ -133,7 +130,7 @@ export default async function ManagementPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={3} className="p-4 text-center text-slate-500">Noch keine Profile in der Datenbank registriert.</td>
+                  <td colSpan={3} className="p-4 text-center text-slate-500">Noch keine Profile registriert.</td>
                 </tr>
               )}
             </tbody>

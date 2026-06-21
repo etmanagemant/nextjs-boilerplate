@@ -19,12 +19,11 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // 1. Authentifizierung abfragen
   const { data: { user } } = await supabase.auth.getUser()
   const url = request.nextUrl.clone()
   const isLoginPath = url.pathname === '/login'
 
-  // Wenn nicht eingeloggt -> Zum Login zwingen
+  // 1. Wenn nicht eingeloggt -> Login-Zwang
   if (!user) {
     if (!isLoginPath) {
       url.pathname = '/login'
@@ -36,12 +35,10 @@ export async function proxy(request: NextRequest) {
   // 2. Rollen-Ermittlung
   let role = 'chatter'
 
-  // 🔥 ABSOLUTER ADMIN-HARDCODE FÜR DICH (Dein Sicherheitsnetz):
-  // Ersetze 'tobias@beispiel.de' mit deiner echten Registrierungs-E-Mail!
-  if (user.email === 'etmanagemant@gmail.com' || user.id === '35498c92-2c4d-4720-a6f7-cc187a4c5fc4') {
+  // Dein unverrückbarer Admin-Hardcode (Trage hier deine E-Mail oder UUID ein)
+  if (user.email === 'tobias@beispiel.de' || user.id === '35498c92-2c4d-4720-a6f7-cc187a4c5fc4') {
     role = 'admin'
   } else {
-    // Für alle anderen: Normaler Datenbank-Lookup
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -53,7 +50,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // 3. Automatisches Weiterleiten bei Aufruf der Startseite "/"
+  // 3. Wenn der User die nackte URL "/" aufruft, leiten wir ihn auf seine Standard-Arbeitsseite
   if (url.pathname === '/') {
     if (role === 'admin') {
       url.pathname = '/management'
@@ -63,7 +60,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // 4. Schutz: Wer kein Admin ist, fliegt unweigerlich zurück zu /chatter
+  // 4. Schutz: NUR Chatter fliegen von der Management-Seite. Admins dürfen ÜBERALL hin!
   if (url.pathname.startsWith('/management') && role !== 'admin') {
     url.pathname = '/chatter'
     return NextResponse.redirect(url)
