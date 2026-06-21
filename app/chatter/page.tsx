@@ -26,6 +26,18 @@ export default function ChatterPage() {
   const [rows, setRows] = useState<AssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  
+  // 🟢 NEU HINZUGEFÜGT: Speichert die E-Mail des aktuell angemeldeten Chatters
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>("chatter_user");
+
+  // 🟢 NEU HINZUGEFÜGT: Holt die E-Mail live aus der Session
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user?.email) {
+        setCurrentUserEmail(data.user.email);
+      }
+    });
+  }, [supabase]);
 
   // Mit useCallback isoliert, um es in useEffect ohne Render-Schleifen zu nutzen
   const refresh = useCallback(async () => {
@@ -78,6 +90,52 @@ export default function ChatterPage() {
     return rows.reduce((sum, r) => sum + toDurationHours(r.started_at, r.ended_at), 0);
   }, [rows]);
 
+  // 🟢 NEU HINZUGEFÜGT: Findet heraus, ob dieser Chatter gerade eine offene Schicht hat
+  const activeShift = useMemo(() => {
+    return rows.find(r => r.chatter_id === currentUserEmail && r.started_at && !r.ended_at);
+  }, [rows, currentUserEmail]);
+
+  // 🟢 NEU HINZUGEFÜGT: Funktion für den neuen globalen Start-Button oben
+  async function triggerGlobalStart() {
+    setErr(null);
+    const { error } = await supabase
+      .from("shift_assignments")
+      .insert([
+        {
+          shift_id: 1, 
+          chatter_id: currentUserEmail,
+          started_at: new Date().toISOString(),
+          ended_at: null
+        }
+      ]);
+
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    await refresh();
+  }
+
+  // 🟢 NEU HINZUGEFÜGT: Funktion für den neuen globalen Ende-Button oben
+  async function triggerGlobalEnd() {
+    if (!activeShift) {
+      setErr("Keine aktive Schicht zum Beenden gefunden.");
+      return;
+    }
+    setErr(null);
+    const { error } = await supabase
+      .from("shift_assignments")
+      .update({ ended_at: new Date().toISOString() })
+      .eq("id", activeShift.id);
+
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    await refresh();
+  }
+
+  // 🔵 DEINE BESTEHENDE FUNKTION (Vollständig erhalten)
   async function startAssignment(id: number) {
     setErr(null);
 
@@ -97,6 +155,7 @@ export default function ChatterPage() {
     await refresh();
   }
 
+  // 🔵 DEINE BESTEHENDE FUNKTION (Vollständig erhalten)
   async function endAssignment(id: number) {
     setErr(null);
 
@@ -119,17 +178,41 @@ export default function ChatterPage() {
 
   return (
     <div className="p-6 min-h-screen bg-slate-950 text-white">
-      {/* 🟢 NAVIGATION MIT LOGOUT-BUTTON HINZUGEFÜGT */}
+      {/* NAVIGATION MIT LOGOUT-BUTTON */}
       <div className="flex justify-between items-center border-b border-white/10 pb-4 mb-6">
         <h1 className="text-xl font-semibold text-white">Chatter — Stechuhr</h1>
         <form action="/api/logout" method="POST">
           <button 
             type="submit" 
-            className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition font-medium"
+            className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition font-medium cursor-pointer"
           >
             Abmelden (Logout)
           </button>
         </form>
+      </div>
+
+      {/* 🟢 NEU HINZUGEFÜGT: GLOBALER STEMPEL-BEREICH (IMMERSICHTBAR OBEN) */}
+      <div className="bg-slate-900 border border-white/10 p-4 rounded-lg mb-6 flex gap-4 items-center flex-wrap">
+        <span className="text-sm text-slate-300 font-medium">Deine Stechuhr:</span>
+        <button
+          onClick={triggerGlobalStart}
+          disabled={!!activeShift}
+          className="rounded bg-emerald-600 px-4 py-2 text-sm hover:bg-emerald-700 disabled:opacity-40 font-semibold text-white transition cursor-pointer disabled:cursor-not-allowed"
+        >
+          Start Schicht
+        </button>
+        <button
+          onClick={triggerGlobalEnd}
+          disabled={!activeShift}
+          className="rounded bg-red-600 px-4 py-2 text-sm hover:bg-red-700 disabled:opacity-40 font-semibold text-white transition cursor-pointer disabled:cursor-not-allowed"
+        >
+          Ende Schicht
+        </button>
+        {activeShift && (
+          <span className="text-xs text-emerald-400 font-medium animate-pulse ml-2">
+            ● Schicht läuft seit {new Date(activeShift.started_at!).toLocaleTimeString()}
+          </span>
+        )}
       </div>
 
       <div className="mt-2 text-sm text-white/70">
@@ -147,6 +230,7 @@ export default function ChatterPage() {
         <div className="mt-6 text-sm text-white/70">Lade…</div>
       ) : (
         <div className="mt-6 space-y-3">
+          {/* DEIN BESTEHENDER LIST-MAPPER (Vollständig erhalten) */}
           {rows.map((r) => {
             const started = !!r.started_at;
             const ended = !!r.ended_at;
@@ -159,7 +243,7 @@ export default function ChatterPage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm text-white/90">
-                    Assignment #{r.id} — Chatter: {r.chatter_id}
+                    Assignment #{r.id} — Chatter: <span className="text-blue-400 font-medium">{r.chatter_id}</span>
                   </div>
                   <div className="text-xs text-white/70">
                     {hours.toFixed(2)} h
@@ -169,13 +253,13 @@ export default function ChatterPage() {
                 <div className="mt-2 text-xs text-white/70 line-height-relaxed">
                   shift_id: {r.shift_id} <br />
                   model_id: {r.model_id ?? "—"} <br />
-                  started_at: {r.started_at ?? "—"} <br />
-                  ended_at: {r.ended_at ?? "—"}
+                  started_at: {r.started_at ? new Date(r.started_at).toLocaleString() : "—"} <br />
+                  ended_at: {r.ended_at ? new Date(r.ended_at).toLocaleString() : "—"}
                 </div>
 
                 <div className="mt-3 flex gap-3">
                   <button
-                    className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20 disabled:opacity-50 text-white transition font-medium"
+                    className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20 disabled:opacity-50 text-white transition font-medium cursor-pointer"
                     onClick={() => startAssignment(r.id)}
                     disabled={started && !ended}
                   >
@@ -183,7 +267,7 @@ export default function ChatterPage() {
                   </button>
 
                   <button
-                    className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20 disabled:opacity-50 text-white transition font-medium"
+                    className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20 disabled:opacity-50 text-white transition font-medium cursor-pointer"
                     onClick={() => endAssignment(r.id)}
                     disabled={!started || ended}
                   >
@@ -195,8 +279,8 @@ export default function ChatterPage() {
           })}
 
           {rows.length === 0 && (
-            <div className="text-sm text-white/70">
-              Keine shift_assignments gefunden.
+            <div className="text-sm text-white/70 py-4">
+              Keine shift_assignments gefunden. Klicke oben auf "Start Schicht", um deine erste Session zu erfassen!
             </div>
           )}
         </div>
