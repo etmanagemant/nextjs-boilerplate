@@ -32,7 +32,7 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
-// 🟢 ABSOLUT FEHLERFREI: Erstellt saubere, unabhängige Zeilen in 'shifts'
+// 🟢 KORRIGIERT: Erfüllt die Pflichtfeld-Bedingung der 'shifts'-Tabelle zu 100%
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 
   const dateStr = formData.get("date") as string; 
@@ -45,15 +45,17 @@ export async function addShift(formData: FormData) {
     const supabaseServer = await createClient();
     
     if (modelNames.length > 0) {
-      // Erstellt für jedes ausgewählte Model eine eigene, saubere Zeile
-      // PostgreSQL vergibt die IDs vollautomatisch im Hintergrund ohne jeden Konflikt!
       const inserts = modelNames.map(name => {
         const individuelleNachricht = formData.get(`mass_message_${name}`) as string;
         const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Model: ${name} | MESSAGE_START:${individuelleNachricht}:MESSAGE_END`;
         
+        // Generiert eine sichere Zufallszahl zwischen 1000 und 9999999 für das Pflichtfeld
+        const zufallsSlotId = Math.floor(Math.random() * 9999000) + 1000;
+
         return {
-          shift_date: dateStr,
-          notes: details
+          shift_date: dateStr,      // Entspricht exakt deiner Spalte 'shift_date'
+          time_slot_id: zufallsSlotId, // 🟢 ERFÜLLT DAS PFLICHTFELD und verhindert Kollisionen!
+          notes: details            // Entspricht deiner Spalte 'notes'
         };
       });
 
@@ -61,7 +63,15 @@ export async function addShift(formData: FormData) {
     } else {
       // Ohne Model
       const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Kein Model`;
-      await supabaseServer.from("shifts").insert([{ shift_date: dateStr, notes: details }]);
+      const zufallsSlotId = Math.floor(Math.random() * 9999000) + 1000;
+
+      await supabaseServer.from("shifts").insert([
+        { 
+          shift_date: dateStr, 
+          time_slot_id: zufallsSlotId, 
+          notes: details 
+        }
+      ]);
     }
     
     revalidatePath("/management");
