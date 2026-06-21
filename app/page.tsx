@@ -1,7 +1,7 @@
 // app/page.tsx
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import WeeklyCalendar from "@/components/layout/WeeklyCalender"; // 🟢 Neu importiert
+import WeeklyCalendar from "@/components/layout/weeklyCalender";
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -17,16 +17,12 @@ export default async function HomePage() {
     role = profile?.role || "chatter";
   }
 
-  // 🟢 LIVE-DATEN AKTUALISIERT: Lädt die Schichten jetzt korrekt aus 'shift_assignments' und verknüpft Profiles + Models!
-  const { data: geplanteAssignments } = await supabase
-    .from("shift_assignments")
-    .select("*, models(name), profiles:chatter_id(full_name, email)");
-    
-  const sichereShifts = geplanteAssignments || [];
+  // 🟢 Lädt die Daten aus deiner Tabelle 'shifts'
+  const { data: shiftsData } = await supabase.from("shifts").select("*");
+  const sichereShifts = shiftsData || [];
 
   return (
     <div className="p-6 min-h-screen bg-slate-950 text-white">
-      {/* HEADER BAR */}
       <div className="max-w-7xl mx-auto flex justify-between items-center mb-6 border-b border-white/10 pb-4">
         <div className="flex items-center gap-4">
           <span className="text-sm font-semibold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">
@@ -34,9 +30,9 @@ export default async function HomePage() {
           </span>
           <nav className="flex gap-2">
             {role === "admin" && (
-              <a href="/management" className="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-700">Management</a>
+              <a href="/management" className="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-700 transition font-medium">Management</a>
             )}
-            <a href="/chatter" className="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-700">Meine Stechuhr</a>
+            <a href="/chatter" className="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-700 transition font-medium">Meine Stechuhr</a>
           </nav>
         </div>
         <form action="/api/logout" method="POST">
@@ -46,12 +42,7 @@ export default async function HomePage() {
         </form>
       </div>
 
-      <WeeklyCalendar 
-        sichereShifts={sichereShifts} 
-        role={role} 
-        userEmail={user.email || null} 
-        userId={user.id} 
-      />
+      <WeeklyCalendar sichereShifts={sichereShifts} role={role} userEmail={user.email || null} userId={user.id} />
     </div>
   );
 }

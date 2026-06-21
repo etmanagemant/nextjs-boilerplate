@@ -32,35 +32,33 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
-// 🟢 KORRIGIERT & GARANTIERT: Trägt geplante Schichten fehlerfrei ein
+// 🟢 KORRIGIERT: Schreibt jetzt direkt in deine Tabelle 'shifts'
 export async function addShift(formData: FormData) {
-  const targetUserId = formData.get("chatter_id") as string; 
-  const modelId = formData.get("model_id") ? Number(formData.get("model_id")) : null;
+  const chatterId = formData.get("chatter_id") as string; 
+  const dateStr = formData.get("date") as string; // YYYY-MM-DD
   const startTime = formData.get("start_time") as string; // HH:MM
   const endTime = formData.get("end_time") as string;     // HH:MM
-  const heuteDatum = formData.get("date") as string;     // YYYY-MM-DD
 
-  if (targetUserId && startTime && endTime && heuteDatum) {
+  // Holt alle ausgewählten Models aus den Checkboxen
+  const modelNames = formData.getAll("model_names").map(String);
+
+  if (chatterId && dateStr && startTime && endTime) {
     const supabaseServer = await createClient();
     
-    // Erstellt saubere ISO-Zeitstempel für deine Tabellenspalten
-    const isoStart = new Date(`${heuteDatum}T${startTime}:00`).toISOString();
-    const isoEnd = new Date(`${heuteDatum}T${endTime}:00`).toISOString();
-    const formatierterSlot = `${startTime} – ${endTime} Uhr`;
+    // Wir bauen alle Infos (Mitarbeiter, Zeiten, Models) in eine einzige Textkette zusammen,
+    // die wir sicher in der Datenbank ablegen können
+    const modelText = modelNames.length > 0 ? modelNames.join(", ") : "Kein Model";
+    const schichtDetails = `Chatter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Models: ${modelText}`;
 
-    await supabaseServer.from("shift_assignments").insert([
+    await supabaseServer.from("shifts").insert([
       {
-        shift_id: 1, 
-        chatter_id: targetUserId, // UUID
-        model_id: modelId,
-        started_at: isoStart,
-        ended_at: isoEnd,
-        time_slot: formatierterSlot // Speichert die Uhrzeit als Textkette für den Kalender
+        shift_date: dateStr, // Nutzt deine Spalte 'shift_date'
+        time_slot_id: 1,     // Platzhalter für deine Spalte 'time_slot_id'
+        notes: schichtDetails // Nutzt eine Textspalte (oder wir legen sie gleich an)
       }
     ]);
     
     revalidatePath("/management");
     revalidatePath("/");
-    revalidatePath("/chatter");
   }
 }

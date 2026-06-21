@@ -28,10 +28,10 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
   }, [baseWeekStart]);
 
   const weekLabel = useMemo(() => {
-    const start = days[0];
-    const end = days[6];
+    const startDay = days[0];
+    const endDay = days[6];
     const opts: Intl.DateTimeFormatOptions = { month: "short", day: "2-digit" };
-    return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
+    return `${startDay.toLocaleDateString(undefined, opts)} – ${endDay.toLocaleDateString(undefined, opts)}`;
   }, [days]);
 
   return (
@@ -55,17 +55,9 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
             const dateKey = formatDateISO(d);
             const isToday = dateKey === formatDateISO(new Date());
 
-            // 🟢 DATUMS-FILTER KORRIGIERT: Extrahiert das Datum aus dem started_at-Zeitstempel (YYYY-MM-DD)
+            // 🟢 Filtert nach deiner Spalte 'shift_date'
             const schichtenAnDiesemTag = sichereShifts.filter((s) => {
-              if (!s.started_at) return false;
-              const schichtDatumYMD = s.started_at.split("T")[0];
-              const istGleicherTag = schichtDatumYMD === dateKey;
-              
-              if (role === "admin") {
-                return istGleicherTag;
-              } else {
-                return istGleicherTag && (s.chatter_id === userId || s.profiles?.email === userEmail);
-              }
+              return s.shift_date === dateKey;
             });
 
             return (
@@ -75,34 +67,12 @@ export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId 
                 <div className="mt-1 text-xs text-white/60 mb-3">{d.toLocaleDateString(undefined, { month: "short" })}</div>
 
                 <div className="space-y-2 mt-2">
-                  {schichtenAnDiesemTag.map((schicht) => {
-                    // Uhrzeiten aus den ISO-Stamps formrahmeren (z.B. "14:00 - 22:00")
-                    const sTime = schicht.started_at ? new Date(schicht.started_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : "00:00";
-                    const eTime = schicht.ended_at ? new Date(schicht.ended_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : "00:00";
-                    
-                    // Zeigt den echten Namen aus der profiles-Verknüpfung an!
-                    const mitarbeiterName = schicht.profiles?.full_name || schicht.profiles?.email || "Mitarbeiter";
-
-                    return (
-                      <div key={schicht.id} className="rounded bg-blue-600/20 border border-blue-500/30 p-2 text-left">
-                        <div className="text-[11px] font-bold text-blue-400 truncate">
-                          👤 {mitarbeiterName}
-                        </div>
-                        <div className="text-[10px] text-slate-300 mt-0.5">
-                          ⏰ {sTime} – {eTime} Uhr
-                        </div>
-                        {schicht.models?.name && (
-                          <div className="text-[10px] text-emerald-400 mt-0.5 font-medium truncate">
-                            💃 Model: {schicht.models.name}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  
-                  {schichtenAnDiesemTag.length === 0 && (
-                    <div className="text-[10px] text-slate-600 italic text-center pt-8">Keine Schichten</div>
-                  )}
+                  {schichtenAnDiesemTag.map((schicht) => (
+                    <div key={schicht.id} className="rounded bg-blue-600/20 border border-blue-500/30 p-2 text-left text-xs text-slate-200 whitespace-pre-wrap font-medium">
+                      {schicht.notes || "Geplante Schicht"}
+                    </div>
+                  ))}
+                  {schichtenAnDiesemTag.length === 0 && <div className="text-[10px] text-slate-600 italic text-center pt-8">Keine Schichten</div>}
                 </div>
               </div>
             );
