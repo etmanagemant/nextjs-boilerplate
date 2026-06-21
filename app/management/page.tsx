@@ -1,9 +1,8 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
+import Link from "next/link"; // 🟢 Neu importiert für fehlerfreie Navigation!
 
 export default async function ManagementPage() {
-  // 🟢 DOPPELTE PRÜFUNG ENTFERNT! Keine Umleitungs-Schleife mehr möglich.
-  
   let profilListe: any[] = [];
   let modelsListe: any[] = [];
 
@@ -16,7 +15,7 @@ export default async function ManagementPage() {
       profilListe = pData;
     }
 
-    // Models auslesen
+    // Models auslesen (Wird jetzt dank der SQL-Policy Daten liefern)
     const { data: mData } = await supabase.from("models").select("*").order("name", { ascending: true });
     if (mData && Array.isArray(mData)) {
       modelsListe = mData;
@@ -80,12 +79,17 @@ export default async function ManagementPage() {
         <div className="flex items-center gap-6">
           <h1 className="text-3xl font-bold text-white">Management</h1>
           <nav className="flex gap-3 text-sm">
-            <a href="/" className="text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800">Startseite</a>
-            <a href="/chatter" className="text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800">Chatter-Ansicht</a>
+            {/* 🟢 Geändert von <a> zu <Link> für clientseitiges Next.js Routing */}
+            <Link href="/" className="text-slate-400 hover:text-white px-3 py-1.5 rounded bg-slate-800 font-medium transition">
+              Startseite (Kalender)
+            </Link>
+            <Link href="/chatter" className="text-slate-400 hover:text-white px-3 py-1.5 rounded bg-slate-800 font-medium transition">
+              Chatter-Ansicht
+            </Link>
           </nav>
         </div>
         <form action="/api/logout" method="POST">
-          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition cursor-pointer">
+          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition cursor-pointer font-medium">
             Abmelden
           </button>
         </form>
