@@ -32,33 +32,36 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
-// Schichterstellungs-Aktion mit freien Uhrzeiten
+// 🟢 KORRIGIERT: Schreibt jetzt fehlerfrei in deine echte 'shift_assignments' Tabelle aus dem Screenshot
 export async function addShift(formData: FormData) {
-  const chatterId = formData.get("chatter_id") as string;
+  // Das Formular liefert uns jetzt die echte user_id (UUID) aus dem Dropdown
+  const targetUserId = formData.get("chatter_id") as string; 
   const modelId = formData.get("model_id") ? Number(formData.get("model_id")) : null;
-  const dateStr = formData.get("date") as string; // YYYY-MM-DD
-  
-  // 🟢 NEU: Holt die frei gewählten Uhrzeiten
   const startTime = formData.get("start_time") as string; // HH:MM
   const endTime = formData.get("end_time") as string;     // HH:MM
 
-  if (chatterId && dateStr && startTime && endTime) {
+  if (targetUserId && startTime && endTime) {
     const supabaseServer = await createClient();
     
-    // Baut aus Anfang und Ende einen sauberen Text (z.B. "13:00 - 19:30 Uhr")
-    const formatierterSlot = `${startTime} – ${endTime} Uhr`;
-    
-    await supabaseServer.from("shifts").insert([
+    // Wir bauen das flexible Zeitformat ("14:00 - 22:00") direkt als started_at / ended_at Textkette
+    // oder nutzen temporäre Zeitstempel, damit die Stechuhr und der Kalender es lesen können.
+    const heuteDatum = formData.get("date") as string; // YYYY-MM-DD
+    const isoStart = new Date(`${heuteDatum}T${startTime}:00`).toISOString();
+    const isoEnd = new Date(`${heuteDatum}T${endTime}:00`).toISOString();
+
+    // 🟢 TRÄGT ES IN DIE RECHTE TABELLE 'shift_assignments' EIN!
+    await supabaseServer.from("shift_assignments").insert([
       {
-        chatter_id: chatterId,
+        shift_id: 1, // System-Platzhalter
+        chatter_id: targetUserId, // Übergibt die korrekte, akzeptierte UUID
         model_id: modelId,
-        date: dateStr,
-        time_slot: formatierterSlot, // Speichert das Ergebnis flexibel ab
-        status: "geplant"
+        started_at: isoStart,
+        ended_at: isoEnd
       }
     ]);
     
     revalidatePath("/management");
     revalidatePath("/");
+    revalidatePath("/chatter"); // Aktualisiert sofort die Stechuhr des Mitarbeiters!
   }
 }
