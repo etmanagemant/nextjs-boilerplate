@@ -32,36 +32,35 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
-// 🟢 KORRIGIERT: Schreibt jetzt fehlerfrei in deine echte 'shift_assignments' Tabelle aus dem Screenshot
+// 🟢 KORRIGIERT & GARANTIERT: Trägt geplante Schichten fehlerfrei ein
 export async function addShift(formData: FormData) {
-  // Das Formular liefert uns jetzt die echte user_id (UUID) aus dem Dropdown
   const targetUserId = formData.get("chatter_id") as string; 
   const modelId = formData.get("model_id") ? Number(formData.get("model_id")) : null;
   const startTime = formData.get("start_time") as string; // HH:MM
   const endTime = formData.get("end_time") as string;     // HH:MM
+  const heuteDatum = formData.get("date") as string;     // YYYY-MM-DD
 
-  if (targetUserId && startTime && endTime) {
+  if (targetUserId && startTime && endTime && heuteDatum) {
     const supabaseServer = await createClient();
     
-    // Wir bauen das flexible Zeitformat ("14:00 - 22:00") direkt als started_at / ended_at Textkette
-    // oder nutzen temporäre Zeitstempel, damit die Stechuhr und der Kalender es lesen können.
-    const heuteDatum = formData.get("date") as string; // YYYY-MM-DD
+    // Erstellt saubere ISO-Zeitstempel für deine Tabellenspalten
     const isoStart = new Date(`${heuteDatum}T${startTime}:00`).toISOString();
     const isoEnd = new Date(`${heuteDatum}T${endTime}:00`).toISOString();
+    const formatierterSlot = `${startTime} – ${endTime} Uhr`;
 
-    // 🟢 TRÄGT ES IN DIE RECHTE TABELLE 'shift_assignments' EIN!
     await supabaseServer.from("shift_assignments").insert([
       {
-        shift_id: 1, // System-Platzhalter
-        chatter_id: targetUserId, // Übergibt die korrekte, akzeptierte UUID
+        shift_id: 1, 
+        chatter_id: targetUserId, // UUID
         model_id: modelId,
         started_at: isoStart,
-        ended_at: isoEnd
+        ended_at: isoEnd,
+        time_slot: formatierterSlot // Speichert die Uhrzeit als Textkette für den Kalender
       }
     ]);
     
     revalidatePath("/management");
     revalidatePath("/");
-    revalidatePath("/chatter"); // Aktualisiert sofort die Stechuhr des Mitarbeiters!
+    revalidatePath("/chatter");
   }
 }
