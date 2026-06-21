@@ -1,7 +1,7 @@
 // app/page.tsx
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import WeeklyCalendar from "@/components/layout/weeklyCalender";
+import WeeklyCalendar from "@/components/layout/WeeklyCalender";
 
 export default async function HomePage() {
   const supabase = await createClient();
