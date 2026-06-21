@@ -1,11 +1,21 @@
-import { redirect } from "next/navigation";
 import { getCurrentRole } from "@/lib/authz";
 
 export default async function ManagementPage() {
   const role = await getCurrentRole();
 
-  if (!role) redirect("/login?next=/management");
-  if (role !== "admin") redirect("/");
+  if (!role) {
+    return new Response(null, {
+      status: 307,
+      headers: { Location: "/login?next=/management" },
+    });
+  }
+
+  if (role !== "admin") {
+    return new Response(null, {
+      status: 307,
+      headers: { Location: "/" },
+    });
+  }
 
   return (
     <main className="p-6">
