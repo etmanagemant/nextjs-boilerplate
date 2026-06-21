@@ -10,14 +10,13 @@ type AssignmentRow = {
   model_id?: number | null;
   started_at: string | null;
   ended_at: string | null;
-  models?: { name: string } | null;
 };
 
 type GeplanteSchicht = {
   id: number;
   datum: string;
-  von: string;
-  bis: string;
+  von: string; // "12:00"
+  bis: string; // "16:00"
   model: string;
   nachricht: string;
 };
@@ -38,19 +37,17 @@ function toDurationHours(startedAt: string | null, endedAt: string | null) {
   if (!startedAt) return 0;
   const start = new Date(startedAt).getTime();
   const end = endedAt ? new Date(endedAt).getTime() : Date.now();
-  const diffMs = Math.max(0, end - start);
-  return diffMs / (1000 * 60 * 60);
+  return Math.max(0, end - start) / (1000 * 60 * 60);
 }
 
 function LiveTimer({ startedAt }: { startedAt: string }) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
     const calc = () => {
-      const diff = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
-      setSeconds(diff);
+      setSeconds(Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)));
     };
     calc();
-    const interval = setInterval(() => setSeconds(p => p + 1), 1000);
+    const interval = setInterval(calc, 1000);
     return () => clearInterval(interval);
   }, [startedAt]);
 
@@ -73,18 +70,24 @@ export default function ChatterPage() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [currentUserFullName, setCurrentUserFullName] = useState<string>("");
   const [copiedShiftId, setCopiedShiftId] = useState<number | null>(null);
+  const [jetztZeit, setJetztZeit] = useState("");
+
+  // Live-Uhrzeit für den sekundengenauen Model-Wechsel im UI aktualisieren
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const d = new Date();
+      setJetztZeit(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       if (data?.user) {
         setCurrentUserEmail(data.user.email || "");
         setCurrentUserId(data.user.id);
-        
-        // Holt den echten Namen aus den Profilen für den Kalender-Abgleich
         const { data: prof } = await supabase.from("profiles").select("full_name").eq("user_id", data.user.id).maybeSingle();
-        if (prof?.full_name) {
-          setCurrentUserFullName(prof.full_name);
-        }
+        if (prof?.full_name) setCurrentUserFullName(prof.full_name);
       }
     });
   }, [supabase]);
@@ -92,7 +95,7 @@ export default function ChatterPage() {
   const refresh = useCallback(async () => {
     if (!currentUserId) return;
     const [assignmentsRes, shiftsRes] = await Promise.all([
-      supabase.from("shift_assignments").select("id, shift_id, chatter_id, model_id, started_at, ended_at, models(name)").eq("chatter_id", currentUserId).order("id", { ascending: false }).limit(50),
+      supabase.from("shift_assignments").select("id, shift_id, chatter_id, model_id, started_at, ended_at").eq("chatter_id", currentUserId).order("id", { ascending: false }).limit(50),
       supabase.from("shifts").select("*")
     ]);
     if (assignmentsRes.error) { setErr(assignmentsRes.error.message); return; }
@@ -102,8 +105,7 @@ export default function ChatterPage() {
 
   useEffect(() => {
     if (!currentUserId) return;
-    setLoading(true);
-    refresh().then(() => setLoading(false));
+    setLoading(true); refresh().then(() => setLoading(false));
   }, [currentUserId, refresh]);
 
   const meineGeplantenSchichten = useMemo<GeplanteSchicht[]>(() => {
@@ -113,12 +115,7 @@ export default function ChatterPage() {
         if (s.notes && s.notes.startsWith("{")) {
           const parsed = JSON.parse(s.notes);
           const kalenderMitarbeiter = String(parsed.mitarbeiter).toLowerCase().trim();
-
-          // 🛡️ MATCHT JETZT ALLES: Vollname, E-Mail oder ID!
-          const matchtMitarbeiter = 
-            kalenderMitarbeiter === currentUserEmail.toLowerCase().trim() ||
-            kalenderMitarbeiter === currentUserId.trim() ||
-            (currentUserFullName && kalenderMitarbeiter === currentUserFullName.toLowerCase().trim());
+          const matchtMitarbeiter = kalenderMitarbeiter === currentUserEmail.toLowerCase().trim() || kalenderMitarbeiter === currentUserId.trim() || (currentUserFullName && kalenderMitarbeiter === currentUserFullName.toLowerCase().trim());
 
           if (matchtMitarbeiter) {
             listen.push({
@@ -138,57 +135,40 @@ export default function ChatterPage() {
 
   const naechsteZweiSchichten = useMemo(() => {
     const heuteStr = getHeuteISOString();
-    const zukuenftige = meineGeplantenSchichten.filter(s => s.datum >= heuteStr);
-    return zukuenftige.slice(0, 2);
-  }, [meineGeplantenSchichten]);
-
-  const heuteGeplanteModelNamen = useMemo(() => {
-    const heuteStr = getHeuteISOString();
-    return meineGeplantenSchichten.filter(s => s.datum === heuteStr).map(s => s.model);
+    return meineGeplantenSchichten.filter(s => s.datum >= heuteStr).slice(0, 2);
   }, [meineGeplantenSchichten]);
 
   const totalHours = useMemo(() => rows.reduce((sum, r) => sum + toDurationHours(r.started_at, r.ended_at), 0), [rows]);
   const activeShift = useMemo(() => rows.find(r => r.started_at && !r.ended_at), [rows]);
+  // Rechnet live aus, welche Models JETZT GERADE in dieser Minute aktiv sind
+  const aktiveLiveModels = useMemo(() => {
+    const heuteStr = getHeuteISOString();
+    const treffer = meineGeplantenSchichten.filter(s => s.datum === heuteStr && jetztZeit >= s.von && jetztZeit <= s.bis);
+    if (treffer.length === 0) return ["Freie Arbeitszeit (Kein Model)"];
+    return treffer.map(s => s.model);
+  }, [meineGeplantenSchichten, jetztZeit]);
+
   async function triggerGlobalStart() {
-    if (!currentUserId || !currentUserEmail) {
-      setErr("Benutzerdaten werden noch geladen. Bitte kurz warten.");
-      return;
-    }
+    if (!currentUserId) { setErr("Benutzerdaten laden noch."); return; }
     setErr(null);
-    const nun = new Date().toISOString();
-
-    // Wenn für heute Models im Kalender stehen (auch mehrere!)
-    if (heuteGeplanteModelNamen.length > 0) {
-      const { data: dbModels } = await supabase.from("models").select("id, name").in("name", heuteGeplanteModelNamen);
-
-      if (dbModels && dbModels.length > 0) {
-        // Erstellt automatisch Einträge für ALLE zugeteilten Models parallel
-        const eintraegeliste = dbModels.map((m) => ({
-          chatter_id: currentUserId,
-          model_id: m.id,
-          started_at: nun,
-          ended_at: null
-        }));
-        const { error } = await supabase.from("shift_assignments").insert(eintraegeliste);
-        if (error) { setErr(error.message); return; }
-        await refresh();
-        return;
+    
+    // 🛡️ EINZIGARTIGER EINTRAG: Es wird immer nur EINE Schicht ohne feste Modelbindung gestempelt!
+    const { error } = await supabase.from("shift_assignments").insert([
+      {
+        chatter_id: currentUserId,
+        model_id: null, // Die Zuordnung regelt das Backend vollautomatisch über die Uhrzeit!
+        started_at: new Date().toISOString(),
+        ended_at: null
       }
-    }
-
-    // Fallback: Keine geplante Schicht gefunden
-    const { error: freeError } = await supabase.from("shift_assignments").insert([
-      { chatter_id: currentUserId, model_id: null, started_at: nun, ended_at: null }
     ]);
-    if (freeError) { setErr(freeError.message); return; }
+    if (error) { setErr(error.message); return; }
     await refresh();
   }
 
   async function triggerGlobalEnd() {
     if (!activeShift) { setErr("Keine aktive Schicht gefunden."); return; }
     setErr(null);
-    // Beendet alle parallel laufenden Models dieser Schicht zeitgleich
-    const { error } = await supabase.from("shift_assignments").update({ ended_at: new Date().toISOString() }).eq("chatter_id", currentUserId).is("ended_at", null);
+    const { error } = await supabase.from("shift_assignments").update({ ended_at: new Date().toISOString() }).eq("id", activeShift.id);
     if (error) { setErr(error.message); return; }
     await refresh();
   }
@@ -214,8 +194,15 @@ export default function ChatterPage() {
           <button onClick={triggerGlobalEnd} disabled={!activeShift} className="rounded bg-red-600 px-4 py-2 text-sm hover:bg-red-700 disabled:opacity-40 font-semibold text-white transition cursor-pointer">Ende Schicht</button>
         </div>
         {activeShift && activeShift.started_at && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-emerald-400 font-medium animate-pulse ml-2">● Schicht läuft aktiv...</span>
+          <div className="flex items-center gap-4 bg-emerald-500/10 border border-emerald-500/20 px-4 py-1.5 rounded-xl">
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Aktiv:</span>
+              <span className="text-xs text-amber-400 font-bold">{aktiveLiveModels.join(", ")}</span>
+            </div>
             <LiveTimer startedAt={activeShift.started_at} />
           </div>
         )}
@@ -250,7 +237,7 @@ export default function ChatterPage() {
             </div>
           ))}
           {naechsteZweiSchichten.length === 0 && (
-            <div className="col-span-2 text-xs text-slate-500 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Aktuell keine zukünftigen Schichten geplant.</div>
+            <div className="col-span-2 text-xs text-slate-500 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Aktuell keine Schichten im Kalender geplant.</div>
           )}
         </div>
       </div>
@@ -266,7 +253,6 @@ export default function ChatterPage() {
             {rows.map((r) => {
               const hours = toDurationHours(r.started_at, r.ended_at);
               const isLaufend = r.started_at && !r.ended_at;
-              const modelName = r.models?.name || "Freie Arbeitszeit (Kein Model)";
               return (
                 <div key={r.id} className={`rounded border p-4 bg-black/20 ${isLaufend ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10"}`}>
                   <div className="flex items-center justify-between gap-3">
@@ -275,7 +261,6 @@ export default function ChatterPage() {
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-white/60 border-t border-white/5 pt-2">
                     <div><span className="text-white/40">Nutzer:</span> <span className="text-blue-400 font-medium">{currentUserEmail}</span></div>
-                    <div><span className="text-white/40">Zugeordnetes Model:</span> <span className="text-amber-400 font-semibold">{modelName}</span></div>
                     <div><span className="text-white/40">Beginn:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
                     <div><span className="text-white/40">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
                   </div>
