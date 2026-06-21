@@ -1,14 +1,14 @@
 import { getCurrentRole } from "@/lib/authz";
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation"; // 🟢 Neu importieren!
+import { redirect } from "next/navigation";
 
 export default async function ManagementPage() {
   const role = await getCurrentRole();
 
-  // 1. Sicherheits-Check (Nutzt jetzt stabiles Next.js redirect)
+  // 1. Sicherheits-Check (Kein "new Response", sondern sauberer Next.js-Redirect)
   if (!role || role !== "admin") {
-    redirect("/"); 
+    redirect("/");
   }
 
   // Live-Daten aus Supabase abrufen
@@ -24,9 +24,42 @@ export default async function ManagementPage() {
     .select("*")
     .order("name", { ascending: true });
 
-  // ... ab hier bleiben die Server Actions (addMitarbeiter, etc.) und das gesamte return (...) EXAKT GLEICH!
+  // 2. Server Actions (Geben nichts zurück, um den Next.js-Compiler nicht zu verwirren)
+  async function addMitarbeiter(formData: FormData) {
+    "use server";
+    const email = formData.get("email") as string;
+    const name = formData.get("name") as string;
+    
+    if (email && name) {
+      const supabaseServer = await createClient();
+      await supabaseServer.from("mitarbeiter").insert([{ email, name, rolle: "mitarbeiter" }]);
+      revalidatePath("/management");
+    }
+  }
 
+  async function addModel(formData: FormData) {
+    "use server";
+    const name = formData.get("name") as string;
+    
+    if (name) {
+      const supabaseServer = await createClient();
+      await supabaseServer.from("models").insert([{ name }]);
+      revalidatePath("/management");
+    }
+  }
 
+  async function deleteModel(formData: FormData) {
+    "use server";
+    const id = formData.get("id");
+    
+    if (id) {
+      const supabaseServer = await createClient();
+      await supabaseServer.from("models").delete().eq("id", id);
+      revalidatePath("/management");
+    }
+  }
+
+  // 3. Reines JSX (Damit der TypeScript-Typ 'AppPageConfig' fehlerfrei kompiliert)
   return (
     <main className="p-6 max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6 text-slate-800">Management Dashboard</h1>
@@ -35,7 +68,6 @@ export default async function ManagementPage() {
       <section className="bg-white p-6 rounded-lg border mb-8 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-700">Mitarbeiter freischalten & benennen</h2>
         
-        {/* Formular zum Hinzufügen */}
         <form action={addMitarbeiter} className="flex gap-3 mb-6 flex-wrap">
           <input 
             type="email" 
@@ -56,7 +88,6 @@ export default async function ManagementPage() {
           </button>
         </form>
 
-        {/* Liste der Mitarbeiter */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
@@ -67,7 +98,7 @@ export default async function ManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {mitarbeiterListe.map((m) => (
+              {mitarbeiterListe?.map((m) => (
                 <tr key={m.id} className="border-b hover:bg-slate-50">
                   <td className="p-2 font-medium text-slate-900">{m.name}</td>
                   <td className="p-2 text-slate-600">{m.email}</td>
@@ -87,7 +118,6 @@ export default async function ManagementPage() {
       <section className="bg-white p-6 rounded-lg border mb-8 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-700">Models (Schichtplanung)</h2>
         
-        {/* Formular zum Hinzufügen */}
         <form action={addModel} className="flex gap-3 mb-6">
           <input 
             type="text" 
@@ -101,9 +131,8 @@ export default async function ManagementPage() {
           </button>
         </form>
 
-        {/* Liste der Models mit Löschfunktion */}
         <div className="grid gap-3 sm:grid-cols-2">
-          {modelsListe.map((model) => (
+          {modelsListe?.map((model) => (
             <div key={model.id} className="flex justify-between items-center p-3 border rounded-md bg-slate-50">
               <span className="font-medium text-slate-800">{model.name}</span>
               <form action={deleteModel}>
@@ -114,16 +143,6 @@ export default async function ManagementPage() {
               </form>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* DEIN BESTEHENDER STATUS-BEREICH */}
-      <section className="bg-white p-6 rounded-lg border shadow-sm">
-        <h2 className="text-xl font-semibold mb-4 text-slate-700">Schicht-Status / Tasks</h2>
-        <div className="flex gap-2 flex-wrap">
-          <button className="px-4 py-2 border rounded-md bg-slate-100 text-slate-700 font-medium">Offen</button>
-          <button className="px-4 py-2 border rounded-md text-slate-600 hover:bg-slate-50">In Arbeit</button>
-          <button className="px-4 py-2 border rounded-md text-slate-600 hover:bg-slate-50">Geplant</button>
         </div>
       </section>
     </main>
