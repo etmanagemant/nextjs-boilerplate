@@ -9,13 +9,20 @@ export default async function ManagementPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Sicherheits-Checks direkt in der Page
   if (!user) { redirect("/login"); }
   
-  const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
-  if (!profile || profile.role !== "admin") { redirect("/"); }
+  // 🟢 HARDCODE: Sicherheitsnetz für dich
+  let isAdmin = false;
+  if (user.email === "etmanagemant@gmail.com") {
+    isAdmin = true;
+  } else {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+    if (profile && profile.role === "admin") isAdmin = true;
+  }
 
-  // Daten abrufen (Live aus Supabase)
+  if (!isAdmin) { redirect("/"); }
+
+  // Daten live laden
   const { data: profilListe } = await supabase.from("profiles").select("*");
   const { data: modelsListe } = await supabase.from("models").select("*").order("name", { ascending: true });
 
@@ -115,6 +122,9 @@ export default async function ManagementPage() {
               </form>
             </div>
           ))}
+          {(!modelsListe || modelsListe.length === 0) && (
+            <div className="col-span-2 text-sm text-slate-500 text-center py-4">Keine Models hinterlegt.</div>
+          )}
         </div>
       </section>
     </main>

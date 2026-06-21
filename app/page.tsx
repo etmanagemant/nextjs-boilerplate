@@ -17,14 +17,17 @@ export default async function HomePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // 1. Wenn kein User eingeloggt ist -> Login
   if (!user) { redirect("/login"); }
 
-  // 2. Rolle direkt abfragen
-  const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
-  const role = profile?.role || "chatter";
+  // 🟢 HARDCODE: Wenn das deine E-Mail ist, bist du direkt Admin!
+  let role = "chatter";
+  if (user.email === "etmanagemant@gmail.com") {
+    role = "admin";
+  } else {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+    role = profile?.role || "chatter";
+  }
 
-  // 3. Wenn kein Admin -> Ab zur Stechuhr
   if (role !== "admin") { redirect("/chatter"); }
 
   const baseWeekStart = startOfWeekMonday(new Date());
@@ -41,7 +44,7 @@ export default async function HomePage() {
         <div className="flex gap-4">
           <a href="/management" className="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-700">Management</a>
           <form action="/api/logout" method="POST">
-            <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition cursor-pointer">
+            <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition">
               Abmelden
             </button>
           </form>
