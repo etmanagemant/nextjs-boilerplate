@@ -1,12 +1,14 @@
 // app/login/page.tsx
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+// 🟢 RICHTIG
+import { createClient } from "@/lib/supabaseClient"; // Import korrigieren
 
 export default function LoginPage() {
   const router = useRouter();
+  const supabase = createClient();
   const [redirectTo, setRedirectTo] = useState("/");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,7 +21,7 @@ export default function LoginPage() {
     setRedirectTo(nextParam ?? "/");
   }, []);
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setErrorMsg(null);

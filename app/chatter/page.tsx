@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "../../utils/supabase/client";
 
 type AssignmentRow = {
   id: number;
@@ -21,6 +21,7 @@ function toDurationHours(startedAt: string | null, endedAt: string | null) {
 }
 
 export default function ChatterPage() {
+  const supabase = createClient();
   const [rows, setRows] = useState<AssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
