@@ -1,0 +1,14 @@
+name: Supercreator-Live-Umsatz-Taktgeber
+
+on:
+  schedule:
+    - cron: '*/10 * * * *' # Läuft vollautomatisch alle 10 Minuten im Hintergrund
+
+jobs:
+  cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Umsatz Matcher
+        run: |
+          curl -X GET "https://etmanagement_ui.vercel.app/api/cron-fetch-revenue" \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
