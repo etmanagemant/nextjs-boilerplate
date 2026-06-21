@@ -1,7 +1,7 @@
 // app/management/page.tsx
 import { createClient } from "@/utils/supabase/server";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { updateMitarbeiterRolle, addModel, deleteModel } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +11,9 @@ export default async function ManagementPage() {
 
   if (!user) { redirect("/login"); }
   
-  // 🟢 DEINE ECHTE UUID ALS FESTES SICHERHEITSNETZ (Kein Platzhalter mehr!)
+  // Dein funktionierender UUID- und E-Mail-Check
   let isAdmin = false;
-  if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email?.includes("tobias")) {
+  if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
     isAdmin = true;
   } else {
     const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
@@ -22,47 +22,12 @@ export default async function ManagementPage() {
 
   if (!isAdmin) { redirect("/"); }
 
-  // Daten live aus der RLS-freien Datenbank laden
-  let profilListe: any[] = [];
-  let modelsListe: any[] = [];
+  // Daten live laden – Jetzt mit all deinen verifizierten Spalten!
+  const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name");
+  const { data: modelsListe } = await supabase.from("models").select("id, name").order("name", { ascending: true });
 
-  const { data: pData } = await supabase.from("profiles").select("user_id, role, email, full_name");
-  if (pData) profilListe = pData;
-
-  const { data: mData } = await supabase.from("models").select("id, name");
-  if (mData) modelsListe = mData;
-
-  // Server Actions
-  async function updateMitarbeiterRolle(formData: FormData) {
-    "use server";
-    const targetUserId = formData.get("user_id");
-    const neueRolle = formData.get("rolle") as string;
-    if (targetUserId && neueRolle) {
-      const supabaseServer = await createClient();
-      await supabaseServer.from("profiles").update({ role: neueRolle }).eq("user_id", targetUserId);
-      revalidatePath("/management");
-    }
-  }
-
-  async function addModel(formData: FormData) {
-    "use server";
-    const name = formData.get("name") as string;
-    if (name) {
-      const supabaseServer = await createClient();
-      await supabaseServer.from("models").insert([{ name }]);
-      revalidatePath("/management");
-    }
-  }
-
-  async function deleteModel(formData: FormData) {
-    "use server";
-    const id = formData.get("id");
-    if (id) {
-      const supabaseServer = await createClient();
-      await supabaseServer.from("models").delete().eq("id", id);
-      revalidatePath("/management");
-    }
-  }
+  const sichereProfile = profilListe || [];
+  const sichereModels = modelsListe || [];
 
   return (
     <main className="p-6 max-w-4xl mx-auto min-h-screen bg-slate-900 text-white rounded-lg my-6 border border-slate-800">
@@ -92,14 +57,14 @@ export default async function ManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {profilListe.map((p) => (
+              {sichereProfile.map((p) => (
                 <tr key={p.user_id} className="border-b border-slate-800/50 hover:bg-slate-900/50">
                   <td className="p-3 font-medium text-slate-100">{p.full_name || "Mitarbeiter"}</td>
                   <td className="p-3 text-slate-400">{p.email || "keine E-Mail"}</td>
                   <td className="p-3">
                     <form action={updateMitarbeiterRolle} className="inline-block w-full">
                       <input type="hidden" name="user_id" value={p.user_id} />
-                      <select name="rolle" defaultValue={p.role} onChange={(e) => e.target.form?.requestSubmit()} className="w-full px-2 py-1 rounded border text-xs font-semibold bg-slate-900 text-white border-slate-700">
+                      <select name="rolle" defaultValue={p.role} onChange={(e) => e.target.form?.requestSubmit()} className="w-full px-2 py-1 rounded border text-xs font-semibold bg-slate-900 text-white border-slate-700 cursor-pointer">
                         <option value="chatter">Chatter</option>
                         <option value="admin">Admin</option>
                       </select>
@@ -107,9 +72,9 @@ export default async function ManagementPage() {
                   </td>
                 </tr>
               ))}
-              {profilListe.length === 0 && (
+              {sichereProfile.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="p-4 text-center text-slate-500">Keine Profile in der Tabelle gefunden.</td>
+                  <td colSpan={3} className="p-4 text-center text-slate-500">Keine Profile registriert.</td>
                 </tr>
               )}
             </tbody>
@@ -121,20 +86,20 @@ export default async function ManagementPage() {
       <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-200">Models (Schichtplanung)</h2>
         <form action={addModel} className="flex gap-3 mb-6">
-          <input type="text" name="name" placeholder="Model Name" required className="flex-1 px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900" />
-          <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700">Model hinzufügen</button>
+          <input type="text" name="name" placeholder="Model Name" required className="flex-1 px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900 focus:outline-none focus:border-blue-500" />
+          <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition cursor-pointer">Model hinzufügen</button>
         </form>
         <div className="grid gap-3 sm:grid-cols-2">
-          {modelsListe.map((model) => (
+          {sichereModels.map((model) => (
             <div key={model.id} className="flex justify-between items-center p-3 border border-slate-800 rounded-md bg-slate-900">
               <span className="font-medium text-slate-200">{model.name}</span>
               <form action={deleteModel}>
                 <input type="hidden" name="id" value={model.id} />
-                <button type="submit" className="text-red-400 hover:text-red-500 text-sm font-semibold">Löschen</button>
+                <button type="submit" className="text-red-400 hover:text-red-500 text-sm font-semibold transition cursor-pointer">Löschen</button>
               </form>
             </div>
           ))}
-          {modelsListe.length === 0 && (
+          {sichereModels.length === 0 && (
             <div className="col-span-2 text-sm text-slate-500 text-center py-4">Keine Models hinterlegt.</div>
           )}
         </div>
