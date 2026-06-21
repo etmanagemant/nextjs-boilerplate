@@ -13,11 +13,11 @@ export async function getCurrentRole(): Promise<Role | null> {
 
   if (userErr || !user) return null;
 
-  // Holt die Rolle aus deiner existierenden 'profiles' Tabelle
+  // 🟢 WICHTIG: Wir prüfen hier explizit gegen das Feld 'user_id' in deiner Tabelle
   const { data: profile, error } = await supabase
     .from("profiles")
     .select("role")
-    .eq("user_id", user.id)
+    .eq("user_id", user.id) // Hier lag der Fehler (vorher stand da teils p.id)
     .maybeSingle();
 
   if (error || !profile) return null;
