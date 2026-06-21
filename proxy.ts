@@ -32,14 +32,15 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse
   }
 
-  // 2. Rollen-Abfrage für angemeldete User
-  const { data: mitarbeiter } = await supabase
-    .from('mitarbeiter')
-    .select('rolle')
-    .eq('email', user.email!)
+  // 2. Rollen-Abfrage korrigiert: Sucht in 'profiles' über 'user_id'
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', user.id)
     .maybeSingle()
 
-  const role = mitarbeiter?.rolle || 'chatter'
+  // Holt die Rolle aus der Spalte 'role' (Standard ist 'chatter', falls nichts gefunden wird)
+  const role = profile?.role || 'chatter'
 
   // 3. Automatisches Weiterleiten je nach Rolle bei Aufruf von "/"
   if (url.pathname === '/') {

@@ -12,29 +12,29 @@ export default async function ManagementPage() {
 
   const supabase = await createClient();
   
-  // Holt alle registrierten Mitarbeiter aus deiner echten 'profiles' Tabelle
+  // Holt alle registrierten Profile
   const { data: profilListe } = await supabase
     .from("profiles")
     .select("*");
 
-  // Holt die Models aus deiner echten 'models' Tabelle
+  // Holt die Models
   const { data: modelsListe } = await supabase
     .from("models")
     .select("*")
     .order("name", { ascending: true });
 
-  // Server Action: Ändert die Rolle in der profiles-Tabelle live
+  // 🟢 Server Action nutzt jetzt korrekt die 'user_id' zum Updaten!
   async function updateMitarbeiterRolle(formData: FormData) {
     "use server";
-    const profileId = formData.get("id");
+    const targetUserId = formData.get("user_id");
     const neueRolle = formData.get("rolle") as string;
     
-    if (profileId && neueRolle) {
+    if (targetUserId && neueRolle) {
       const supabaseServer = await createClient();
       await supabaseServer
         .from("profiles")
         .update({ role: neueRolle })
-        .eq("id", profileId);
+        .eq("user_id", targetUserId); // Fix von id zu user_id
       
       revalidatePath("/management");
     }
@@ -67,25 +67,29 @@ export default async function ManagementPage() {
       {/* BEREICH 1: MITARBEITER-VERWALTUNG */}
       <section className="bg-white p-6 rounded-lg border mb-8 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-700">Mitarbeiter & Rollen modifizieren</h2>
-        <p className="text-xs text-slate-500 mb-4">Hier siehst du alle registrierten Profile aus deiner Datenbank.</p>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="border-b bg-slate-50 text-slate-500">
-                <th className="p-2">Profil-ID / Name</th>
+                <th className="p-2">Name</th>
+                <th className="p-2">E-Mail</th>
                 <th className="p-2 w-[150px]">Rolle ändern</th>
               </tr>
             </thead>
             <tbody>
               {profilListe?.map((p) => (
-                <tr key={p.id} className="border-b hover:bg-slate-50">
+                <tr key={p.user_id} className="border-b hover:bg-slate-50">
                   <td className="p-2 font-medium text-slate-900">
-                    {p.display_name || p.username || `User #${p.id}`}
+                    {p.full_name || "Mitarbeiter"}
+                  </td>
+                  <td className="p-2 text-slate-600">
+                    {p.email || <span className="text-slate-400 italic">keine E-Mail</span>}
                   </td>
                   <td className="p-2">
                     <form action={updateMitarbeiterRolle} className="inline-block w-full">
-                      <input type="hidden" name="id" value={p.id} />
+                      {/* 🟢 Übergibt die korrekte user_id an die Server Action */}
+                      <input type="hidden" name="user_id" value={p.user_id} />
                       <select 
                         name="rolle" 
                         defaultValue={p.role}
@@ -103,7 +107,7 @@ export default async function ManagementPage() {
               ))}
               {(!profilListe || profilListe.length === 0) && (
                 <tr>
-                  <td colSpan={2} className="p-4 text-center text-slate-500">Noch keine Profile registriert.</td>
+                  <td colSpan={3} className="p-4 text-center text-slate-500">Noch keine Profile registriert.</td>
                 </tr>
               )}
             </tbody>
