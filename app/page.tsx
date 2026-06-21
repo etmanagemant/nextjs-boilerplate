@@ -1,7 +1,7 @@
 // app/page.tsx
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import WeeklyCalendar from "@/components/layout/WeeklyCalender"; // Import des Client-Kalenders
+import WeeklyCalendar from "@/components/layout/WeeklyCalender"; // 🟢 Neu importiert
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -9,7 +9,6 @@ export default async function HomePage() {
 
   if (!user) { redirect("/login"); }
 
-  // Deine funktionierende Admin-Erkennung (Aus den vorherigen Schritten exakt beibehalten)
   let role = "chatter";
   if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email?.includes("tobias")) {
     role = "admin";
@@ -18,9 +17,12 @@ export default async function HomePage() {
     role = profile?.role || "chatter";
   }
 
-  // Geplante Schichten laden
-  const { data: geplanteShifts } = await supabase.from("shifts").select("*, models(name)");
-  const sichereShifts = geplanteShifts || [];
+  // 🟢 LIVE-DATEN AKTUALISIERT: Lädt die Schichten jetzt korrekt aus 'shift_assignments' und verknüpft Profiles + Models!
+  const { data: geplanteAssignments } = await supabase
+    .from("shift_assignments")
+    .select("*, models(name), profiles:chatter_id(full_name, email)");
+    
+  const sichereShifts = geplanteAssignments || [];
 
   return (
     <div className="p-6 min-h-screen bg-slate-950 text-white">
@@ -44,7 +46,6 @@ export default async function HomePage() {
         </form>
       </div>
 
-      {/* Übergibt die Daten an die Client-Komponente mit funktionierenden Pfeiltasten */}
       <WeeklyCalendar 
         sichereShifts={sichereShifts} 
         role={role} 
