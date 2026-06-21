@@ -1,24 +1,34 @@
 // lib/admin.ts
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
 
 export async function requireAdmin() {
-  const supabase = getSupabaseServer();
+  // 1. Nutzt den neuen, asynchronen Server-Client
+  const supabase = await createClient();
 
-  const { data: userData, error: userErr } = await supabase.auth.getUser();
-  if (userErr || !userData?.user) return { ok: false as const, reason: "not-authenticated" };
+  // 2. Holt den aktuellen User
+  const {
+    data: { user },
+    error: userErr,
+  } = await supabase.auth.getUser();
 
-  const userId = userData.user.id;
+  // Wenn kein User da ist, direkt zum Login umleiten
+  if (userErr || !user || !user.email) {
+    redirect("/login?next=/management");
+  }
 
-  // Beispiel: Tabelle profiles(user_id uuid, role text)
-  const { data: profile, error: profErr } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", userId)
+  // 3. Prüft die Rolle in deiner 'mitarbeiter' Tabelle
+  const { data: mitarbeiter, error } = await supabase
+    .from("mitarbeiter")
+    .select("rolle")
+    .eq("email", user.email)
     .maybeSingle();
 
-  if (profErr) return { ok: false as const, reason: "profile-error" };
+  // Wenn der User kein Admin ist, wird er auf die Startseite geschmissen
+  if (error || !mitarbeiter || mitarbeiter.rolle !== "admin") {
+    redirect("/");
+  }
 
-  if (profile?.role !== "admin") return { ok: false as const, reason: "not-admin" };
-
-  return { ok: true as const };
+  // Gibt den validierten Admin-User zurück, falls man ihn in der Page braucht
+  return user;
 }
