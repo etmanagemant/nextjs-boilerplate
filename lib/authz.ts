@@ -1,24 +1,31 @@
 // lib/authz.ts
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { createClient } from "@/utils/supabase/server";
 
-export type Role = "admin" | "chatter";
+export type Role = "admin" | "mitarbeiter" | "chatter";
 
 export async function getCurrentRole(): Promise<Role | null> {
-  const supabase = await createSupabaseServerClient();
+  // 1. Nutzt den neuen, asynchronen Next.js 16 Server-Client
+  const supabase = await createClient();
 
   const {
     data: { user },
     error: userErr,
   } = await supabase.auth.getUser();
 
-  if (userErr || !user) return null;
+  // Wenn kein User eingeloggt ist, gibt es keine Rolle
+  if (userErr || !user || !user.email) return null;
 
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id)
+  // 2. Holt die Rolle aus deiner 'mitarbeiter' Tabelle anhand der E-Mail
+  const { data: mitarbeiter, error } = await supabase
+    .from("mitarbeiter")
+    .select("rolle")
+    .eq("email", user.email)
     .maybeSingle();
 
-  if (error) return null;
-  return (profile?.role as Role) ?? null;
+  if (error || !mitarbeiter) {
+    // Fallback: Wenn der User in Supabase existiert, aber noch nicht in der Tabelle steht
+    return null;
+  }
+
+  return (mitarbeiter.rolle as Role) ?? null;
 }

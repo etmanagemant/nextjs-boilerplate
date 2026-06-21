@@ -2,8 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 export async function createClient() {
-  // WICHTIG: In Next.js 16 MUSS cookies() mit await aufgerufen werden!
-  const cookieStore = await cookies()
+  const cookieStore = await cookies() // Next.js 16 benötigt hier zwingend das await!
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

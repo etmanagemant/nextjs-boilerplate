@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createClient } from "../../utils/supabase/client";
+import { useEffect, useMemo, useState, useCallback } from "react";
+// 🟢 Pfad korrigiert: Kein .ts am Ende, großes C bei supabaseClient, Alias (@) genutzt für Stabilität
+import { createClient } from "@/lib/supabaseClient";
 
 type AssignmentRow = {
   id: number;
@@ -26,7 +27,25 @@ export default function ChatterPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
+  // Mit useCallback isoliert, um es in useEffect ohne Render-Schleifen zu nutzen
+  const refresh = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("shift_assignments")
+      .select("id, shift_id, chatter_id, model_id, started_at, ended_at")
+      .order("id", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    setRows((data ?? []) as AssignmentRow[]);
+  }, [supabase]);
+
+  // Erstmaliges Laden der Daten
   useEffect(() => {
+    let isMounted = true;
+    
     (async () => {
       setLoading(true);
       setErr(null);
@@ -36,6 +55,8 @@ export default function ChatterPage() {
         .select("id, shift_id, chatter_id, model_id, started_at, ended_at")
         .order("id", { ascending: false })
         .limit(50);
+
+      if (!isMounted) return;
 
       if (error) {
         setErr(error.message);
@@ -47,7 +68,11 @@ export default function ChatterPage() {
       setRows((data ?? []) as AssignmentRow[]);
       setLoading(false);
     })();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [supabase]);
 
   const totalHours = useMemo(() => {
     return rows.reduce((sum, r) => sum + toDurationHours(r.started_at, r.ended_at), 0);
@@ -56,7 +81,6 @@ export default function ChatterPage() {
   async function startAssignment(id: number) {
     setErr(null);
 
-    // Nur setzen, wenn started_at noch null ist
     const { data: updated, error } = await supabase
       .from("shift_assignments")
       .update({ started_at: new Date().toISOString(), ended_at: null })
@@ -67,13 +91,6 @@ export default function ChatterPage() {
 
     if (error) {
       setErr(error.message);
-      return;
-    }
-
-    // Wenn nichts upgedatet wurde, war started_at schon gesetzt
-    // Dann einfach nur neu laden
-    if (!updated) {
-      await refresh();
       return;
     }
 
@@ -97,26 +114,7 @@ export default function ChatterPage() {
       return;
     }
 
-    if (!updated) {
-      await refresh();
-      return;
-    }
-
     await refresh();
-  }
-
-  async function refresh() {
-    const { data, error } = await supabase
-      .from("shift_assignments")
-      .select("id, shift_id, chatter_id, model_id, started_at, ended_at")
-      .order("id", { ascending: false })
-      .limit(50);
-
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    setRows((data ?? []) as AssignmentRow[]);
   }
 
   return (
@@ -141,7 +139,6 @@ export default function ChatterPage() {
           {rows.map((r) => {
             const started = !!r.started_at;
             const ended = !!r.ended_at;
-
             const hours = toDurationHours(r.started_at, r.ended_at);
 
             return (
