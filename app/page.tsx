@@ -19,7 +19,7 @@ export default async function HomePage() {
 
   if (!user) { redirect("/login"); }
 
-  // Deine Admin-Berechtigung
+  // Deine funktionierende Admin-Erkennung (Aus den vorherigen Schritten exakt beibehalten)
   let role = "chatter";
   if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email?.includes("tobias")) {
     role = "admin";
@@ -28,9 +28,10 @@ export default async function HomePage() {
     role = profile?.role || "chatter";
   }
 
-  if (role !== "admin") { redirect("/chatter"); }
+  // 🟢 ENTSPERRT: Dieser Block warf Chatter bisher raus. Jetzt dürfen sie bleiben!
+  // if (role !== "admin") { redirect("/chatter"); }
 
-  // 🟢 LIVE-DATEN: Holt alle geplanten Schichten und verknüpft sie mit den Models
+  // Geplante Schichten laden
   const { data: geplanteShifts } = await supabase.from("shifts").select("*, models(name)");
   const sichereShifts = geplanteShifts || [];
 
@@ -43,17 +44,23 @@ export default async function HomePage() {
     <div className="p-6 min-h-screen bg-slate-950 text-white">
       {/* HEADER BAR */}
       <div className="max-w-7xl mx-auto flex justify-between items-center mb-6 border-b border-white/10 pb-4">
-        <span className="text-sm font-semibold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">
-          Eingeloggt als: {role.toUpperCase()} ({user.email})
-        </span>
-        <div className="flex gap-4">
-          <a href="/management" className="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-700">Management</a>
-          <form action="/api/logout" method="POST">
-            <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition">
-              Abmelden
-            </button>
-          </form>
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-semibold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">
+            Status: {role.toUpperCase()} ({user.email})
+          </span>
+          <nav className="flex gap-2">
+            {/* 🟢 Navigationslinks für alle verfügbar, aber Management-Link wird für normale Chatter versteckt */}
+            {role === "admin" && (
+              <a href="/management" className="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-700">Management</a>
+            )}
+            <a href="/chatter" className="text-xs bg-slate-800 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-700">Meine Stechuhr</a>
+          </nav>
         </div>
+        <form action="/api/logout" method="POST">
+          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition">
+            Abmelden
+          </button>
+        </form>
       </div>
 
       <div className="flex items-center justify-between gap-4 max-w-7xl mx-auto">
@@ -70,8 +77,16 @@ export default async function HomePage() {
             const dateKey = formatDateISO(d);
             const isToday = dateKey === formatDateISO(new Date());
 
-            // 🟢 FILTERT DIE GEPLANTEN SCHICHTEN FÜR GENAU DIESEN TAG HERAUS
-            const schichtenAnDiesemTag = sichereShifts.filter(s => s.date === dateKey);
+            // 🟢 DATENSCHUTZ-FILTER FÜR CHATTER:
+            // Wenn der User ADMIN ist, sieht er ALLES. Wenn er CHATTER ist, sieht er NUR seine eigenen Schichten!
+            const schichtenAnDiesemTag = sichereShifts.filter(s => {
+              const istGleicherTag = s.date === dateKey;
+              if (role === "admin") {
+                return istGleicherTag;
+              } else {
+                return istGleicherTag && (s.chatter_id === user.email || s.chatter_id === user.id);
+              }
+            });
 
             return (
               <div key={dateKey} className={`rounded p-3 border min-h-[300px] ${isToday ? "border-amber-500/50 bg-amber-500/10" : "border-white/10 bg-black/10"}`}>
@@ -79,12 +94,11 @@ export default async function HomePage() {
                 <div className="mt-1 text-lg font-semibold text-white">{d.toLocaleDateString(undefined, { day: "2-digit" })}</div>
                 <div className="mt-1 text-xs text-white/60 mb-3">{d.toLocaleDateString(undefined, { month: "short" })}</div>
 
-                {/* 🟢 DIESE SCHLEIFE RENDERT JEDE GEPLANTE SCHICHT LIVE IN DEN KALENDER */}
                 <div className="space-y-2 mt-2">
                   {schichtenAnDiesemTag.map((schicht) => (
                     <div key={schicht.id} className="rounded bg-blue-600/20 border border-blue-500/30 p-2 text-left">
                       <div className="text-[11px] font-bold text-blue-400 truncate">
-                        👤 {schicht.chatter_id.split("@")[0]}
+                        👤 {schicht.chatter_id.includes("@") ? schicht.chatter_id.split("@")[0] : "Mitarbeiter"}
                       </div>
                       <div className="text-[10px] text-slate-300 mt-0.5">
                         ⏰ {schicht.time_slot}
