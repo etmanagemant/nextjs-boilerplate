@@ -32,7 +32,7 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
-// 🟢 KORRIGIERT: Gibt jetzt eine unmissverständliche Antwort an den Browser zurück!
+// 🟢 KORRIGIERT: Keine Netzwerk-Abbrüche mehr durch serverseitiges revalidatePath!
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 
   const dateStr = formData.get("date") as string; 
@@ -67,11 +67,7 @@ export async function addShift(formData: FormData) {
       ]);
     }
     
-    // Cache leeren
-    revalidatePath("/management");
-    revalidatePath("/");
-
-    // 🟢 HIER IST DIE ANTWORT FÜR DEN BROWSER:
+    // 🟢 Rückmeldung wird sofort gesendet, OHNE den Stream abzubrechen!
     return { success: true };
   }
   

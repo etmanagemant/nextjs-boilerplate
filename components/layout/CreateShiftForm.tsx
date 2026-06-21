@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { addShift } from "@/app/management/actions";
+import { useRouter } from "next/navigation"; // 🟢 Neu importiert für sauberes Daten-Update!
 
 type CreateShiftFormProps = {
   sichereProfile: any[];
@@ -9,6 +10,7 @@ type CreateShiftFormProps = {
 };
 
 export default function CreateShiftForm({ sichereProfile, sichereModels }: CreateShiftFormProps) {
+  const router = useRouter(); // 🟢 Router initialisieren
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
@@ -29,18 +31,21 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
     const formData = new FormData(e.currentTarget);
     
     try {
-      // 🟢 KORRIGIERT: Wir fangen die echte Antwort des Servers ab!
       const res = await addShift(formData);
       
       if (res && res.success) {
+        // 🟢 ERFOLG: Zuerst Text anzeigen, Formular leeren...
         setStatusMsg({ type: "success", text: "✓ Schicht(en) mit Mass Messages erfolgreich angelegt!" });
         e.currentTarget.reset();
         setSelectedModels([]);
+        
+        // 🟢 ...und DANN den Kalender im Hintergrund flüssig und ohne Netzwerk-Crash updaten!
+        router.refresh();
       } else {
         setStatusMsg({ type: "error", text: `⚠ Fehler: ${res?.error || "Unbekannter Fehler"}` });
       }
     } catch (err) {
-      setStatusMsg({ type: "error", text: "⚠ Netzwerkfehler beim Anlegen der Schicht. Bitte erneut versuchen." });
+      setStatusMsg({ type: "error", text: "⚠ Fehler bei der Übertragung. Bitte erneut versuchen." });
     } finally {
       setLoading(false);
     }
