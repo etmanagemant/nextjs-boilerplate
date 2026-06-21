@@ -11,7 +11,7 @@ export default async function ManagementPage() {
 
   if (!user) { redirect("/login"); }
   
-  // 🟢 FIXED: E-Mail und ID sauber getrennt, um den "invalid input syntax for type uuid" Fehler zu vernichten!
+  // Dein funktionierender UUID- und E-Mail-Check bleibt exakt gleich
   let isAdmin = false;
   if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
     isAdmin = true;
@@ -45,6 +45,7 @@ export default async function ManagementPage() {
 
   return (
     <main className="p-6 max-w-4xl mx-auto min-h-screen bg-slate-900 text-white rounded-lg my-6 border border-slate-800">
+      {/* HEADER NAVI */}
       <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4 flex-wrap gap-4">
         <div className="flex items-center gap-6">
           <h1 className="text-3xl font-bold text-white">Management</h1>
@@ -54,7 +55,7 @@ export default async function ManagementPage() {
           </nav>
         </div>
         <form action="/api/logout" method="POST">
-          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition cursor-pointer font-medium">Abmelden</button>
+          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition font-medium">Abmelden</button>
         </form>
       </div>
 
@@ -70,7 +71,7 @@ export default async function ManagementPage() {
         </div>
       </section>
 
-      {/* 🟢 NEU BEREICH: SCHICHTERSTELLUNG LOGIK FORMULAR */}
+      {/* SCHICHTERSTELLUNG LOGIK FORMULAR */}
       <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 mb-8 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-200">Neue Schicht zuteilen & planen</h2>
         
@@ -99,14 +100,16 @@ export default async function ManagementPage() {
             <input type="date" name="date" required className="w-full px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900" />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Zeitslot (Slot)</label>
-            <select name="slot" required className="w-full px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900">
-              <option value="08-12">08:00 – 12:00 Uhr</option>
-              <option value="12-16">12:00 – 16:00 Uhr</option>
-              <option value="16-20">16:00 – 20:00 Uhr</option>
-              <option value="20-24">20:00 – 00:00 Uhr</option>
-            </select>
+          {/* 🟢 GEÄNDERT: Hier sind jetzt die freien Uhrzeit-Felder statt der starren Slots */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Schicht Anfang</label>
+              <input type="time" name="start_time" required className="w-full px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Schicht Ende</label>
+              <input type="time" name="end_time" required className="w-full px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900" />
+            </div>
           </div>
 
           <div className="sm:col-span-2">
@@ -126,7 +129,7 @@ export default async function ManagementPage() {
               <tr className="border-b border-slate-800 bg-slate-900 text-slate-400">
                 <th className="p-3">Name</th>
                 <th className="p-3">E-Mail</th>
-                <th className="p-3 w-[220px]">Rolle ändern</th>
+                <th className="p-3 w-[150px]">Rolle ändern</th>
               </tr>
             </thead>
             <tbody>
@@ -135,13 +138,12 @@ export default async function ManagementPage() {
                   <td className="p-3 font-medium text-slate-100">{p.full_name || "Mitarbeiter"}</td>
                   <td className="p-3 text-slate-400">{p.email || "keine E-Mail"}</td>
                   <td className="p-3">
-                    <form action={updateMitarbeiterRolle} className="flex items-center gap-2">
+                    <form action={updateMitarbeiterRolle} className="inline-block w-full">
                       <input type="hidden" name="user_id" value={p.user_id} />
                       <select name="rolle" defaultValue={p.role || "chatter"} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500 cursor-pointer">
                         <option value="chatter">Chatter</option>
                         <option value="admin">Admin</option>
                       </select>
-                      <button type="submit" className="text-xs bg-slate-700 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-600 transition cursor-pointer font-medium">Speichern</button>
                     </form>
                   </td>
                 </tr>

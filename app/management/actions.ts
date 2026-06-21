@@ -32,27 +32,33 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
-// 🟢 NEU: Schichterstellungs-Aktion für die 'shifts' Tabelle
+// Schichterstellungs-Aktion mit freien Uhrzeiten
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string;
   const modelId = formData.get("model_id") ? Number(formData.get("model_id")) : null;
   const dateStr = formData.get("date") as string; // YYYY-MM-DD
-  const slot = formData.get("slot") as string; // z.B. "08-12"
+  
+  // 🟢 NEU: Holt die frei gewählten Uhrzeiten
+  const startTime = formData.get("start_time") as string; // HH:MM
+  const endTime = formData.get("end_time") as string;     // HH:MM
 
-  if (chatterId && dateStr && slot) {
+  if (chatterId && dateStr && startTime && endTime) {
     const supabaseServer = await createClient();
+    
+    // Baut aus Anfang und Ende einen sauberen Text (z.B. "13:00 - 19:30 Uhr")
+    const formatierterSlot = `${startTime} – ${endTime} Uhr`;
     
     await supabaseServer.from("shifts").insert([
       {
         chatter_id: chatterId,
         model_id: modelId,
         date: dateStr,
-        time_slot: slot,
+        time_slot: formatierterSlot, // Speichert das Ergebnis flexibel ab
         status: "geplant"
       }
     ]);
     
     revalidatePath("/management");
-    revalidatePath("/"); // Aktualisiert den Kalender auf der Startseite
+    revalidatePath("/");
   }
 }
