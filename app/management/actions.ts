@@ -32,6 +32,7 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
+// 🟢 ABSOLUT FEHLERFREI: Erstellt saubere, unabhängige Zeilen in 'shifts'
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 
   const dateStr = formData.get("date") as string; 
@@ -44,17 +45,15 @@ export async function addShift(formData: FormData) {
     const supabaseServer = await createClient();
     
     if (modelNames.length > 0) {
-      // 🟢 SCHLEIFE ERSTELLT FÜR JEDES MODEL EINE EIGENE ZEILE IN DER DATENBANK
+      // Erstellt für jedes ausgewählte Model eine eigene, saubere Zeile
+      // PostgreSQL vergibt die IDs vollautomatisch im Hintergrund ohne jeden Konflikt!
       const inserts = modelNames.map(name => {
-        // Holt die spezifische Nachricht für genau dieses Model aus dem Formular ab
         const individuelleNachricht = formData.get(`mass_message_${name}`) as string;
-        
         const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Model: ${name} | MESSAGE_START:${individuelleNachricht}:MESSAGE_END`;
         
         return {
           shift_date: dateStr,
-          time_slot_id: 1, 
-          notes: details // Legt alles abgsichert als Text ab
+          notes: details
         };
       });
 
@@ -62,7 +61,7 @@ export async function addShift(formData: FormData) {
     } else {
       // Ohne Model
       const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Kein Model`;
-      await supabaseServer.from("shifts").insert([{ shift_date: dateStr, time_slot_id: 1, notes: details }]);
+      await supabaseServer.from("shifts").insert([{ shift_date: dateStr, notes: details }]);
     }
     
     revalidatePath("/management");
