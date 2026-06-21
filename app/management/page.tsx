@@ -1,125 +1,218 @@
-// app/management/page.tsx
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
-import { updateMitarbeiterRolle, addModel, deleteModel } from "./actions";
-// 🟢 BEIDE IMPORTE JETZT EXAKT AUF DEINEN LAYOUT-ORDNER AUSGERICHTET!
-import CreateShiftForm from "@/components/layout/CreateShiftForm"; 
-import RoleSelect from "@/components/layout/RoleSelect"; 
+"use client";
 
-export const dynamic = "force-dynamic";
+import { useMemo, useState } from "react";
+import { createClient } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
 
-export default async function ManagementPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+type WeeklyCalendarProps = {
+  sichereShifts: any[];
+  modelsListe: any[];
+  role: string;
+  userEmail: string | null;
+  userId: string;
+};
 
-  if (!user) { redirect("/login"); }
-  
-  let isAdmin = false;
-  if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
-    isAdmin = true;
-  } else {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
-    if (profile && profile.role === "admin") isAdmin = true;
+function pad2(n: number) { return String(n).padStart(2, "0"); }
+function formatDateISO(d: Date) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function startOfWeekMonday(date: Date) {
+  const d = new Date(date); d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); const diffToMonday = (day + 6) % 7;
+  d.setDate(d.getDate() - diffToMonday); return d;
+}
+
+export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userEmail, userId }: WeeklyCalendarProps) {
+  const router = useRouter();
+  const supabase = createClient();
+  const [baseWeekStart, setBaseWeekStart] = useState(() => startOfWeekMonday(new Date()));
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  const [editingShiftId, setEditingShiftId] = useState<number | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editMitarbeiter, setEditMitarbeiter] = useState("");
+  const [editVon, setEditVon] = useState("00:00");
+  const [editBis, setEditBis] = useState("00:00");
+  const [editModel, setEditModel] = useState("Kein Model");
+  const [editNachricht, setEditNachricht] = useState("");
+
+  const days = useMemo(() => {
+    return Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(baseWeekStart);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+  }, [baseWeekStart]);
+
+  const weekLabel = useMemo(() => {
+    if (days.length === 0) return "";
+    const opts: Intl.DateTimeFormatOptions = { month: "short", day: "2-digit" };
+    return `${days[0].toLocaleDateString(undefined, opts)} – ${days[6].toLocaleDateString(undefined, opts)}`;
+  }, [days]);
+
+  function handleCopyText(textToCopy: string, id: number) {
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }
+  async function handleDeleteShift(id: number) {
+    if (!window.confirm("Möchtest du diese Schicht wirklich unwiderruflich löschen?")) return;
+    const { error } = await supabase.from("shifts").delete().eq("id", id);
+    if (!error) { router.refresh(); }
   }
 
-  if (!isAdmin) { redirect("/"); }
-
-  const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name");
-  const { data: modelsListe } = await supabase.from("models").select("id, name").order("name", { ascending: true });
-  const { data: alleSchichten } = await supabase.from("shift_assignments").select("*");
-
-  const sichereProfile = profilListe || [];
-  const sichereModels = modelsListe || [];
-  const sichereSchichten = alleSchichten || [];
-
-  let gesamtStundenAllerUser = 0;
-  sichereSchichten.forEach((s) => {
-    if (s.started_at && s.ended_at) {
-      const start = new Date(s.started_at).getTime();
-      const end = new Date(s.ended_at).getTime();
-      if (end > start) {
-        gesamtStundenAllerUser += (end - start) / (1000 * 60 * 60);
+  function startEditing(schicht: any) {
+    setEditingShiftId(schicht.id);
+    setEditDate(schicht.shift_date || "");
+    let parsed = { mitarbeiter: "Mitarbeiter", von: "00:00", bis: "00:00", model: "Kein Model", nachricht: "" };
+    try {
+      if (schicht.notes && schicht.notes.startsWith("{")) {
+        parsed = JSON.parse(schicht.notes);
+      } else {
+        parsed.mitarbeiter = schicht.notes || "Geplant";
       }
+    } catch (e) {
+      parsed.mitarbeiter = "Geplant";
     }
-  });
+    setEditMitarbeiter(parsed.mitarbeiter);
+    setEditVon(parsed.von || "00:00");
+    setEditBis(parsed.bis || "00:00");
+    setEditModel(parsed.model || "Kein Model");
+    setEditNachricht(parsed.nachricht || "");
+  }
 
+  async function handleSaveEdit(id: number) {
+    const finalJsonObj = {
+      mitarbeiter: editMitarbeiter,
+      von: editVon,
+      bis: editBis,
+      model: editModel,
+      nachricht: editNachricht
+    };
+    const { error } = await supabase
+      .from("shifts")
+      .update({ notes: JSON.stringify(finalJsonObj), shift_date: editDate })
+      .eq("id", id);
+    if (!error) {
+      setEditingShiftId(null);
+      router.refresh();
+    }
+  }
   return (
-    <main className="p-6 max-w-4xl mx-auto min-h-screen bg-slate-900 text-white rounded-lg my-6 border border-slate-800">
-      <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4 flex-wrap gap-4">
-        <div className="flex items-center gap-6">
-          <h1 className="text-3xl font-bold text-white">Management</h1>
-          <nav className="flex gap-3 text-sm">
-            <a href="/" className="text-slate-400 hover:text-white px-3 py-1.5 rounded bg-slate-800 font-medium transition">Startseite (Kalender)</a>
-            <a href="/chatter" className="text-slate-400 hover:text-white px-3 py-1.5 rounded bg-slate-800 font-medium transition">Chatter-Ansicht</a>
-          </nav>
+    <div className="w-[98%] mx-auto mt-4">
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-wide">Weekly Schedule Calendar</h1>
+          <div className="mt-1 text-base text-slate-400 font-medium">{weekLabel}</div>
         </div>
-        <form action="/api/logout" method="POST">
-          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition cursor-pointer font-medium">Abmelden</button>
-        </form>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 7); return startOfWeekMonday(n); })} className="rounded bg-slate-800 border border-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-700 cursor-pointer font-semibold transition">← Letzte Woche</button>
+          <button type="button" onClick={() => setBaseWeekStart(startOfWeekMonday(new Date()))} className="rounded bg-slate-800 border border-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-700 cursor-pointer font-semibold transition">Heute</button>
+          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 7); return startOfWeekMonday(n); })} className="rounded bg-slate-800 border border-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-700 cursor-pointer font-semibold transition">Nächste Woche →</button>
+        </div>
       </div>
 
-      <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 mb-8 shadow-sm">
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider text-center">Abgeleistete Gesamtstunden (Stechuhr)</div>
-        <div className="text-3xl font-bold text-emerald-400 mt-2 text-center">{gesamtStundenAllerUser.toFixed(2)} h</div>
-      </section>
+      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-6 shadow-2xl backdrop-blur-md">
+        <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+          {days.map((d) => {
+            const dateKey = formatDateISO(d);
+            const isToday = dateKey === formatDateISO(new Date());
+            const schichtenAnDiesemTag = sichereShifts.filter((s) => s.shift_date && s.shift_date === dateKey);
 
-      {/* SCHICHTERSTELLUNG FORMULAR */}
-      <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 mb-8 shadow-sm">
-        <h2 className="text-xl font-semibold mb-4 text-slate-200">Neue Schicht zuteilen & planen</h2>
-        <CreateShiftForm sichereProfile={sichereProfile} sichereModels={sichereModels} />
-      </section>
+            return (
+              <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[480px] ${isToday ? "border-amber-500/40 bg-amber-500/5 shadow-lg shadow-amber-500/5" : "border-slate-800/80 bg-slate-900/40"}`}>
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                    <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
+                    <span className={`text-base font-bold px-2 py-0.5 rounded-md ${isToday ? "bg-amber-500 text-slate-950" : "text-white"}`}>{d.toLocaleDateString(undefined, { day: "2-digit" })}</span>
+                  </div>
 
-      {/* MITARBEITER-VERWALTUNG */}
-      <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 mb-8 shadow-sm">
-        <h2 className="text-xl font-semibold mb-4 text-slate-200">Mitarbeiter & Rollen modifizieren</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-900 text-slate-400">
-                <th className="p-3">Name</th>
-                <th className="p-3">E-Mail</th>
-                <th className="p-3 w-[150px]">Rolle ändern</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sichereProfile.map((p) => (
-                <tr key={p.user_id} className="border-b border-slate-800/50 hover:bg-slate-900/50">
-                  <td className="p-3 font-medium text-slate-100">{p.full_name || "Mitarbeiter"}</td>
-                  <td className="p-3 text-slate-400">{p.email || "keine E-Mail"}</td>
-                  <td className="p-3">
-                    {/* 🟢 JETZT UNVERKÜRZT UND AUTOMATISCH: Nutzt das sichere RoleSelect ohne Fehler-Risiko! */}
-                    <RoleSelect 
-                      userId={p.user_id} 
-                      defaultRole={p.role} 
-                      onUpdateAction={updateMitarbeiterRolle} 
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  <div className="space-y-3">
+                    {schichtenAnDiesemTag.length === 0 ? (
+                      <div className="text-xs text-slate-500 italic p-2 text-center border border-dashed border-slate-800/60 rounded-lg">Keine Schichten geplant</div>
+                    ) : (
+                      schichtenAnDiesemTag.map((schicht) => {
+                        let parsedNotes = { mitarbeiter: "Mitarbeiter", von: "00:00", bis: "00:00", model: "Kein Model", nachricht: "" };
+                        try {
+                          if (schicht.notes && schicht.notes.startsWith("{")) { parsedNotes = JSON.parse(schicht.notes); }
+                          else { parsedNotes.mitarbeiter = schicht.notes || "Geplant"; }
+                        } catch (e) { parsedNotes.mitarbeiter = "Geplant"; }
+                        return (
+                          <div key={schicht.id} className="rounded-lg bg-slate-900 border border-slate-800 p-3 shadow-md relative group hover:border-slate-700 transition">
+                            {role === "admin" && editingShiftId !== schicht.id && (
+                              <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button type="button" onClick={() => startEditing(schicht)} className="p-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-[10px] font-bold cursor-pointer">✏️</button>
+                                <button type="button" onClick={() => handleDeleteShift(schicht.id)} className="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 text-[10px] font-bold cursor-pointer">🗑️</button>
+                              </div>
+                            )}
+
+                            {editingShiftId === schicht.id ? (
+                              <div className="space-y-2.5 mt-1 bg-slate-950 p-2.5 rounded-md border border-slate-800">
+                                <span className="text-[10px] font-bold text-blue-400 block tracking-wider uppercase">Schicht anpassen</span>
+                                <div>
+                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Datum</label>
+                                  <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                </div>
+                                <div>
+                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Mitarbeiter</label>
+                                  <input type="text" value={editMitarbeiter} onChange={(e) => setEditMitarbeiter(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Von</label>
+                                    <input type="text" placeholder="12:00" value={editVon} onChange={(e) => setEditVon(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                  </div>
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Bis</label>
+                                    <input type="text" placeholder="16:00" value={editBis} onChange={(e) => setEditBis(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Model auswählen</label>
+                                  <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none cursor-pointer">
+                                    <option value="Kein Model" className="bg-slate-950 text-white">Kein Model</option>
+                                    {(modelsListe || []).map((m) => (
+                                      <option key={m.id} value={m.name} className="bg-slate-950 text-white">{m.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Nachricht (optional)</label>
+                                  <textarea value={editNachricht} onChange={(e) => setEditNachricht(e.target.value)} rows={2} className="w-full bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white focus:border-blue-500 outline-none resize-none" />
+                                </div>
+                                <div className="flex gap-1.5 justify-end pt-1 border-t border-slate-800">
+                                  <button type="button" onClick={() => setEditingShiftId(null)} className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-[10px] font-semibold hover:bg-slate-700 cursor-pointer">Abbrechen</button>
+                                  <button type="button" onClick={() => handleSaveEdit(schicht.id)} className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-bold hover:bg-emerald-500 cursor-pointer">Sichern</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-slate-300 space-y-1">
+                                <div className="font-semibold text-white">{parsedNotes.mitarbeiter}</div>
+                                {parsedNotes.von && parsedNotes.bis && (
+                                  <div className="text-[11px] text-slate-400">{parsedNotes.von} - {parsedNotes.bis} Uhr</div>
+                                )}
+                                {parsedNotes.model && parsedNotes.model !== "Kein Model" && (
+                                  <div className="text-[10px] text-amber-400/80">Model: {parsedNotes.model}</div>
+                                )}
+                                {parsedNotes.nachricht && (
+                                  <div className="text-[10px] text-slate-400 bg-slate-950/40 rounded p-1.5 border border-slate-800/40 relative group/msg mt-1.5 break-words">
+                                    <span>{parsedNotes.nachricht}</span>
+                                    <button type="button" onClick={() => handleCopyText(parsedNotes.nachricht, schicht.id)} className="absolute bottom-1 right-1 opacity-0 group-hover/msg:opacity-100 bg-slate-800 border border-slate-700 text-[10px] px-1 rounded text-slate-300 hover:text-white transition cursor-pointer">
+                                      {copiedId === schicht.id ? "✔️" : "📋"}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </section>
-
-      {/* MODELS VERWALTEN */}
-      <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 shadow-sm">
-        <h2 className="text-xl font-semibold mb-4 text-slate-200">Models (Schichtplanung)</h2>
-        <form action={addModel} className="flex gap-3 mb-6">
-          <input type="text" name="name" placeholder="Model Name" required className="flex-1 px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900" />
-          <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition cursor-pointer">Model hinzufügen</button>
-        </form>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {sichereModels.map((model) => (
-            <div key={model.id} className="flex justify-between items-center p-3 border border-slate-800 rounded-md bg-slate-900">
-              <span className="font-medium text-slate-200">{model.name}</span>
-              <form action={deleteModel}>
-                <input type="hidden" name="id" value={model.id} />
-                <button type="submit" className="text-red-400 hover:text-red-500 text-sm font-semibold transition cursor-pointer">Löschen</button>
-              </form>
-            </div>
-          ))}
-        </div>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }

@@ -1,4 +1,3 @@
-// app/management/actions.ts
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
@@ -32,6 +31,15 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
+export async function updateModelName(formData: FormData) {
+  const id = formData.get("id");
+  const name = formData.get("name") as string;
+  if (id && name) {
+    const supabaseServer = await createClient();
+    await supabaseServer.from("models").update({ name: name.trim() }).eq("id", id);
+    revalidatePath("/management");
+  }
+}
 // 🟢 CRASH-PROOF VERBINDUNG: Liefert jetzt eine reine, ungestörte JSON-Antwort an das Formular
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 
