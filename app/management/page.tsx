@@ -2,7 +2,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { updateMitarbeiterRolle, addModel, deleteModel } from "./actions";
-import CreateShiftForm from "@/components/layout/CreateShiftForm"; // 🟢 Neu importiert
+import CreateShiftForm from "../../components/layout/CreateShiftForm"; // 🟢 Relativer Pfad korrigiert
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,7 @@ export default async function ManagementPage() {
 
   if (!user) { redirect("/login"); }
   
+  // Dein funktionierender UUID- und E-Mail-Check bleibt exakt gleich
   let isAdmin = false;
   if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
     isAdmin = true;
@@ -22,6 +23,7 @@ export default async function ManagementPage() {
 
   if (!isAdmin) { redirect("/"); }
 
+  // Daten live aus deinen echten Spalten laden
   const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name");
   const { data: modelsListe } = await supabase.from("models").select("id, name").order("name", { ascending: true });
   const { data: alleSchichten } = await supabase.from("shift_assignments").select("*");
@@ -30,14 +32,19 @@ export default async function ManagementPage() {
   const sichereModels = modelsListe || [];
   const sichereSchichten = alleSchichten || [];
 
+  // 🟢 ABSURZ-SCHUTZ BERECHNUNG: Berechnet nur bereits VERGANGENE und beendete Arbeitszeiten
   const stundenSatz = 25; 
   let gesamtStundenAllerUser = 0;
 
   sichereSchichten.forEach((s) => {
-    if (s.started_at) {
+    if (s.started_at && s.ended_at) {
       const start = new Date(s.started_at).getTime();
-      const end = s.ended_at ? new Date(s.ended_at).getTime() : Date.now();
-      gesamtStundenAllerUser += Math.max(0, end - start) / (1000 * 60 * 60);
+      const end = new Date(s.ended_at).getTime();
+      
+      // Nur berechnen, wenn das Ende nach dem Start liegt (verhindert negative Zukunfts-Zahlen!)
+      if (end > start) {
+        gesamtStundenAllerUser += (end - start) / (1000 * 60 * 60);
+      }
     }
   });
 
@@ -56,9 +63,10 @@ export default async function ManagementPage() {
         </form>
       </div>
 
+      {/* UMSATZ DASHBOARD PANEL */}
       <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 mb-8 shadow-sm grid grid-cols-2 gap-4">
         <div className="bg-slate-900 p-4 rounded-md border border-slate-800 text-center">
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Gesamtstunden aller User</div>
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Gearbeitete Gesamtstunden</div>
           <div className="text-3xl font-bold text-emerald-400 mt-2">{gesamtStundenAllerUser.toFixed(2)} h</div>
         </div>
         <div className="bg-slate-900 p-4 rounded-md border border-slate-800 text-center">
@@ -70,7 +78,6 @@ export default async function ManagementPage() {
       {/* SCHICHTERSTELLUNG FORMULAR */}
       <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 mb-8 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-200">Neue Schicht zuteilen & planen</h2>
-        {/* 🟢 Hier wird jetzt das interaktive Formular mit Rückmeldung gerendert */}
         <CreateShiftForm sichereProfile={sichereProfile} sichereModels={sichereModels} />
       </section>
 
@@ -111,7 +118,7 @@ export default async function ManagementPage() {
       <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-200">Models (Schichtplanung)</h2>
         <form action={addModel} className="flex gap-3 mb-6">
-          <input type="text" name="name" placeholder="Model Name" required className="flex-1 px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900" />
+          <input type="text" name="name" placeholder="Model Name" required className="flex-1 px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900 focus:outline-none focus:border-blue-500" />
           <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition cursor-pointer">Model hinzufügen</button>
         </form>
         <div className="grid gap-3 sm:grid-cols-2">
