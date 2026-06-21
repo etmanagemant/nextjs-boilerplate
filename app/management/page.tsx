@@ -2,7 +2,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { updateMitarbeiterRolle, addModel, deleteModel } from "./actions";
-import CreateShiftForm from "../../components/layout/CreateShiftForm"; // 🟢 Relativer Pfad korrigiert
+import CreateShiftForm from "@/components/layout/CreateShiftForm"; // 🟢 KORRIGIERT: Absoluter Alias-Pfad!
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export default async function ManagementPage() {
 
   if (!user) { redirect("/login"); }
   
-  // Dein funktionierender UUID- und E-Mail-Check bleibt exakt gleich
+  // Deine funktionierende Admin-Erkennung (UUID- und E-Mail-Check) bleibt exakt gleich
   let isAdmin = false;
   if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
     isAdmin = true;
@@ -23,7 +23,7 @@ export default async function ManagementPage() {
 
   if (!isAdmin) { redirect("/"); }
 
-  // Daten live aus deinen echten Spalten laden
+  // Daten live aus deinen echten Spalten laden mit absolutem Fallback-Schutz
   const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name");
   const { data: modelsListe } = await supabase.from("models").select("id, name").order("name", { ascending: true });
   const { data: alleSchichten } = await supabase.from("shift_assignments").select("*");
@@ -32,7 +32,7 @@ export default async function ManagementPage() {
   const sichereModels = modelsListe || [];
   const sichereSchichten = alleSchichten || [];
 
-  // 🟢 ABSURZ-SCHUTZ BERECHNUNG: Berechnet nur bereits VERGANGENE und beendete Arbeitszeiten
+  // Absturz-Schutz Umsatz-Berechnung (Berechnet nur beendete Arbeitszeiten)
   const stundenSatz = 25; 
   let gesamtStundenAllerUser = 0;
 
@@ -40,8 +40,6 @@ export default async function ManagementPage() {
     if (s.started_at && s.ended_at) {
       const start = new Date(s.started_at).getTime();
       const end = new Date(s.ended_at).getTime();
-      
-      // Nur berechnen, wenn das Ende nach dem Start liegt (verhindert negative Zukunfts-Zahlen!)
       if (end > start) {
         gesamtStundenAllerUser += (end - start) / (1000 * 60 * 60);
       }
