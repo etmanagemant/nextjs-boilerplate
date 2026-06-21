@@ -4,23 +4,30 @@ import { createClient } from "@/utils/supabase/server";
 export type Role = "admin" | "chatter";
 
 export async function getCurrentRole(): Promise<Role | null> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error: userErr } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
+    if (userErr || !user || !user.email) return null;
 
-  if (userErr || !user) return null;
+    // 🟢 DEIN HARDCODE: Wenn du das bist, direkt Admin zurückgeben – spart die DB-Suche!
+    if (user.email === "DEINE_ECHTE_EMAIL@HIER_EINTRAGEN.de") {
+      return "admin";
+    }
 
-  // 🟢 WICHTIG: Wir prüfen hier explizit gegen das Feld 'user_id' in deiner Tabelle
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id) // Hier lag der Fehler (vorher stand da teils p.id)
-    .maybeSingle();
+    // Für alle anderen sichere Abfrage ohne maybeSingle()-Absturzgefahr
+    const { data: profiles, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("user_id", user.id);
 
-  if (error || !profile) return null;
-  
-  return (profile.role as Role) ?? null;
+    if (error || !profiles || profiles.length === 0) {
+      return "chatter"; // Fallback, falls kein Profil existiert
+    }
+    
+    return (profiles[0].role as Role) ?? "chatter";
+  } catch (e) {
+    // Falls irgendwas abstürzt, fangen wir es ab
+    return "chatter";
+  }
 }
