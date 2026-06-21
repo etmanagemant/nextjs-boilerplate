@@ -93,14 +93,17 @@ export default function ChatterPage() {
     refresh().then(() => setLoading(false));
   }, [currentUserId, refresh]);
 
-  // Parst die JSON-Notes aus dem Kalender in saubere Objekte für diesen Chatter
   const meineGeplantenSchichten = useMemo<GeplanteSchicht[]>(() => {
     const listen: GeplanteSchicht[] = [];
     alleKalenderSchichten.forEach((s) => {
       try {
         if (s.notes && s.notes.startsWith("{")) {
           const parsed = JSON.parse(s.notes);
-          if (parsed.mitarbeiter === currentUserEmail) {
+          const matchtMitarbeiter = 
+            String(parsed.mitarbeiter).toLowerCase() === currentUserEmail.toLowerCase() ||
+            String(parsed.mitarbeiter) === currentUserId;
+
+          if (matchtMitarbeiter) {
             listen.push({
               id: s.id,
               datum: s.shift_date || "",
@@ -113,18 +116,15 @@ export default function ChatterPage() {
         }
       } catch (e) {}
     });
-    // Sortiere chronologisch nach Datum und Uhrzeit
     return listen.sort((a, b) => `${a.datum}T${a.von}`.localeCompare(`${b.datum}T${b.von}`));
-  }, [alleKalenderSchichten, currentUserEmail]);
+  }, [alleKalenderSchichten, currentUserEmail, currentUserId]);
 
-  // Holt die nächsten 2 anstehenden Schichten ab dem heutigen Tag
   const naechsteZweiSchichten = useMemo(() => {
     const heuteStr = getHeuteISOString();
     const zukuenftige = meineGeplantenSchichten.filter(s => s.datum >= heuteStr);
     return zukuenftige.slice(0, 2);
   }, [meineGeplantenSchichten]);
 
-  // Holt die Namen aller Models, die für den HEUTIGEN Tag geplant sind
   const heuteGeplanteModelNamen = useMemo(() => {
     const heuteStr = getHeuteISOString();
     return meineGeplantenSchichten.filter(s => s.datum === heuteStr).map(s => s.model);
@@ -133,11 +133,13 @@ export default function ChatterPage() {
   const totalHours = useMemo(() => rows.reduce((sum, r) => sum + toDurationHours(r.started_at, r.ended_at), 0), [rows]);
   const activeShift = useMemo(() => rows.find(r => r.started_at && !r.ended_at), [rows]);
   async function triggerGlobalStart() {
-    if (!currentUserId) { setErr("Benutzerdaten werden noch geladen."); return; }
+    if (!currentUserId || !currentUserEmail) {
+      setErr("Benutzerdaten werden noch geladen. Bitte kurz warten.");
+      return;
+    }
     setErr(null);
     const nun = new Date().toISOString();
 
-    // Wenn für heute Models im Kalender stehen, logge den User automatisch darauf ein
     if (heuteGeplanteModelNamen.length > 0) {
       const { data: dbModels } = await supabase.from("models").select("id, name").in("name", heuteGeplanteModelNamen);
 
@@ -155,7 +157,6 @@ export default function ChatterPage() {
       }
     }
 
-    // Fallback: Keine Schicht geplant -> Logge als freie Arbeitszeit ein
     const { error: freeError } = await supabase.from("shift_assignments").insert([
       { chatter_id: currentUserId, model_id: null, started_at: nun, ended_at: null }
     ]);
@@ -252,7 +253,7 @@ export default function ChatterPage() {
                     <div className="text-sm font-semibold text-slate-300">{hours.toFixed(2)} h</div>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-white/60 border-t border-white/5 pt-2">
-                    <div><span className="text-white/40">Nutzer:</span> <span className="text-blue-400 font-medium">{currentUserEmail || "Dein Account"}</span></div>
+                    <div><span className="text-white/40">Nutzer:</span> <span className="text-blue-400 font-medium">{currentUserEmail}</span></div>
                     <div><span className="text-white/40">Zugeordnetes Model:</span> <span className="text-amber-400 font-semibold">{modelName}</span></div>
                     <div><span className="text-white/40">Beginn:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
                     <div><span className="text-white/40">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
