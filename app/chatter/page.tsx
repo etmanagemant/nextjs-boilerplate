@@ -23,9 +23,17 @@ type GeplanteSchicht = {
 };
 
 function pad2(n: number) { return String(n).padStart(2, "0"); }
+
 function getHeuteISOString() {
   const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const options = { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" } as const;
+  const parts = new Intl.DateTimeFormat("en-US", options).formatToParts(d);
+  
+  const year = parts.find(p => p.type === "year")?.value;
+  const month = parts.find(p => p.type === "month")?.value;
+  const day = parts.find(p => p.type === "day")?.value;
+  
+  return `${year}-${month}-${day}`;
 }
 
 function toDurationHours(startedAt: string | null, endedAt: string | null) {
@@ -100,8 +108,8 @@ export default function ChatterPage() {
         if (s.notes && s.notes.startsWith("{")) {
           const parsed = JSON.parse(s.notes);
           const matchtMitarbeiter = 
-            String(parsed.mitarbeiter).toLowerCase() === currentUserEmail.toLowerCase() ||
-            String(parsed.mitarbeiter) === currentUserId;
+            String(parsed.mitarbeiter).toLowerCase().trim() === currentUserEmail.toLowerCase().trim() ||
+            String(parsed.mitarbeiter).trim() === currentUserId.trim();
 
           if (matchtMitarbeiter) {
             listen.push({
