@@ -19,7 +19,7 @@ function startOfWeekMonday(date: Date) {
   d.setDate(d.getDate() - diffToMonday); return d;
 }
 
-export default function WeeklyCalender({ sichereShifts, role, userEmail, userId }: WeeklyCalendarProps) {
+export default function WeeklyCalendar({ sichereShifts, role, userEmail, userId }: WeeklyCalendarProps) {
   const router = useRouter();
   const supabase = createClient();
   const [baseWeekStart, setBaseWeekStart] = useState(() => startOfWeekMonday(new Date()));
@@ -95,7 +95,7 @@ export default function WeeklyCalender({ sichereShifts, role, userEmail, userId 
             });
 
             return (
-              <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[450px] ${
+              <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[480px] ${
                 isToday ? "border-amber-500/40 bg-amber-500/5 shadow-lg shadow-amber-500/5" : "border-slate-800/80 bg-slate-900/40"
               }`}>
                 <div>
@@ -105,56 +105,61 @@ export default function WeeklyCalender({ sichereShifts, role, userEmail, userId 
                   </div>
 
                   <div className="space-y-3">
-                    {schichtenAnDiesemTag.map((schicht) => {
-                      const textData = schicht.notes || "";
-                      const cleanInfo = textData.split(" | MESSAGE_START:")[0] || textData;
-                      
-                      let massMessageText = "";
-                      if (textData.includes("MESSAGE_START:")) {
-                        massMessageText = textData.split("MESSAGE_START:")[1]?.split(":MESSAGE_END")[0] || "";
-                      }
+                    {schichtenAnDiesemTag.length === 0 ? (
+                      <div className="text-xs text-slate-500 italic p-2">Keine Schichten geplant</div>
+                    ) : (
+                      schichtenAnDiesemTag.map((schicht) => {
+                        let parsedNotes = { mitarbeiter: "Mitarbeiter", von: "00:00", bis: "00:00", model: "Kein Model", nachricht: "" };
+                        
+                        try {
+                          if (schicht.notes && schicht.notes.startsWith("{")) {
+                            parsedNotes = JSON.parse(schicht.notes);
+                          } else {
+                            parsedNotes.mitarbeiter = schicht.notes || "Geplant";
+                          }
+                        } catch (e) {
+                          parsedNotes.mitarbeiter = "Geplant";
+                        }
 
-                      return (
-                        <div key={schicht.id} className="rounded-lg bg-slate-900 border border-slate-800 p-3 shadow-md relative group hover:border-slate-700 transition">
-                          {role === "admin" && editingShiftId !== schicht.id && (
-                            <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button type="button" onClick={() => { setEditingShiftId(schicht.id); setEditNotes(schicht.notes); setEditDate(schicht.shift_date); }} className="p-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-[10px] font-bold cursor-pointer">✏️</button>
-                              <button type="button" onClick={() => handleDeleteShift(schicht.id)} className="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 text-[10px] font-bold cursor-pointer">🗑️</button>
-                            </div>
-                          )}
-
-                          {editingShiftId === schicht.id ? (
-                            <div className="space-y-2 mt-1">
-                              <span className="text-[10px] font-bold text-blue-400 block">Schicht modifizieren:</span>
-                              <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-xs text-white" />
-                              <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={4} className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-[11px] text-white resize-none" />
-                              <div className="flex gap-1.5 justify-end">
-                                <button type="button" onClick={() => setEditingShiftId(null)} className="px-2 py-1 bg-slate-800 rounded text-[10px] cursor-pointer">Abbrechen</button>
-                                <button type="button" onClick={() => handleSaveEdit(schicht.id)} className="px-2 py-1 bg-emerald-600 rounded text-[10px] font-bold cursor-pointer">Sichern</button>
+                        return (
+                          <div key={schicht.id} className="rounded-lg bg-slate-900 border border-slate-800 p-3 shadow-md relative group hover:border-slate-700 transition">
+                            {role === "admin" && editingShiftId !== schicht.id && (
+                              <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button type="button" onClick={() => { setEditingShiftId(schicht.id); setEditNotes(schicht.notes); setEditDate(schicht.shift_date); }} className="p-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-[10px] font-bold cursor-pointer">✏️</button>
+                                <button type="button" onClick={() => handleDeleteShift(schicht.id)} className="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 text-[10px] font-bold cursor-pointer">🗑️</button>
                               </div>
-                            </div>
-                          ) : (
-                            <div className="text-[11px] space-y-1">
-                              <div className="font-medium text-slate-300 whitespace-pre-wrap">{cleanInfo}</div>
-                              {massMessageText && (
-                                <div className="mt-2.5 bg-slate-950 p-2 rounded border border-slate-800/60 flex flex-col gap-1.5">
-                                  <span className="text-[10px] text-pink-400 font-bold tracking-wider uppercase">Mass Message:</span>
-                                  <div className="text-[10px] text-slate-300 italic whitespace-pre-wrap leading-relaxed max-h-[80px] overflow-y-auto pr-1">
-                                    {massMessageText}
-                                  </div>
-                                  <button type="button" onClick={() => handleCopyText(massMessageText, schicht.id)} className={`w-full text-center text-[10px] rounded py-1 font-bold transition cursor-pointer mt-1 ${copiedId === schicht.id ? "bg-green-600 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
-                                    {copiedId === schicht.id ? "✓ Kopiert!" : "Text kopieren"}
-                                  </button>
+                            )}
+
+                            {editingShiftId === schicht.id ? (
+                              <div className="space-y-2 mt-1">
+                                <span className="text-[10px] font-bold text-blue-400 block">Schicht modifizieren:</span>
+                                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-xs text-white" />
+                                <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={5} className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-[10px] font-mono text-white resize-none" />
+                                <div className="flex gap-1.5 justify-end">
+                                  <button type="button" onClick={() => setEditingShiftId(null)} className="px-2 py-1 bg-slate-800 rounded text-[10px] cursor-pointer">Abbrechen</button>
+                                  <button type="button" onClick={() => handleSaveEdit(schicht.id)} className="px-2 py-1 bg-emerald-600 rounded text-[10px] font-bold cursor-pointer">Sichern</button>
                                 </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-slate-300 space-y-1">
+                                <div className="font-semibold text-white">{parsedNotes.mitarbeiter}</div>
+                                {parsedNotes.von && parsedNotes.bis && (
+                                  <div className="text-[11px] text-slate-400">{parsedNotes.von} - {parsedNotes.bis} Uhr</div>
+                                )}
+                                {parsedNotes.model !== "Kein Model" && (
+                                  <div className="text-[10px] text-amber-400/80">Model: {parsedNotes.model}</div>
+                                )}
+                                {parsedNotes.nachricht && (
+                                  <div className="text-[10px] text-slate-400 italic mt-1 border-t border-slate-800/60 pt-1">{parsedNotes.nachricht}</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
-                {schichtenAnDiesemTag.length === 0 && <div className="text-[11px] text-slate-600 italic text-center pt-16">Keine Schichten geplant</div>}
               </div>
             );
           })}

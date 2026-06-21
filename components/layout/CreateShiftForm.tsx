@@ -30,7 +30,8 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
     setLoading(true);
     setStatusMsg(null);
 
-    const formData = new FormData(e.currentTarget);
+    const formElement = e.currentTarget;
+    const formData = new FormData(formElement);
     const chatterId = formData.get("chatter_id") as string; 
     const dateStr = formData.get("date") as string; 
     const startTime = formData.get("start_time") as string; 
@@ -42,34 +43,48 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
       return;
     }
 
-    const formatierterSlot = `${startTime} – ${endTime} Uhr`;
-
     try {
       if (selectedModels.length > 0) {
         const inserts = selectedModels.map(name => {
           const individuelleNachricht = formData.get(`mass_message_${name}`) as string;
-          const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Model: ${name} | MESSAGE_START:${individuelleNachricht}:MESSAGE_END`;
+          
+          // 🟢 KORRIGIERT: Wir bauen ein sauberes JSON-Objekt, statt den Text hässlich zusammenzukleben!
+          const saubereStruktur = JSON.stringify({
+            mitarbeiter: chatterId,
+            von: startTime,
+            bis: endTime,
+            model: name,
+            nachricht: individuelleNachricht
+          });
 
           return {
             shift_date: dateStr,
-            time_slot_id: 1, // 🟢 FIXED: Nutzt die garantiert existierende ID 1 der time_slots Tabelle!
-            notes: details
+            time_slot_id: 1, 
+            notes: saubereStruktur
           };
         });
 
         const { error } = await supabase.from("shifts").insert(inserts);
         if (error) throw error;
       } else {
-        const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Kein Model`;
+        const saubereStruktur = JSON.stringify({
+          mitarbeiter: chatterId,
+          von: startTime,
+          bis: endTime,
+          model: "Kein Model",
+          nachricht: ""
+        });
 
         const { error } = await supabase.from("shifts").insert([
-          { shift_date: dateStr, time_slot_id: 1, notes: details } // 🟢 FIXED ALSO HERE
+          { shift_date: dateStr, time_slot_id: 1, notes: saubereStruktur }
         ]);
         if (error) throw error;
       }
 
-      setStatusMsg({ type: "success", text: "✓ Schicht(en) mit Mass Messages erfolgreich im Kalender angelegt!" });
-      e.currentTarget.reset();
+      setStatusMsg({ type: "success", text: "✓ Schicht(en) erfolgreich im Kalender angelegt!" });
+      
+      // 🟢 FIXED: Setzt das Formular über die native HTML-Methode absolut crash-proof zurück!
+      formElement.reset();
       setSelectedModels([]);
       router.refresh();
 
@@ -125,7 +140,7 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
               <label className="block text-xs text-emerald-400 font-medium">Mass Message für {modelName}:</label>
               <textarea 
                 name={`mass_message_${modelName}`} 
-                placeholder={`Hier die Nachricht für {modelName} eintragen...`}
+                placeholder={`Hier die Nachricht für ${modelName} eintragen...`}
                 required
                 rows={2}
                 className="w-full px-3 py-2 border border-slate-700 rounded-md text-white bg-slate-950 focus:outline-none focus:border-blue-500 text-xs resize-none"
