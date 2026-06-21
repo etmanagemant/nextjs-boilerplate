@@ -32,31 +32,38 @@ export async function deleteModel(formData: FormData) {
   }
 }
 
-// 🟢 KORRIGIERT: Schreibt jetzt direkt in deine Tabelle 'shifts'
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 
-  const dateStr = formData.get("date") as string; // YYYY-MM-DD
-  const startTime = formData.get("start_time") as string; // HH:MM
-  const endTime = formData.get("end_time") as string;     // HH:MM
+  const dateStr = formData.get("date") as string; 
+  const startTime = formData.get("start_time") as string; 
+  const endTime = formData.get("end_time") as string;     
 
-  // Holt alle ausgewählten Models aus den Checkboxen
   const modelNames = formData.getAll("model_names").map(String);
 
   if (chatterId && dateStr && startTime && endTime) {
     const supabaseServer = await createClient();
     
-    // Wir bauen alle Infos (Mitarbeiter, Zeiten, Models) in eine einzige Textkette zusammen,
-    // die wir sicher in der Datenbank ablegen können
-    const modelText = modelNames.length > 0 ? modelNames.join(", ") : "Kein Model";
-    const schichtDetails = `Chatter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Models: ${modelText}`;
+    if (modelNames.length > 0) {
+      // 🟢 SCHLEIFE ERSTELLT FÜR JEDES MODEL EINE EIGENE ZEILE IN DER DATENBANK
+      const inserts = modelNames.map(name => {
+        // Holt die spezifische Nachricht für genau dieses Model aus dem Formular ab
+        const individuelleNachricht = formData.get(`mass_message_${name}`) as string;
+        
+        const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Model: ${name} | MESSAGE_START:${individuelleNachricht}:MESSAGE_END`;
+        
+        return {
+          shift_date: dateStr,
+          time_slot_id: 1, 
+          notes: details // Legt alles abgsichert als Text ab
+        };
+      });
 
-    await supabaseServer.from("shifts").insert([
-      {
-        shift_date: dateStr, // Nutzt deine Spalte 'shift_date'
-        time_slot_id: 1,     // Platzhalter für deine Spalte 'time_slot_id'
-        notes: schichtDetails // Nutzt eine Textspalte (oder wir legen sie gleich an)
-      }
-    ]);
+      await supabaseServer.from("shifts").insert(inserts);
+    } else {
+      // Ohne Model
+      const details = `Mitarbeiter: ${chatterId} | Zeit: ${startTime} - ${endTime} | Kein Model`;
+      await supabaseServer.from("shifts").insert([{ shift_date: dateStr, time_slot_id: 1, notes: details }]);
+    }
     
     revalidatePath("/management");
     revalidatePath("/");

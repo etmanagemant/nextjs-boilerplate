@@ -2,7 +2,9 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { updateMitarbeiterRolle, addModel, deleteModel } from "./actions";
-import CreateShiftForm from "@/components/layout/CreateShiftForm";
+// 🟢 BEIDE IMPORTE JETZT EXAKT AUF DEINEN LAYOUT-ORDNER AUSGERICHTET!
+import CreateShiftForm from "@/components/layout/CreateShiftForm"; 
+import RoleSelect from "@/components/layout/RoleSelect"; 
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +14,6 @@ export default async function ManagementPage() {
 
   if (!user) { redirect("/login"); }
   
-  // Deine funktionierende Admin-Erkennung bleibt exakt gleich
   let isAdmin = false;
   if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
     isAdmin = true;
@@ -23,7 +24,6 @@ export default async function ManagementPage() {
 
   if (!isAdmin) { redirect("/"); }
 
-  // Daten live aus deinen echten Spalten laden
   const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name");
   const { data: modelsListe } = await supabase.from("models").select("id, name").order("name", { ascending: true });
   const { data: alleSchichten } = await supabase.from("shift_assignments").select("*");
@@ -32,10 +32,9 @@ export default async function ManagementPage() {
   const sichereModels = modelsListe || [];
   const sichereSchichten = alleSchichten || [];
 
-  // Stunden-Statistik
   let gesamtStundenAllerUser = 0;
   sichereSchichten.forEach((s) => {
-    if (s.started_at && s.ended_at && !s.time_slot) {
+    if (s.started_at && s.ended_at) {
       const start = new Date(s.started_at).getTime();
       const end = new Date(s.ended_at).getTime();
       if (end > start) {
@@ -79,7 +78,7 @@ export default async function ManagementPage() {
               <tr className="border-b border-slate-800 bg-slate-900 text-slate-400">
                 <th className="p-3">Name</th>
                 <th className="p-3">E-Mail</th>
-                <th className="p-3 w-[220px]">Rolle ändern</th>
+                <th className="p-3 w-[150px]">Rolle ändern</th>
               </tr>
             </thead>
             <tbody>
@@ -88,24 +87,12 @@ export default async function ManagementPage() {
                   <td className="p-3 font-medium text-slate-100">{p.full_name || "Mitarbeiter"}</td>
                   <td className="p-3 text-slate-400">{p.email || "keine E-Mail"}</td>
                   <td className="p-3">
-                    {/* 🟢 JETZT FEHLERFREI: Ein ganz normales HTML-Formular mit einem Speichern-Button */}
-                    <form action={updateMitarbeiterRolle} className="flex items-center gap-2">
-                      <input type="hidden" name="user_id" value={p.user_id} />
-                      <select 
-                        name="rolle" 
-                        defaultValue={p.role || "chatter"} 
-                        className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500 cursor-pointer"
-                      >
-                        <option value="chatter">Chatter</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                      <button 
-                        type="submit" 
-                        className="text-xs bg-slate-700 text-slate-200 px-3 py-1.5 rounded hover:bg-slate-600 transition cursor-pointer font-medium"
-                      >
-                        Speichern
-                      </button>
-                    </form>
+                    {/* 🟢 JETZT UNVERKÜRZT UND AUTOMATISCH: Nutzt das sichere RoleSelect ohne Fehler-Risiko! */}
+                    <RoleSelect 
+                      userId={p.user_id} 
+                      defaultRole={p.role} 
+                      onUpdateAction={updateMitarbeiterRolle} 
+                    />
                   </td>
                 </tr>
               ))}
@@ -118,7 +105,7 @@ export default async function ManagementPage() {
       <section className="bg-slate-950 p-6 rounded-lg border border-slate-800 shadow-sm">
         <h2 className="text-xl font-semibold mb-4 text-slate-200">Models (Schichtplanung)</h2>
         <form action={addModel} className="flex gap-3 mb-6">
-          <input type="text" name="name" placeholder="Model Name" required className="flex-1 px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900 focus:outline-none focus:border-blue-500" />
+          <input type="text" name="name" placeholder="Model Name" required className="flex-1 px-3 py-2 border border-slate-700 rounded-md text-sm text-white bg-slate-900" />
           <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition cursor-pointer">Model hinzufügen</button>
         </form>
         <div className="grid gap-3 sm:grid-cols-2">

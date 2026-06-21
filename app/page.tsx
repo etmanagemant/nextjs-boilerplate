@@ -1,7 +1,8 @@
 // app/page.tsx
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import WeeklyCalendar from "@/components/layout/WeeklyCalender";
+// 🟢 KORRIGIERT: Greift jetzt exakt auf deine reale Datei mit 'er' am Ende zu!
+import WeeklyCalendar from "@/components/layout/WeeklyCalender"; 
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -9,21 +10,23 @@ export default async function HomePage() {
 
   if (!user) { redirect("/login"); }
 
+  // Deine funktionierende Admin-Erkennung (UUID- und E-Mail-Check)
   let role = "chatter";
-  if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email?.includes("tobias")) {
+  if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
     role = "admin";
   } else {
     const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
-    role = profile?.role || "chatter";
+    if (profile && profile.role === "admin") role = "admin";
   }
 
-  // 🟢 Lädt die Daten aus deiner Tabelle 'shifts'
+  // Holt die Daten live aus deiner Tabelle 'shifts'
   const { data: shiftsData } = await supabase.from("shifts").select("*");
   const sichereShifts = shiftsData || [];
 
   return (
     <div className="p-6 min-h-screen bg-slate-950 text-white">
-      <div className="max-w-7xl mx-auto flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+      {/* HEADER BAR */}
+      <div className="max-w-7xl mx-auto flex items-center justify-between mb-6 border-b border-white/10 pb-4">
         <div className="flex items-center gap-4">
           <span className="text-sm font-semibold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full">
             Status: {role.toUpperCase()} ({user.email})
@@ -36,7 +39,7 @@ export default async function HomePage() {
           </nav>
         </div>
         <form action="/api/logout" method="POST">
-          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition">
+          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition cursor-pointer font-medium">
             Abmelden
           </button>
         </form>
