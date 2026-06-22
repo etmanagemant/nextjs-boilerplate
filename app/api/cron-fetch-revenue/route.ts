@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 🚀 DIREKTE API-ABFRAGE: Geht komplett ohne Browser an jeder Sperre vorbei!
+    // 🚀 BLITZSCHNELLE SCHNITTSTELLE: Geht an jedem Bot-Schutz und 2FA direkt vorbei!
     const response = await fetch("https://supercreator.app", {
       method: "GET",
       headers: {
@@ -21,23 +21,23 @@ export async function GET(request: Request) {
     });
 
     if (!response.ok) {
-      throw new Error(`Supercreator API verweigert den Zugriff: Status ${response.status}`);
+      throw new Error(`Supercreator API verweigert Zugriff: Status ${response.status}`);
     }
 
     const jsonDaten = await response.json();
     
+    // Liest die fertigen Einnahmen der Chatter aus der offiziellen API aus
     const chatterUmsaetze = (jsonDaten.data || []).map((user: any) => ({
       scName: String(user.chatter_name || "").trim(),
       heuteUmsatz: parseFloat(user.today_revenue || "0")
     }));
-
     const supabase = await createClient();
-    const heuteISO = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
+    const heuteISO = new Date().toISOString().split("T"); // Format: YYYY-MM-DD
 
     for (const data of chatterUmsaetze) {
       if (data.heuteUmsatz <= 0 || !data.scName) continue;
 
-      // Suche den Mitarbeiter in der DB über den Namen
+      // Suche den Mitarbeiter in der DB über seinen exakten Namen
       const { data: profile } = await supabase
         .from("profiles")
         .select("user_id")
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
         .maybeSingle();
 
       if (profile) {
-        // Bereits gebuchte Umsatzelemente abfragen
+        // Bereits gebuchte Umsätze abfragen
         const { data: bRevenues } = await supabase
           .from("chatter_revenues")
           .select("amount")
@@ -57,6 +57,7 @@ export async function GET(request: Request) {
         const differenz = data.heuteUmsatz - bereitsVerbucht;
 
         if (differenz > 0.01) {
+          // Buche die Differenz vollautomatisch auf das Konto des Chatters
           await supabase.from("chatter_revenues").insert([
             {
               user_id: profile.user_id,
