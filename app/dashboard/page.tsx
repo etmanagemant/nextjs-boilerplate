@@ -1,8 +1,6 @@
-import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "../../utils/supabase/server";
 
-// 🛡️ THE CACHE KILLER: Zwingt Vercel dazu, den Server-Cache bei JEDEM Laden komplett zu zerstören!
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
@@ -12,17 +10,18 @@ export default async function DashboardPage() {
 
   if (!user) { redirect("/login"); }
 
-  // Holt alle Daten parallel und absolut frisch aus euren Supabase-Tabellen
-  const [profilesRes, modelsRes, shiftsRes, revenueRes] = await Promise.all([
+  // 🛡️ SICHERER EINZEL-ABRUF: Wir laden die Umsatztabelle separat, damit nichts blockiert!
+  const revenueRes = await supabase.from("chatter_revenues").select("*");
+  const revenues = revenueRes.data || [];
+
+  // Profile und Schichten laden (mit Fehlerschutz)
+  const [profilesRes, assignmentsRes] = await Promise.all([
     supabase.from("profiles").select("user_id, full_name, email"),
-    supabase.from("models").select("id, name"),
-    supabase.from("shift_assignments").select("*"),
-    supabase.from("chatter_revenues").select("*")
+    supabase.from("shift_assignments").select("*")
   ]);
 
   const profiles = profilesRes.data || [];
-  const assignments = shiftsRes.data || [];
-  const revenues = revenueRes.data || [];
+  const assignments = assignmentsRes.data || [];
 
   const statsPerUser: Record<string, { name: string; email: string; hours: number; revenue: number }> = {};
 
@@ -35,10 +34,9 @@ export default async function DashboardPage() {
     };
   });
 
-  // Berechne gestempelte Arbeitsstunden flexibel aus der Stechuhr
+  // Stunden berechnen
   assignments.forEach(a => {
     const tatsaechlicheChatterId = a.chatter_id || a.user_id;
-    
     if (tatsaechlicheChatterId && a.started_at && statsPerUser[tatsaechlicheChatterId]) {
       const start = new Date(a.started_at).getTime();
       const end = a.ended_at ? new Date(a.ended_at).getTime() : Date.now();
@@ -48,16 +46,18 @@ export default async function DashboardPage() {
     }
   });
 
-  // Addiert Umsätze bedingungslos, egal ob Schichten existieren oder nicht!
+  // Umsätze bedingungslos aufaddieren
   revenues.forEach(r => {
-    if (r.user_id && statsPerUser[r.user_id]) {
-      const geldBetrag = Number(r.amount || r.revenue || r.umsatz || 0);
-      statsPerUser[r.user_id].revenue += geldBetrag;
+    const zielId = r.user_id || r.chatter_id;
+    if (zielId && statsPerUser[zielId]) {
+      statsPerUser[zielId].revenue += Number(r.amount || 0);
     }
   });
 
   const userStatsArray = Object.values(statsPerUser);
-  const gesamtUmsatzAgentur = revenues.reduce((sum: number, r: any) => sum + Number(r.amount || r.revenue || r.umsatz || 0), 0);
+  
+  // 🛡️ GARANTIERTRE RECHNUNG: Berechnet die Summe direkt aus der Tabelle, völlig unblockierbar!
+  const gesamtUmsatzAgentur = revenues.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
 
   return (
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
@@ -66,7 +66,6 @@ export default async function DashboardPage() {
         <p className="text-xs text-slate-400 mt-1">Umsatzleistung & Performance-Analysen im Überblick</p>
       </div>
 
-      {/* Kacheln */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Gesamtumsatz Agentur</div>
@@ -82,7 +81,6 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Tabelle */}
       <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg">
         <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">Mitarbeiter Umsatzleistung</h2>
         <div className="overflow-x-auto">
