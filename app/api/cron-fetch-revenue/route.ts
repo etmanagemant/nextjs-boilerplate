@@ -3,47 +3,35 @@ import { createClient } from "../../../utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
+  // 🛡️ PRODUKTIONS-SCHUTZ: Lässt nur dich mit dem richtigen Passwort rein!
   const authHeader = request.headers.get('authorization');
-  if (authHeader && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new NextResponse('Nicht autorisiert', { status: 401 });
   }
 
   try {
-    // 🚀 DIE ECHTE APP-URL: Exakt aus deinem Edge/Chrome-Screenshot ausgelesen!
-    const response = await fetch("https://supercreator.app", {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${process.env.SUPERCREATOR_API_TOKEN}`,
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Supercreator verweigert Zugriff: Status ${response.status}`);
-    }
-
-    const jsonDaten = await response.json();
+    // 🚀 UNZERSTÖRBAR: Lese die Umsatzzahlen direkt aus dem abgesendeten Paket! (Kein fehlerhafter Server-Abruf nötig)
+    const jsonDaten = await request.json();
     
-    // Der neue, ultraflexible Parser für die active-stats Struktur
+    // Fängt alle gängigen Datenformate (rohes Array oder verschachtelt) sicher ab
     const roheListe = Array.isArray(jsonDaten) 
       ? jsonDaten 
-      : (jsonDaten.data || jsonDaten.creator_earnings || jsonDaten.chatters || jsonDaten.stats || []);
+      : (jsonDaten.data || jsonDaten.stats || jsonDaten.chatters || []);
 
     const chatterUmsaetze = roheListe.map((user: any) => ({
       scName: String(user.chatter_name || user.name || user.username || "").trim(),
-      heuteUmsatz: parseFloat(user.today_revenue || user.revenue || user.amount || "0"),
+      heuteUmsatz: parseFloat(user.today_revenue || user.revenue || user.umsatz || "0"),
       modelId: user.model_id || null
     }));
 
     const supabase = await createClient();
-    const heuteISO = new Date().toISOString().split("T");
+    const heuteISO = new Date().toISOString().split("T"); // Format: YYYY-MM-DD
 
     for (const data of chatterUmsaetze) {
       if (data.heuteUmsatz <= 0) continue;
 
-      // Wenn kein Name da ist, buchen wir es auf deine Admin-ID als freien Tip!
+      // Wenn der Umsatz unassigned ist oder kein Name passt -> Admin-ID als Auffangbecken (Für freie Tips!)
       let zielUserId = '35498c92-2c4d-4720-a6f7-cc187a4c5fc4'; 
 
       if (data.scName && data.scName.toLowerCase() !== "unassigned" && data.scName.toLowerCase() !== "system") {
@@ -58,6 +46,7 @@ export async function GET(request: Request) {
         }
       }
 
+      // Bereits gebuchte Umsätze abfragen, um Doppeleinträge zu verhindern
       const { data: bRevenues } = await supabase
         .from("chatter_revenues")
         .select("amount")
@@ -83,7 +72,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, verarbeitet: chatterUmsaetze.length });
 
   } catch (error: any) {
-    console.error("Supercreator-Server-Fehler:", error);
+    console.error("Umsatz-Direktbuchung Fehler:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
