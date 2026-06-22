@@ -16,15 +16,32 @@ export default function AbrechnungPage() {
   const [cryptoWallet, setCryptoWallet] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
 
+  // 🛡️ REPARATUR-LOGIK: Stammdaten werden NUR EINMALIG beim Start geladen!
+  useEffect(() => {
+    async function ladeEinmaligeStammdaten() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        setCurrentUserId(user.id);
+        const adminCheck = user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com";
+        setIsAdmin(adminCheck);
+
+        const { data: meinProfil } = await supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
+        if (meinProfil) {
+          setAddress(meinProfil.chatter_address || "");
+          setIban(meinProfil.chatter_iban || "");
+          setCryptoNetwork(meinProfil.chatter_crypto_network || "");
+          setCryptoWallet(meinProfil.chatter_crypto_wallet || "");
+        }
+      } catch (err) { console.error(err); }
+    }
+    ladeEinmaligeStammdaten();
+  }, [supabase]);
+
+  // Dieser Timer aktualisiert im Hintergrund nur noch die nackten Performance-Zahlen
   async function ladeAbrechnungsZentrale() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      setCurrentUserId(user.id);
-      const adminCheck = user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com";
-      setIsAdmin(adminCheck);
-
       const [profilesRes, revenueRes, shiftsRes] = await Promise.all([
         supabase.from("profiles").select("*"),
         supabase.from("chatter_revenues").select("*"),
@@ -35,17 +52,9 @@ export default function AbrechnungPage() {
       const revenues = revenueRes.data || [];
       const shifts = shiftsRes.data || [];
 
-      const meinProfil = profiles.find(p => p.user_id === user.id);
-      if (meinProfil) {
-        setAddress(meinProfil.chatter_address || "");
-        setIban(meinProfil.chatter_iban || "");
-        setCryptoNetwork(meinProfil.chatter_crypto_network || "");
-        setCryptoWallet(meinProfil.chatter_crypto_wallet || "");
-      }
-
-      const erlaubteProfile = adminCheck 
+      const erlaubteProfile = isAdmin 
         ? profiles.filter(p => p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4")
-        : profiles.filter(p => p.user_id === user.id);
+        : profiles.filter(p => p.user_id === currentUserId);
 
       const berechneteListe = erlaubteProfile.map(p => {
         let stunden = 0;
@@ -88,7 +97,13 @@ export default function AbrechnungPage() {
     } catch (e) { console.error(e); }
   }
 
-  useEffect(() => { ladeAbrechnungsZentrale(); }, [supabase]);
+  useEffect(() => {
+    if (!loading && currentUserId) {
+      ladeAbrechnungsZentrale();
+      const interval = setInterval(ladeAbrechnungsZentrale, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [supabase, loading, currentUserId]);
   async function handleSaveProfile() {
     setSaveStatus("Speichert...");
     const { error } = await supabase
@@ -103,7 +118,6 @@ export default function AbrechnungPage() {
 
     if (!error) {
       setSaveStatus("Erfolgreich aktualisiert!");
-      ladeAbrechnungsZentrale();
       setTimeout(() => setSaveStatus(""), 2000);
     } else {
       setSaveStatus("Fehler beim Speichern!");
@@ -114,10 +128,10 @@ export default function AbrechnungPage() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    // 🛡️ RECHTLICHE FALLBACKS: Wenn Felder leer sind, werden sie als optionaler Freitext formatiert
-    const gedruckteAdresse = daten.chatter_address.trim() ? daten.chatter_address.replace(/\n/g, "<br>") : "<em>[Anschrift manuell eintragen]</em>";
-    const gedruckteIban = daten.chatter_iban.trim() ? daten.chatter_iban : "<em>[IBAN manuell eintragen]</em>";
-    const gedruckteWallet = daten.chatter_crypto_wallet.trim() ? `${daten.chatter_crypto_wallet} ${daten.chatter_crypto_network ? `(${daten.chatter_crypto_network})` : ""}` : "<em>[Wallet manuell eintragen]</em>";
+    // Nutzt für das PDF direkt die Eingaben aus den Live-Eingabefeldern
+    const gedruckteAdresse = address.trim() ? address.replace(/\n/g, "<br>") : "<em>[Anschrift manuell eintragen]</em>";
+    const gedruckteIban = iban.trim() ? iban : "<em>[IBAN manuell eintragen]</em>";
+    const gedruckteWallet = cryptoWallet.trim() ? `${cryptoWallet} ${cryptoNetwork ? `(${cryptoNetwork})` : ""}` : "<em>[Wallet manuell eintragen]</em>";
 
     printWindow.document.write(`
       <html>
@@ -193,8 +207,6 @@ export default function AbrechnungPage() {
     `);
     printWindow.document.close();
   }
-
-  if (loading) return <div className="text-center pt-24 font-bold text-[#D4AF37] animate-pulse">Lade Abrechnungs-Zentrale...</div>;
   return (
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
       <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
