@@ -61,7 +61,9 @@ function LiveTimer({ startedAt }: { startedAt: string }) {
       ⏱️ {pad2(hrs)}:{pad2(mins)}:{pad2(secs)}
     </span>
   );
-}export default function ChatterPage() {
+}
+
+export default function ChatterPage() {
   const supabase = createClient();
   const [rows, setRows] = useState<AssignmentRow[]>([]);
   const [alleKalenderSchichten, setAlleKalenderSchichten] = useState<any[]>([]);
@@ -148,6 +150,7 @@ function LiveTimer({ startedAt }: { startedAt: string }) {
   }, [meineGeplantenSchichten, jetztZeit]);
 
   const totalHours = useMemo(() => rows.reduce((sum, r) => sum + toDurationHours(r.started_at, r.ended_at), 0), [rows]);
+
   const activeShift = useMemo(() => rows.find(r => r.started_at && !r.ended_at), [rows]);
   const aktiveLiveModels = useMemo(() => {
     const heuteStr = getHeuteISOString();
@@ -159,14 +162,8 @@ function LiveTimer({ startedAt }: { startedAt: string }) {
   async function triggerGlobalStart() {
     if (!currentUserId) { setErr("Benutzerdaten laden noch."); return; }
     setErr(null);
-    
     const { error } = await supabase.from("shift_assignments").insert([
-      {
-        chatter_id: currentUserId,
-        model_id: null, 
-        started_at: new Date().toISOString(),
-        ended_at: null
-      }
+      { chatter_id: currentUserId, model_id: null, started_at: new Date().toISOString(), ended_at: null }
     ]);
     if (error) { setErr(error.message); return; }
     await refresh();
@@ -186,90 +183,97 @@ function LiveTimer({ startedAt }: { startedAt: string }) {
     setTimeout(() => setCopiedShiftId(null), 2000);
   }
   return (
-    <div className="p-6 min-h-screen bg-slate-950 text-white">
-      <div className="flex justify-between items-center border-b border-white/10 pb-4 mb-6">
-        <h1 className="text-xl font-semibold text-white">Chatter — Stechuhr</h1>
+    <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
+      {/* Header-Zustand */}
+      <div className="flex justify-between items-center border-b border-[#AA7C11]/20 pb-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">Mitarbeiter Stechuhr</h1>
+          <p className="text-xs text-slate-400 mt-0.5">Schichten erfassen und Live-Mass-Messages kopieren</p>
+        </div>
         <form action="/api/logout" method="POST">
-          <button type="submit" className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-500/30 transition font-medium cursor-pointer">Abmelden (Logout)</button>
+          <button type="submit" className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg hover:bg-red-500/20 transition font-bold cursor-pointer">Abmelden</button>
         </form>
       </div>
 
-      <div className="bg-slate-900 border border-white/10 p-4 rounded-lg mb-6 flex gap-4 items-center flex-wrap justify-between">
-        <div className="flex gap-4 items-center flex-wrap">
-          <span className="text-sm text-slate-300 font-medium">Deine Stechuhr:</span>
-          <button onClick={triggerGlobalStart} disabled={!!activeShift} className="rounded bg-emerald-600 px-4 py-2 text-sm hover:bg-emerald-700 disabled:opacity-40 font-semibold text-white transition cursor-pointer">Start Schicht</button>
-          <button onClick={triggerGlobalEnd} disabled={!activeShift} className="rounded bg-red-600 px-4 py-2 text-sm hover:bg-red-700 disabled:opacity-40 font-semibold text-white transition cursor-pointer">Ende Schicht</button>
+      {/* Stechuhr-Kontrollzentrum */}
+      <div className="bg-black/40 border border-[#AA7C11]/10 p-4 rounded-xl mb-6 flex gap-4 items-center flex-wrap justify-between shadow-lg">
+        <div className="flex gap-2 items-center flex-wrap">
+          <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">Deine Stechuhr:</span>
+          <button onClick={triggerGlobalStart} disabled={!!activeShift} className="rounded-lg bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer">Start Schicht</button>
+          <button onClick={triggerGlobalEnd} disabled={!activeShift} className="rounded-lg bg-gradient-to-b from-red-400 to-red-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer">Ende Schicht</button>
         </div>
+        
         {activeShift && activeShift.started_at && (
-          <div className="flex items-center gap-4 bg-emerald-500/10 border border-emerald-500/20 px-4 py-1.5 rounded-xl">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-4 bg-emerald-500/5 border border-emerald-500/20 px-4 py-1.5 rounded-xl">
+            <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Aktiv:</span>
-              <span className="text-xs text-amber-400 font-bold">{aktiveLiveModels.join(", ")}</span>
+              <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">Aktiv:</span>
+              <span className="text-xs text-[#D4AF37] font-black uppercase tracking-wide">{aktiveLiveModels.join(", ")}</span>
             </div>
             <LiveTimer startedAt={activeShift.started_at} />
           </div>
         )}
       </div>
 
-      <div className="mt-2 text-sm text-white/70 mb-6">
-        Deine Gesamtstunden: <span className="text-white font-semibold">{totalHours.toFixed(2)} h</span>
+      <div className="mt-2 text-xs text-slate-400 mb-6 font-medium">
+        Deine erfassten Gesamtstunden: <span className="text-white font-bold font-mono">{totalHours.toFixed(2)} h</span>
       </div>
 
       {/* 📋 VORSCHAU: Geplante Schichten */}
       <div className="mb-8">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Deine aktuellen Schicht-Zuteilungen</h3>
+        <h3 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">Deine aktuellen Schicht-Zuteilungen</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {naechsteZweiSchichten.map((s) => (
-            <div key={s.id} className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-between min-h-[140px]">
+            <div key={s.id} className="bg-black/30 border border-[#AA7C11]/20 rounded-xl p-4 flex flex-col justify-between min-h-[140px] hover:border-[#D4AF37]/40 transition">
               <div>
-                <div className="flex justify-between items-center border-b border-slate-800/80 pb-1.5 mb-2">
-                  <span className="text-xs font-black text-amber-400 uppercase tracking-wide">Model: {s.model}</span>
-                  <span className="text-[11px] text-slate-400 font-medium">{new Date(s.datum).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} | {s.von} - {s.bis} Uhr</span>
+                <div className="flex justify-between items-center border-b border-[#AA7C11]/10 pb-1.5 mb-2">
+                  <span className="text-xs font-black text-[#D4AF37] uppercase tracking-wide">Model: {s.model}</span>
+                  <span className="text-[10px] text-slate-400 font-semibold font-mono">{new Date(s.datum).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} | {s.von} - {s.bis} Uhr</span>
                 </div>
                 {s.nachricht ? (
-                  <p className="text-xs text-slate-400 italic line-clamp-2 bg-slate-950/40 p-2 rounded border border-slate-900/60 break-words">{s.nachricht}</p>
+                  <p className="text-xs text-slate-300 italic line-clamp-2 bg-[#050505]/60 p-2.5 rounded border border-[#AA7C11]/5 break-words">"{s.nachricht}"</p>
                 ) : (
-                  <p className="text-xs text-slate-500 italic p-2">Keine Mass Message hinterlegt.</p>
+                  <p className="text-xs text-slate-500 italic p-2">Keine Mass Message für diese Schicht.</p>
                 )}
               </div>
               {s.nachricht && (
-                <button type="button" onClick={() => handleCopyMessage(s.nachricht, s.id)} className="w-full mt-3 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 text-blue-400 rounded py-1 text-xs font-bold transition cursor-pointer">
+                <button type="button" onClick={() => handleCopyMessage(s.nachricht, s.id)} className="w-full mt-3 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#AA7C11]/30 text-[#D4AF37] rounded py-1 text-xs font-bold transition cursor-pointer">
                   {copiedShiftId === s.id ? "✓ Nachricht kopiert!" : "📋 Mass Message kopieren"}
                 </button>
               )}
             </div>
           ))}
           {naechsteZweiSchichten.length === 0 && (
-            <div className="col-span-2 text-xs text-slate-500 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Aktuell keine aktiven oder anstehenden Schichten geplant.</div>
+            <div className="col-span-2 text-xs text-slate-500 italic p-6 text-center border border-dashed border-[#AA7C11]/10 rounded-xl">Aktuell keine anstehenden Schichten geplant.</div>
           )}
         </div>
       </div>
 
-      {err && <div className="mt-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 p-2 rounded mb-4">{err}</div>}
+      {err && <div className="mt-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 p-2 rounded mb-4 text-center">{err}</div>}
 
+      {/* HISTORIE */}
       <div className="mt-6">
-        <h2 className="text-lg font-semibold text-slate-300 mb-4">Deine persönliche Schichthistorie</h2>
+        <h2 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider mb-4">Deine persönliche Schichthistorie</h2>
         {loading ? (
-          <div className="text-sm text-white/70">Lade deinen Verlauf…</div>
+          <div className="text-xs text-slate-500 italic">Lade deinen Verlauf…</div>
         ) : (
           <div className="space-y-3">
             {rows.map((r) => {
               const hours = toDurationHours(r.started_at, r.ended_at);
               const isLaufend = r.started_at && !r.ended_at;
               return (
-                <div key={r.id} className={`rounded border p-4 bg-black/20 ${isLaufend ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10"}`}>
+                <div key={r.id} className={`rounded-xl border p-4 transition-all ${isLaufend ? "border-[#D4AF37] bg-[#AA7C11]/5" : "border-[#AA7C11]/10 bg-black/20"}`}>
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-medium text-slate-200">Schicht #{r.id} {isLaufend && <span className="ml-2 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Aktiv</span>}</div>
-                    <div className="text-sm font-semibold text-slate-300">{hours.toFixed(2)} h</div>
+                    <div className="text-xs font-bold text-slate-200 uppercase tracking-wide">Schicht #{r.id} {isLaufend && <span className="ml-2 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Aktiv</span>}</div>
+                    <div className="text-xs font-bold font-mono text-[#D4AF37]">{hours.toFixed(2)} h</div>
                   </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-white/60 border-t border-white/5 pt-2">
-                    <div><span className="text-white/40">Nutzer:</span> <span className="text-blue-400 font-medium">{currentUserEmail}</span></div>
-                    <div><span className="text-white/40">Beginn:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
-                    <div><span className="text-white/40">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-slate-400 border-t border-[#AA7C11]/5 pt-2 font-mono">
+                    <div><span className="text-slate-500 font-sans uppercase font-bold text-[9px]">Nutzer:</span> {currentUserEmail}</div>
+                    <div><span className="text-slate-500 font-sans uppercase font-bold text-[9px]">Beginn:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
+                    <div><span className="text-slate-500 font-sans uppercase font-bold text-[9px]">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
                   </div>
                 </div>
               );
@@ -277,6 +281,6 @@ function LiveTimer({ startedAt }: { startedAt: string }) {
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }
