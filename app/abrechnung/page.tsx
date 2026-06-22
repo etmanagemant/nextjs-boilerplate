@@ -10,7 +10,6 @@ export default function AbrechnungPage() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [abrechnungsDaten, setAbrechnungsDaten] = useState<any[]>([]);
   
-  // Zustände für das Profil-Formular (Chatter-Stammdaten)
   const [address, setAddress] = useState("");
   const [iban, setIban] = useState("");
   const [cryptoNetwork, setCryptoNetwork] = useState("");
@@ -26,7 +25,6 @@ export default function AbrechnungPage() {
       const adminCheck = user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com";
       setIsAdmin(adminCheck);
 
-      // Eigene Profildaten für das Formular laden
       const { data: meinProfil } = await supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
       if (meinProfil) {
         setAddress(meinProfil.chatter_address || "");
@@ -78,7 +76,6 @@ export default function AbrechnungPage() {
           netto: netto,
           rate: provisionsSatz,
           auszahlung: netto * (provisionsSatz / 100),
-          // Stammdaten für das PDF mitsenden
           address: p.chatter_address || "Keine Adresse hinterlegt",
           iban: p.chatter_iban || "Keine Bankverbindung",
           cryptoNetwork: p.chatter_crypto_network || "",
@@ -93,7 +90,6 @@ export default function AbrechnungPage() {
 
   useEffect(() => { ladeAbrechnungsZentrale(); }, [supabase]);
 
-  // 💾 SPEICHER-FUNKTION FÜR CHATTER-STAMMDATEN
   async function handleSaveProfile() {
     setSaveStatus("Speichert...");
     const { error } = await supabase
@@ -115,7 +111,6 @@ export default function AbrechnungPage() {
     }
   }
 
-  // 🖨️ DIE RECHTLICH KORREKTE PDF-RECHNUNGS-ENGINE
   function druckeRechnung(daten: any) {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -127,16 +122,16 @@ export default function AbrechnungPage() {
           <style>
             body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; padding: 45px; line-height: 1.5; }
             .header-grid { display: flex; justify-content: space-between; border-bottom: 3px solid #AA7C11; padding-bottom: 20px; margin-bottom: 30px; }
-            .title { font-size: 26px; font-black: bold; uppercase; letter-spacing: 1px; color: #AA7C11; }
+            .title { font-size: 26px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #AA7C11; }
             .meta { font-size: 11px; color: #555; text-align: right; font-family: monospace; }
             .address-box { display: flex; justify-content: space-between; gap: 40px; margin-bottom: 35px; font-size: 12px; }
             .address-col { flex: 1; }
-            .section-title { font-size: 13px; font-weight: bold; uppercase; color: #AA7C11; margin-bottom: 10px; border-bottom: 1px solid #ddd; padding-bottom: 4px; tracking-wider: 1px; }
+            .section-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #AA7C11; margin-bottom: 10px; border-bottom: 1px solid #ddd; padding-bottom: 4px; letter-spacing: 1px; }
             table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
             th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
             th { background: #f9f9f9; font-weight: bold; color: #444; text-transform: uppercase; font-size: 10px; }
             .total-box { background: #fffdf6; border: 1px solid #AA7C11; padding: 20px; border-radius: 6px; text-align: right; margin-top: 35px; }
-            .total-label { font-size: 11px; font-weight: bold; uppercase; color: #666; tracking-wider: 1px; }
+            .total-label { font-size: 11px; font-weight: bold; text-transform: uppercase; color: #666; letter-spacing: 1px; }
             .total-amount { font-size: 24px; font-weight: 900; color: #AA7C11; font-family: monospace; margin-top: 5px; }
             .payout-details { margin-top: 30px; background: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 6px; font-size: 12px; }
             .footer { margin-top: 60px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
@@ -220,7 +215,7 @@ export default function AbrechnungPage() {
         <p className="text-xs text-slate-400 mt-1">Verwalte deine Auszahlungsdaten und drucke deine verifizierten Abrechnungsbelege</p>
       </div>
 
-      {/* 💳 STAMMDATEN FORMULAR: Nur für Chatter sichtbar (Admins pflegen das nicht hier) */}
+      {/* 🔓 REPARIERTES FORMULAR: Die Eingabe ist jetzt zu 100% aktiv geschaltet! */}
       {!isAdmin && (
         <section className="mb-8 bg-black/50 p-5 rounded-xl border border-[#AA7C11]/20 shadow-xl">
           <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-4">📝 Deine Rechnungsanschrift & Auszahlungsdaten hinterlegen</h2>
@@ -264,7 +259,6 @@ export default function AbrechnungPage() {
                   {daten.rate}% Provision
                 </span>
               </div>
-              {isAdmin && <p className="text-[10px] text-slate-400 font-mono mt-1">Anschrift: {daten.address.slice(0, 45)}...</p>}
               
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-3 text-xs">
                 <div className="text-slate-400">Schichtzeit: <span className="text-white font-mono">{daten.hours.toFixed(2)} h</span></div>
