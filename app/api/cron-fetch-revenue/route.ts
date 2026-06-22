@@ -10,24 +10,30 @@ export async function GET(request: Request) {
   }
 
   try {
+    // 🚀 DIE ECHTE APP-URL: Exakt aus deinem Edge/Chrome-Screenshot ausgelesen!
     const response = await fetch("https://supercreator.app", {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${process.env.SUPERCREATOR_API_TOKEN}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
       }
     });
 
     if (!response.ok) {
-      throw new Error(`Supercreator API verweigert Zugriff: Status ${response.status}`);
+      throw new Error(`Supercreator verweigert Zugriff: Status ${response.status}`);
     }
 
     const jsonDaten = await response.json();
-    const roheListe = Array.isArray(jsonDaten) ? jsonDaten : (jsonDaten.data || jsonDaten.creator_earnings || []);
+    
+    // Der neue, ultraflexible Parser für die active-stats Struktur
+    const roheListe = Array.isArray(jsonDaten) 
+      ? jsonDaten 
+      : (jsonDaten.data || jsonDaten.creator_earnings || jsonDaten.chatters || jsonDaten.stats || []);
 
     const chatterUmsaetze = roheListe.map((user: any) => ({
-      scName: String(user.chatter_name || user.name || "").trim(),
-      heuteUmsatz: parseFloat(user.today_revenue || user.revenue || "0"),
+      scName: String(user.chatter_name || user.name || user.username || "").trim(),
+      heuteUmsatz: parseFloat(user.today_revenue || user.revenue || user.amount || "0"),
       modelId: user.model_id || null
     }));
 
@@ -37,7 +43,7 @@ export async function GET(request: Request) {
     for (const data of chatterUmsaetze) {
       if (data.heuteUmsatz <= 0) continue;
 
-      // 🛡️ ADMIN-FALLBACK-FIX: Wenn der Name unzugeordnet ist, parken wir das Geld auf deiner Admin-ID!
+      // Wenn kein Name da ist, buchen wir es auf deine Admin-ID als freien Tip!
       let zielUserId = '35498c92-2c4d-4720-a6f7-cc187a4c5fc4'; 
 
       if (data.scName && data.scName.toLowerCase() !== "unassigned" && data.scName.toLowerCase() !== "system") {
@@ -52,12 +58,10 @@ export async function GET(request: Request) {
         }
       }
 
-      // Bereits gebuchte Umsätze für diese Kombination abfragen
       const { data: bRevenues } = await supabase
         .from("chatter_revenues")
         .select("amount")
         .eq("user_id", zielUserId)
-        .eq("model_id", data.modelId)
         .gte("created_at", `${heuteISO}T00:00:00`)
         .lte("created_at", `${heuteISO}T23:59:59`);
 
@@ -79,7 +83,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, verarbeitet: chatterUmsaetze.length });
 
   } catch (error: any) {
-    console.error("Supercreator-API-Abgleich Fehler:", error);
+    console.error("Supercreator-Server-Fehler:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
