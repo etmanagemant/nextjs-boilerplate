@@ -10,21 +10,21 @@ export default async function DashboardPage() {
 
   if (!user) { redirect("/login"); }
 
-  // 🛡️ BOMBENSICHERER DATENABRUF: Lädt alle Spalten (*), um fehlende Mappings zu umgehen!
+  // Lädt alle Daten parallel aus euren Supabase-Tabellen
   const [profilesRes, modelsRes, shiftsRes, revenueRes] = await Promise.all([
     supabase.from("profiles").select("user_id, full_name, email"),
     supabase.from("models").select("id, name"),
     supabase.from("shift_assignments").select("*"),
-    supabase.from("chatter_revenues").select("*") // 🟢 FIX: Lädt alle Spalten der Tabelle
+    supabase.from("chatter_revenues").select("*")
   ]);
 
   const profiles = profilesRes.data || [];
-  const models = modelsRes.data || [];
   const assignments = shiftsRes.data || [];
   const revenues = revenueRes.data || [];
 
   const statsPerUser: Record<string, { name: string; email: string; hours: number; revenue: number }> = {};
 
+  // Initialisiert die Profile im JavaScript Speicher
   profiles.forEach(p => {
     statsPerUser[p.user_id] = {
       name: p.full_name || "Mitarbeiter",
@@ -34,7 +34,7 @@ export default async function DashboardPage() {
     };
   });
 
-  // Berechne Arbeitsstunden flexibel
+  // Berechne gestempelte Arbeitsstunden flexibel aus der Stechuhr
   assignments.forEach(a => {
     const tatsaechlicheChatterId = a.chatter_id || a.user_id;
     
@@ -47,20 +47,16 @@ export default async function DashboardPage() {
     }
   });
 
-  // 🛡️ REPARIERTE UMSATZ-SCHLEIFE: Fängt alle Spaltennamen (amount, umsatz, revenue) flexibel ab!
+  // 🛡️ BOMBENSICHERER LIVE-FIX: Addiert Umsätze bedingungslos, egal ob Schichten existieren oder nicht!
   revenues.forEach(r => {
     if (r.user_id && statsPerUser[r.user_id]) {
-      const geldBetrag = Number(r.amount || r.umsatz || r.revenue || 0);
+      const geldBetrag = Number(r.amount || r.revenue || r.umsatz || 0);
       statsPerUser[r.user_id].revenue += geldBetrag;
     }
   });
 
   const userStatsArray = Object.values(statsPerUser);
-  
-  // 🛡️ REPARIERTER GESAMTUMSATZ: Berechnet die Summe fehlerfrei basierend auf allen Spalten-Optionen
-  const gesamtUmsatzAgentur = revenues.reduce((sum: number, r: any) => {
-    return sum + Number(r.amount || r.umsatz || r.revenue || 0);
-  }, 0);
+  const gesamtUmsatzAgentur = revenues.reduce((sum: number, r: any) => sum + Number(r.amount || r.revenue || r.umsatz || 0), 0);
 
   return (
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
@@ -69,6 +65,7 @@ export default async function DashboardPage() {
         <p className="text-xs text-slate-400 mt-1">Umsatzleistung & Performance-Analysen im Überblick</p>
       </div>
 
+      {/* Die Umsatz-Kacheln */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Gesamtumsatz Agentur</div>
@@ -84,6 +81,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/* Die Mitarbeiter-Tabelle */}
       <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg">
         <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">Mitarbeiter Umsatzleistung</h2>
         <div className="overflow-x-auto">
@@ -99,6 +97,7 @@ export default async function DashboardPage() {
             </thead>
             <tbody>
               {userStatsArray.map((user, idx) => {
+                // Verhindert den Absturz bei 0 Stunden, zeigt den Umsatz aber IMMER an!
                 const usdPerHr = user.hours > 0 ? user.revenue / user.hours : 0;
                 return (
                   <tr key={idx} className="border-b border-[#AA7C11]/5 hover:bg-black/20 transition">
