@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-// 🛡️ UNZERSTÖRBARER NEXT.JS ALIAS: Findet die Datei auf Vercel immer, egal wie tief der Ordner liegt!
-import { createClient } from "@/utils/supabase/server";
+import { createClient } from "../../../utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +11,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 🚀 DIREKTE API-ABFRAGE: Geht an jedem Bot-Schutz direkt vorbei!
+    // 🚀 DIE ECHTE CONSOLE-SCHNITTSTELLE: Holt die Daten direkt von der echten Dashboard-API!
     const response = await fetch("https://supercreator.app", {
       method: "GET",
       headers: {
