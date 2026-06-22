@@ -16,7 +16,6 @@ export default function AbrechnungPage() {
   const [cryptoWallet, setCryptoWallet] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
 
-  // 🛡️ EINFIER-SCHUTZ: Fängt null-Werte ab, damit die Felder NIEMALS blockieren!
   useEffect(() => {
     async function ladeEinmaligeStammdaten() {
       try {
@@ -108,10 +107,10 @@ export default function AbrechnungPage() {
     const { error } = await supabase
       .from("profiles")
       .update({
-        chatter_address: address || "",
-        chatter_iban: iban || "",
-        chatter_crypto_network: cryptoNetwork || "",
-        chatter_crypto_wallet: cryptoWallet || ""
+        chatter_address: address,
+        chatter_iban: iban,
+        chatter_crypto_network: cryptoNetwork,
+        chatter_crypto_wallet: cryptoWallet
       })
       .eq("user_id", currentUserId);
 
@@ -127,15 +126,23 @@ export default function AbrechnungPage() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    const gedruckteAdresse = address.trim() ? address.replace(/\n/g, "<br>") : "<em>[Anschrift manuell eintragen]</em>";
-    
-    // 🧠 DYNAMISCHE STRUKTUR-ANPASSUNG: Erstellt den Kasten nur, wenn Daten real existieren!
-    let auszahlungsHTML = "";
-    if (!iban.trim() && !cryptoWallet.trim()) {
-      auszahlungsHTML = `<strong>Bankverbindung / Wallet:</strong> ____________________________________ <br><span style="font-size:10px; color:#777;">(Manuell vom Aussteller auszufüllen)</span>`;
-    } else {
-      if (iban.trim()) auszahlungsHTML += `<strong>Bankverbindung (IBAN):</strong> ${iban}<br>`;
-      if (cryptoWallet.trim()) auszahlungsHTML += `<strong>Krypto-Auszahlung:</strong> Wallet: ${cryptoWallet} ${cryptoNetwork ? `(${cryptoNetwork})` : ""}`;
+    // 🛡️ RADIKAL CLEAN: Wenn die Adresse leer ist, bleibt das Feld auf dem PDF unsichtbar
+    const hatAdresse = daten.chatter_address && daten.chatter_address.trim();
+    const gedruckteAdresse = hatAdresse ? daten.chatter_address.replace(/\n/g, "<br>") : "";
+
+    // Baut den Auszahlungs-Kasten NUR, wenn auch wirklich Daten hinterlegt sind!
+    let auszahlungsSektion = "";
+    const hatIban = daten.chatter_iban && daten.chatter_iban.trim();
+    const hatWallet = daten.chatter_crypto_wallet && daten.chatter_crypto_wallet.trim();
+
+    if (hatIban || hatWallet) {
+      auszahlungsSektion = `
+        <div class="payout-details">
+          <div class="section-title" style="border:0; margin-bottom:5px;">Hinterlegte Auszahlungsdaten</div>
+          ${hatIban ? `<strong>Bankverbindung (IBAN):</strong> ${daten.chatter_iban}<br>` : ""}
+          ${hatWallet ? `<strong>Krypto-Auszahlung:</strong> Wallet: ${daten.chatter_crypto_wallet} ${daten.chatter_crypto_network ? `(${daten.chatter_crypto_network})` : ""}` : ""}
+        </div>
+      `;
     }
 
     printWindow.document.write(`
@@ -175,7 +182,9 @@ export default function AbrechnungPage() {
           <div class="address-box">
             <div class="address-col">
               <div class="section-title">Rechnungsaussteller (Chatter)</div>
-              <strong>${daten.name}</strong><br>${gedruckteAdresse}<br>Email: ${daten.email}
+              <strong>${daten.name}</strong><br>
+              ${gedruckteAdresse}<br>
+              Email: ${daten.email}
             </div>
             <div class="address-col">
               <div class="section-title">Rechnungsempfänger (Leistungsnehmer)</div>
@@ -200,10 +209,7 @@ export default function AbrechnungPage() {
             <div class="total-label">Guthaben / Rechnungsbetrag zur Auszahlung</div>
             <div class="total-amount">$${daten.auszahlung.toFixed(2)}</div>
           </div>
-          <div class="payout-details">
-            <div class="section-title" style="border:0; margin-bottom:5px;">Hinterlegte Auszahlungsdaten</div>
-            ${auszahlungsHTML}
-          </div>
+          ${auszahlungsSektion}
           <div class="footer">Diese Gutschrift-Abrechnung wurde vollautomatisch erstellt und ist digital gültig.</div>
           <script>window.print();</script>
         </body>
@@ -220,27 +226,28 @@ export default function AbrechnungPage() {
         <p className="text-xs text-slate-400 mt-1">Verwalte deine Auszahlungsdaten und drucke deine verifizierten Abrechnungsbelege</p>
       </div>
 
+      {/* 🔓 UNBLOCKIERBAR: Die Felder nutzen jetzt echten Text-Fluss und frieren niemals wieder ein! */}
       {!isAdmin && (
         <section className="mb-8 bg-black/50 p-5 rounded-xl border border-[#AA7C11]/20 shadow-xl">
           <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-4">📝 Deine Rechnungsanschrift & Auszahlungsdaten hinterlegen (Optional)</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div>
               <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Vollständige Anschrift (Straße, PLZ, Ort)</label>
-              <textarea value={address} onChange={(e) => setAddress(e.target.value || "")} placeholder="Musterstraße 1, 12345 Musterstadt (Falls leer, manuelles Ausfüllen auf PDF)" className="w-full h-20 bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
+              <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Musterstraße 1, 12345 Musterstadt" className="w-full h-20 bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
             </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Bankverbindung (IBAN)</label>
-                <input type="text" value={iban} onChange={(e) => setIban(e.target.value || "")} placeholder="DE12 3456 7890 ... (Optional)" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
+                <input type="text" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="DE12 3456 7890 ..." className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-1">
                   <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Krypto Netz</label>
-                  <input type="text" value={cryptoNetwork} onChange={(e) => setCryptoNetwork(e.target.value || "")} placeholder="USDT TRC20" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
+                  <input type="text" value={cryptoNetwork} onChange={(e) => setCryptoNetwork(e.target.value)} placeholder="USDT TRC20" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Crypto Wallet Adresse</label>
-                  <input type="text" value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value || "")} placeholder="T9xZ... (Optional)" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
+                  <input type="text" value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value)} placeholder="T9xZ..." className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
                 </div>
               </div>
             </div>
@@ -252,6 +259,7 @@ export default function AbrechnungPage() {
         </section>
       )}
 
+      {/* Abrechnungsliste */}
       <div className="space-y-4">
         {abrechnungsDaten.map((daten, idx) => (
           <div key={idx} className="bg-black/40 p-5 rounded-xl border border-[#AA7C11]/10 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition hover:border-[#AA7C11]/20">
