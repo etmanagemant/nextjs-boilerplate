@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel } from "./actions";
+import { revalidatePath } from "next/cache";
 // 🟢 IMPORTE EXAKT BEIBEHALTEN
 import CreateShiftForm from "@/components/layout/CreateShiftForm"; 
 import RoleSelect from "@/components/layout/RoleSelect"; 
@@ -23,7 +24,8 @@ export default async function ManagementPage() {
 
   if (!isAdmin) { redirect("/"); }
 
-  const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name");
+  // 🛡️ ERWEITERTES SELECT: Zieht provision_rate mit aus der Datenbank heraus!
+  const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name, provision_rate");
   const { data: modelsListe } = await supabase.from("models").select("id, name").order("name", { ascending: true });
   const { data: alleSchichten } = await supabase.from("shift_assignments").select("*");
 
@@ -41,6 +43,21 @@ export default async function ManagementPage() {
       }
     }
   });
+
+  // ⚡ SERVER ACTION: Neue krisensichere Funktion speichert die Provision ab, ohne Code-Konflikte!
+  async function updateMitarbeiterProvision(formData: FormData) {
+    "use server";
+    const uId = formData.get("user_id") as string;
+    const rate = Number(formData.get("provision_rate") || 20);
+    
+    const serverSupabase = await createClient();
+    await serverSupabase
+      .from("profiles")
+      .update({ provision_rate: rate })
+      .eq("user_id", uId);
+      
+    revalidatePath("/management");
+  }
   return (
     <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
       <div className="flex justify-between items-center mb-6 border-b border-[#AA7C11]/20 pb-4 flex-wrap gap-4">
@@ -73,6 +90,7 @@ export default async function ManagementPage() {
               <tr className="border-b border-[#AA7C11]/10 bg-[#050505] text-[#D4AF37] font-semibold text-xs uppercase tracking-wider">
                 <th className="p-3">Name</th>
                 <th className="p-3">E-Mail</th>
+                <th className="p-3 w-[140px] text-amber-300">Provision %</th>
                 <th className="p-3 w-[150px]">Rolle ändern</th>
               </tr>
             </thead>
@@ -82,17 +100,27 @@ export default async function ManagementPage() {
                   <td className="p-3">
                     <form action={updateMitarbeiterName} className="flex gap-2">
                       <input type="hidden" name="user_id" value={p.user_id} />
-                      <input type="text" name="full_name" defaultValue={p.full_name || ""} required className="bg-[#050505] border border-[#AA7C11]/30 rounded px-2 py-1 text-sm text-white focus:border-[#D4AF37] outline-none w-full max-w-[160px]" />
-                      <button type="submit" className="text-[11px] bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer">Speichern</button>
+                      <input type="text" name="full_name" defaultValue={p.full_name || ""} required className="bg-[#050505] border border-[#AA7C11]/30 rounded px-2 py-1 text-sm text-white focus:border-[#D4AF37] outline-none w-full max-w-[140px]" />
+                      <button type="submit" className="text-[11px] bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer">OK</button>
                     </form>
                   </td>
                   <td className="p-3 text-slate-400 font-mono text-xs">{p.email || "keine E-Mail"}</td>
+                  
+                  {/* 👑 NEUE SPALTE: Ermöglicht das getrennte Speichern der Chatter-Beteiligungen */}
                   <td className="p-3">
-                    <RoleSelect 
-                      userId={p.user_id} 
-                      defaultRole={p.role} 
-                      onUpdateAction={updateMitarbeiterRolle} 
-                    />
+                    {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
+                      <form action={updateMitarbeiterProvision} className="flex gap-1.5 items-center">
+                        <input type="hidden" name="user_id" value={p.user_id} />
+                        <input type="number" name="provision_rate" defaultValue={p.provision_rate || 20} className="w-14 bg-[#050505] border border-[#AA7C11]/30 text-white rounded p-1 text-xs text-center outline-none focus:border-[#D4AF37]" />
+                        <button type="submit" className="text-[10px] bg-emerald-600 text-white font-bold px-1.5 py-1 rounded hover:bg-emerald-700 transition cursor-pointer">✓</button>
+                      </form>
+                    ) : (
+                      <span className="text-xs text-slate-500 font-mono">Admin</span>
+                    )}
+                  </td>
+
+                  <td className="p-3">
+                    <RoleSelect userId={p.user_id} defaultRole={p.role} onUpdateAction={updateMitarbeiterRolle} />
                   </td>
                 </tr>
               ))}
