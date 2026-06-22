@@ -16,7 +16,7 @@ export default function AbrechnungPage() {
   const [cryptoWallet, setCryptoWallet] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
 
-  // 🛡️ REPARATUR-LOGIK: Stammdaten werden NUR EINMALIG beim Start geladen!
+  // 1. Stammdaten werden beim ersten Laden unblockierbar geladen
   useEffect(() => {
     async function ladeEinmaligeStammdaten() {
       try {
@@ -39,8 +39,9 @@ export default function AbrechnungPage() {
     ladeEinmaligeStammdaten();
   }, [supabase]);
 
-  // Dieser Timer aktualisiert im Hintergrund nur noch die nackten Performance-Zahlen
+  // 2. Die unzerstörbare Live-Abfrage für die Tabelle
   async function ladeAbrechnungsZentrale() {
+    if (!currentUserId) return;
     try {
       const [profilesRes, revenueRes, shiftsRes] = await Promise.all([
         supabase.from("profiles").select("*"),
@@ -84,26 +85,23 @@ export default function AbrechnungPage() {
           brutto: brutto,
           netto: netto,
           rate: provisionsSatz,
-          auszahlung: netto * (provisionsSatz / 100),
-          chatter_address: p.chatter_address || "",
-          chatter_iban: p.chatter_iban || "",
-          chatter_crypto_network: p.chatter_crypto_network || "",
-          chatter_crypto_wallet: p.chatter_crypto_wallet || ""
+          auszahlung: netto * (provisionsSatz / 100)
         };
       });
 
       setAbrechnungsDaten(berechneteListe);
-      setLoading(false);
+      setLoading(false); // Schaltet das Laden erst aus, wenn Daten real existieren!
     } catch (e) { console.error(e); }
   }
 
+  // Zündet den 5-Sekunden-Timer fehlerfrei, sobald die ID bereitsteht
   useEffect(() => {
-    if (!loading && currentUserId) {
+    if (currentUserId) {
       ladeAbrechnungsZentrale();
       const interval = setInterval(ladeAbrechnungsZentrale, 5000);
       return () => clearInterval(interval);
     }
-  }, [supabase, loading, currentUserId]);
+  }, [currentUserId, isAdmin]);
   async function handleSaveProfile() {
     setSaveStatus("Speichert...");
     const { error } = await supabase
@@ -128,7 +126,6 @@ export default function AbrechnungPage() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    // Nutzt für das PDF direkt die Eingaben aus den Live-Eingabefeldern
     const gedruckteAdresse = address.trim() ? address.replace(/\n/g, "<br>") : "<em>[Anschrift manuell eintragen]</em>";
     const gedruckteIban = iban.trim() ? iban : "<em>[IBAN manuell eintragen]</em>";
     const gedruckteWallet = cryptoWallet.trim() ? `${cryptoWallet} ${cryptoNetwork ? `(${cryptoNetwork})` : ""}` : "<em>[Wallet manuell eintragen]</em>";
@@ -249,34 +246,42 @@ export default function AbrechnungPage() {
         </section>
       )}
 
-      <div className="space-y-4">
-        {abrechnungsDaten.map((daten, idx) => (
-          <div key={idx} className="bg-black/40 p-5 rounded-xl border border-[#AA7C11]/10 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition hover:border-[#AA7C11]/20">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white tracking-wide">{daten.name}</h2>
-                <span className="bg-[#AA7C11]/10 border border-[#AA7C11]/30 text-[#D4AF37] text-[10px] font-mono px-2 py-0.5 rounded">
-                  {daten.rate}% Provision
-                </span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-3 text-xs">
-                <div className="text-slate-400">Schichtzeit: <span className="text-white font-mono">{daten.hours.toFixed(2)} h</span></div>
-                <div className="text-slate-400">Umsatz Brutto: <span className="text-amber-200 font-mono">${daten.brutto.toFixed(2)}</span></div>
-                <div className="text-slate-400">Netto-Eingang: <span className="text-emerald-400 font-mono">${daten.netto.toFixed(2)}</span></div>
-              </div>
-            </div>
-            <div className="flex items-center justify-between w-full md:w-auto md:justify-end gap-4 border-t border-[#AA7C11]/5 pt-3 md:border-t-0 md:pt-0">
-              <div className="text-right">
-                <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Auszahlungsbetrag:</div>
-                <div className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#F3E5AB] via-[#D4AF37] to-[#AA7C11] font-mono">
-                  ${daten.auszahlung.toFixed(2)}
+      {/* 🟢 DIE REPARIERTE COMPONENTEN TABELLE IST HIER WIEDER VOLLSTÄNDIG LIVE */}
+      {loading ? (
+        <div className="text-center p-8 font-bold text-slate-500 font-mono animate-pulse">SYNCHRONISIERE AGENTUR PERFORMANCE-DATEN...</div>
+      ) : (
+        <div className="space-y-4">
+          {abrechnungsDaten.map((daten, idx) => (
+            <div key={idx} className="bg-black/40 p-5 rounded-xl border border-[#AA7C11]/10 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition hover:border-[#AA7C11]/20">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-white tracking-wide">{daten.name}</h2>
+                  <span className="bg-[#AA7C11]/10 border border-[#AA7C11]/30 text-[#D4AF37] text-[10px] font-mono px-2 py-0.5 rounded">
+                    {daten.rate}% Provision
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-3 text-xs">
+                  <div className="text-slate-400">Schichtzeit: <span className="text-white font-mono">{daten.hours.toFixed(2)} h</span></div>
+                  <div className="text-slate-400">Umsatz Brutto: <span className="text-amber-200 font-mono">${daten.brutto.toFixed(2)}</span></div>
+                  <div className="text-slate-400">Netto-Eingang: <span className="text-emerald-400 font-mono">${daten.netto.toFixed(2)}</span></div>
                 </div>
               </div>
-              <button onClick={() => druckeRechnung(daten)} className="bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black text-xs font-black px-4 py-2.5 rounded-lg uppercase tracking-wider shadow-md cursor-pointer transition">🖨️ PDF Rechnung</button>
+              <div className="flex items-center justify-between w-full md:w-auto md:justify-end gap-4 border-t border-[#AA7C11]/5 pt-3 md:border-t-0 md:pt-0">
+                <div className="text-right">
+                  <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Auszahlungsbetrag:</div>
+                  <div className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#F3E5AB] via-[#D4AF37] to-[#AA7C11] font-mono">
+                    ${daten.auszahlung.toFixed(2)}
+                  </div>
+                </div>
+                <button onClick={() => druckeRechnung(daten)} className="bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black text-xs font-black px-4 py-2.5 rounded-lg uppercase tracking-wider shadow-md cursor-pointer transition">🖨️ PDF Rechnung</button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+          {abrechnungsDaten.length === 0 && (
+            <div className="text-center p-8 text-xs text-slate-500 font-mono">Keine aktiven Leistungsdaten erfasst.</div>
+          )}
+        </div>
+      )}
     </main>
   );
 }
