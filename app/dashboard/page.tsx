@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
-// 🛡️ IMPORT-FIX: Holt die Server-Datei fehlerfrei über den relativen Pfad
 import { createClient } from "../../utils/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -11,12 +10,12 @@ export default async function DashboardPage() {
 
   if (!user) { redirect("/login"); }
 
-  // 🛡️ SPALTEN-FIX: Lädt alle Spalten (*), um Namenskonflikte (chatter_id / user_id) zu killen!
+  // 🛡️ BOMBENSICHERER DATENABRUF: Lädt alle Spalten (*), um fehlende Mappings zu umgehen!
   const [profilesRes, modelsRes, shiftsRes, revenueRes] = await Promise.all([
     supabase.from("profiles").select("user_id, full_name, email"),
     supabase.from("models").select("id, name"),
     supabase.from("shift_assignments").select("*"),
-    supabase.from("chatter_revenues").select("user_id, model_id, amount")
+    supabase.from("chatter_revenues").select("*") // 🟢 FIX: Lädt alle Spalten der Tabelle
   ]);
 
   const profiles = profilesRes.data || [];
@@ -35,7 +34,7 @@ export default async function DashboardPage() {
     };
   });
 
-  // Berechne Stunden und prüfe flexibel beide Spaltennamen ab
+  // Berechne Arbeitsstunden flexibel
   assignments.forEach(a => {
     const tatsaechlicheChatterId = a.chatter_id || a.user_id;
     
@@ -48,16 +47,21 @@ export default async function DashboardPage() {
     }
   });
 
-  // Umsätze addieren
+  // 🛡️ REPARIERTE UMSATZ-SCHLEIFE: Fängt alle Spaltennamen (amount, umsatz, revenue) flexibel ab!
   revenues.forEach(r => {
     if (r.user_id && statsPerUser[r.user_id]) {
-      statsPerUser[r.user_id].revenue += Number(r.amount || 0);
+      const geldBetrag = Number(r.amount || r.umsatz || r.revenue || 0);
+      statsPerUser[r.user_id].revenue += geldBetrag;
     }
   });
 
   const userStatsArray = Object.values(statsPerUser);
-  // 🛡️ TYPESCRIPT-FIX: sum und r explizit mit Typen versehen, damit die Fehler verschwinden!
-  const gesamtUmsatzAgentur = revenues.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+  
+  // 🛡️ REPARIERTER GESAMTUMSATZ: Berechnet die Summe fehlerfrei basierend auf allen Spalten-Optionen
+  const gesamtUmsatzAgentur = revenues.reduce((sum: number, r: any) => {
+    return sum + Number(r.amount || r.umsatz || r.revenue || 0);
+  }, 0);
+
   return (
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
       <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
