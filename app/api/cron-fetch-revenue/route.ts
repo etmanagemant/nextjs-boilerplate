@@ -3,37 +3,22 @@ import { createClient } from "../../../utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  // 🛡️ PRODUKTIONS-SCHUTZ: Lässt nur deinen autorisierten Taktgeber rein!
+export async function POST(request: Request) {
+  // 🛡️ PRODUKTIONS-SCHUTZ: Lässt nur dich mit dem richtigen Passwort rein!
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new NextResponse('Nicht autorisiert', { status: 401 });
   }
 
   try {
-    // 🚀 DIE ECHTE CONSOLE-SCHNITTSTELLE: Holt die Daten direkt von der echten Dashboard-API!
-    const response = await fetch("https://supercreator.app", {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${process.env.SUPERCREATOR_API_TOKEN}`,
-        "Content-Type": "application/json"
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Supercreator API verweigert Zugriff: Status ${response.status}`);
-    }
-
-    const jsonDaten = await response.json();
+    // Lese die Umsatzzahlen direkt aus dem abgesendeten Befehl aus (Kein Fetch an Supercreator nötig!)
+    const jsonDaten = await request.json();
     
-    // Fängt alle Antwort-Strukturen von Supercreator flexibel ab!
-    const roheListe = Array.isArray(jsonDaten) 
-      ? jsonDaten 
-      : (jsonDaten.data || jsonDaten.creator_earnings || jsonDaten.chatters || []);
+    const roheListe = Array.isArray(jsonDaten) ? jsonDaten : (jsonDaten.daten || []);
 
     const chatterUmsaetze = roheListe.map((user: any) => ({
-      scName: String(user.chatter_name || user.name || user.username || "").trim(),
-      heuteUmsatz: parseFloat(user.today_revenue || user.revenue || user.amount || "0")
+      scName: String(user.name || user.chatter_name || "").trim(),
+      heuteUmsatz: parseFloat(user.umsatz || user.revenue || "0")
     }));
     const supabase = await createClient();
     const heuteISO = new Date().toISOString().split("T"); // Format: YYYY-MM-DD
@@ -73,10 +58,10 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, verarbeiteteMitarbeiter: chatterUmsaetze.length, daten: chatterUmsaetze });
+    return NextResponse.json({ success: true, verbucht: chatterUmsaetze.length });
 
   } catch (error: any) {
-    console.error("Supercreator-API-Abgleich Fehler:", error);
+    console.error("Umsatz-Direktbuchung Fehler:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
