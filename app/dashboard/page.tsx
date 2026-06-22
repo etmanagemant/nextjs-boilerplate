@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "../../utils/supabase/server";
 
+// 🛡️ THE CACHE KILLER: Zwingt Vercel dazu, den Server-Cache bei JEDEM Laden komplett zu zerstören!
+export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
@@ -10,7 +12,7 @@ export default async function DashboardPage() {
 
   if (!user) { redirect("/login"); }
 
-  // Lädt alle Daten parallel aus euren Supabase-Tabellen
+  // Holt alle Daten parallel und absolut frisch aus euren Supabase-Tabellen
   const [profilesRes, modelsRes, shiftsRes, revenueRes] = await Promise.all([
     supabase.from("profiles").select("user_id, full_name, email"),
     supabase.from("models").select("id, name"),
@@ -24,7 +26,6 @@ export default async function DashboardPage() {
 
   const statsPerUser: Record<string, { name: string; email: string; hours: number; revenue: number }> = {};
 
-  // Initialisiert die Profile im JavaScript Speicher
   profiles.forEach(p => {
     statsPerUser[p.user_id] = {
       name: p.full_name || "Mitarbeiter",
@@ -47,7 +48,7 @@ export default async function DashboardPage() {
     }
   });
 
-  // 🛡️ BOMBENSICHERER LIVE-FIX: Addiert Umsätze bedingungslos, egal ob Schichten existieren oder nicht!
+  // Addiert Umsätze bedingungslos, egal ob Schichten existieren oder nicht!
   revenues.forEach(r => {
     if (r.user_id && statsPerUser[r.user_id]) {
       const geldBetrag = Number(r.amount || r.revenue || r.umsatz || 0);
@@ -65,7 +66,7 @@ export default async function DashboardPage() {
         <p className="text-xs text-slate-400 mt-1">Umsatzleistung & Performance-Analysen im Überblick</p>
       </div>
 
-      {/* Die Umsatz-Kacheln */}
+      {/* Kacheln */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Gesamtumsatz Agentur</div>
@@ -81,7 +82,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Die Mitarbeiter-Tabelle */}
+      {/* Tabelle */}
       <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg">
         <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">Mitarbeiter Umsatzleistung</h2>
         <div className="overflow-x-auto">
@@ -97,7 +98,6 @@ export default async function DashboardPage() {
             </thead>
             <tbody>
               {userStatsArray.map((user, idx) => {
-                // Verhindert den Absturz bei 0 Stunden, zeigt den Umsatz aber IMMER an!
                 const usdPerHr = user.hours > 0 ? user.revenue / user.hours : 0;
                 return (
                   <tr key={idx} className="border-b border-[#AA7C11]/5 hover:bg-black/20 transition">
