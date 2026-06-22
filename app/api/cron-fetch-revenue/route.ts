@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
   let browser;
   try {
-    browser = await playwright.chromium.launch({ headless: true });
+    browser = await playwright.chromium.launch({ headless: false });
     const page = await browser.newPage();
 
     // 1. Login bei Supercreator
