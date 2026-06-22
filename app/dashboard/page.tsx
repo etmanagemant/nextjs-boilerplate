@@ -9,8 +9,11 @@ export default function DashboardPage() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   
-  const [gesamtUmsatzAgentur, setGesamtUmsatzAgentur] = useState<number>(0);
-  const [eigenerUmsatzChatter, setEigenerUmsatzChatter] = useState<number>(0);
+  // Getrennte Kachel-Zustände
+  const [gesamtBruttoAgentur, setGesamtBruttoAgentur] = useState<number>(0);
+  const [gesamtNettoAgentur, setGesamtNettoAgentur] = useState<number>(0);
+  const [chatterBrutto, setChatterBrutto] = useState<number>(0);
+  const [chatterNetto, setChatterNetto] = useState<number>(0);
   const [userStatsArray, setUserStatsArray] = useState<any[]>([]);
   
   const [unassignedRevenues, setUnassignedRevenues] = useState<any[]>([]);
@@ -37,12 +40,16 @@ export default function DashboardPage() {
       const revenues = revenueRes.data || [];
       const models = modelsRes.data || [];
 
-      const statsPerUser: Record<string, { name: string; email: string; hours: number; revenue: number }> = {};
+      // Speicher-Struktur für getrennte Brutto- und Netto-Werte
+      const statsPerUser: Record<string, { name: string; email: string; hours: number; brutto: number; netto: number }> = {};
 
       profiles.forEach(p => {
-        statsPerUser[p.user_id] = { name: p.full_name || "Mitarbeiter", email: p.email || "", hours: 0, revenue: 0 };
+        if (p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4") {
+          statsPerUser[p.user_id] = { name: p.full_name || "Mitarbeiter", email: p.email || "", hours: 0, brutto: 0, netto: 0 };
+        }
       });
 
+      // Stechuhr Stunden ausrechnen
       assignments.forEach((a: any) => {
         const tatsaechlicheChatterId = a.chatter_id || a.user_id;
         if (tatsaechlicheChatterId && a.started_at && statsPerUser[tatsaechlicheChatterId]) {
@@ -54,26 +61,41 @@ export default function DashboardPage() {
         }
       });
 
-      let eigenerSummenZaehler = 0;
+      let summeBruttoChatter = 0;
+      let summeNettoChatter = 0;
       const unassignedList: any[] = [];
 
       revenues.forEach((r: any) => {
         const zielId = r.user_id || r.chatter_id;
         
+        // Freie unzugeordnete Umsätze für die Admin-Box herausfiltern
         if (zielId === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" && adminCheck) {
           const modelName = models.find(m => m.id === r.model_id)?.name || "Unbekanntes Model";
           unassignedList.push({ ...r, modelName });
         }
 
-        if (zielId && statsPerUser[zielId]) { statsPerUser[zielId].revenue += Number(r.amount || 0); }
-        if (zielId === user.id) { eigenerSummenZaehler += Number(r.amount || 0); }
+        // Werte aufaddieren (Fängt alte Zeilen ab, falls gross_amount noch NULL ist)
+        const bruttoWert = Number(r.gross_amount || r.amount || 0);
+        const nettoWert = Number(r.amount || 0);
+
+        if (zielId && statsPerUser[zielId]) {
+          statsPerUser[zielId].brutto += bruttoWert;
+          statsPerUser[zielId].netto += nettoWert;
+        }
+        
+        if (zielId === user.id) {
+          summeBruttoChatter += bruttoWert;
+          summeNettoChatter += nettoWert;
+        }
       });
 
-      setGesamtUmsatzAgentur(revenues.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0));
-      setEigenerUmsatzChatter(eigenerSummenZaehler);
+      setGesamtBruttoAgentur(revenues.reduce((sum: number, r: any) => sum + Number(r.gross_amount || r.amount || 0), 0));
+      setGesamtNettoAgentur(revenues.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0));
+      setChatterBrutto(summeBruttoChatter);
+      setChatterNetto(summeNettoChatter);
       setUnassignedRevenues(unassignedList);
       
-      const sortiertesArray = Object.values(statsPerUser).sort((a: any, b: any) => b.revenue - a.revenue);
+      const sortiertesArray = Object.values(statsPerUser).sort((a: any, b: any) => b.netto - a.netto);
       setUserStatsArray(sortiertesArray);
       setLoading(false);
     } catch (e) { console.error(e); }
@@ -85,10 +107,24 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [supabase]);
 
-  async function handleTransferRevenue(revenueId: number) {
+  // 🛡️ REPARIERTER ZUWEISER: Berechnet Netto (80%) und Brutto (100%) separat und schreibt es in die DB
+  async function handleTransferRevenue(revenueId: number, currentAmount: number) {
     const targetChatterId = selectedChatterForTransfer[revenueId];
     if (!targetChatterId) return;
-    const { error } = await supabase.from("chatter_revenues").update({ user_id: targetChatterId }).eq("id", revenueId);
+
+    // Wenn der Eintrag aus einem Brutto-Befehl stammte ($70), machen wir es mathematisch exakt
+    const bruttoBetrag = currentAmount;
+    const nettoBetrag = bruttoBetrag * 0.80;
+
+    const { error } = await supabase
+      .from("chatter_revenues")
+      .update({ 
+        user_id: targetChatterId,
+        amount: nettoBetrag,       // Netto landet in amount
+        gross_amount: bruttoBetrag // Brutto landet in gross_amount
+      })
+      .eq("id", revenueId);
+
     if (!error) { ladeLiveDaten(); }
   }
 
@@ -97,33 +133,33 @@ export default function DashboardPage() {
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
       <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
         <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">ET Performance Dashboard</h1>
-        <p className="text-xs text-slate-400 mt-1">Echtzeit-Umsätze & Agentur-Rangliste</p>
+        <p className="text-xs text-slate-400 mt-1">Echtzeit-Leistungsanalyse (Brutto / Netto Übersicht)</p>
       </div>
 
-      {/* Exklusive Admin Zuweisungsbox */}
+      {/* Admin Zuweisungsbox */}
       {isAdmin && unassignedRevenues.length > 0 && (
         <section className="mb-8 bg-amber-950/20 p-5 rounded-xl border-2 border-[#D4AF37]/40 shadow-xl">
-          <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-3">⚠️ Offene Trinkgelder / Unzugeordnete Einnahmen ({unassignedRevenues.length})</h2>
-          <p className="text-[11px] text-slate-400 mb-4">Hier landen alle Einnahmen, die keinem Chatter zugeordnet werden konnten. Weise sie manuell zu:</p>
+          <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-3">⚠️ Offene Trinkgelder / Zuweisungs-Pool ({unassignedRevenues.length})</h2>
+          <p className="text-[11px] text-slate-400 mb-4">Weise die Einnahmen einem Chatter zu. Das System splittet den Eintrag automatisch in Brutto & Netto auf!</p>
           <div className="space-y-2">
             {unassignedRevenues.map((r) => (
               <div key={r.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#050505] p-3 rounded-lg border border-[#AA7C11]/20 gap-3 text-xs">
                 <div>
-                  <span className="font-bold text-white block">Betrag: ${Number(r.amount).toFixed(2)}</span>
-                  <span className="text-[10px] text-slate-400 font-mono">Model: {r.modelName} | Zeit: {new Date(r.created_at).toLocaleTimeString('de-DE')}</span>
+                  <span className="font-bold text-white block">Eingegangener Tip: ${Number(r.amount).toFixed(2)}</span>
+                  <span className="text-[10px] text-slate-400 block font-mono">Model: {r.modelName}</span>
                 </div>
                 <div className="flex gap-2 items-center w-full sm:w-auto">
                   <select 
                     value={selectedChatterForTransfer[r.id] || ""} 
                     onChange={(e) => setSelectedChatterForTransfer({...selectedChatterForTransfer, [r.id]: e.target.value})}
-                    className="bg-black border border-[#AA7C11]/30 rounded p-1.5 text-xs text-white outline-none flex-1 sm:flex-none cursor-pointer"
+                    className="bg-black border border-[#AA7C11]/30 rounded p-1.5 text-xs text-white outline-none cursor-pointer"
                   >
-                    <option value="">Mitarbeiter wählen...</option>
-                    {userStatsArray.filter(u => u.email !== "etmanagemant@gmail.com" && u.email !== "etmanagement@gmail.com").map(u => (
-                      <option key={u.email} value={userStatsArray.find(x => x.email === u.email)?.user_id}>{u.name}</option>
+                    <option value="">Chatter wählen...</option>
+                    {userStatsArray.map((u: any) => (
+                      <option key={u.email} value={u.user_id}>{u.name}</option>
                     ))}
                   </select>
-                  <button onClick={() => handleTransferRevenue(r.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded text-[11px] uppercase tracking-wide cursor-pointer transition">Zuweisen</button>
+                  <button onClick={() => handleTransferRevenue(r.id, r.amount)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded text-[11px] uppercase tracking-wide cursor-pointer transition">Zuweisen</button>
                 </div>
               </div>
             ))}
@@ -131,32 +167,34 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* Kacheln */}
+      {/* Die Umsatz-Kacheln */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center">
           {isAdmin ? (
             <>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Live Gesamtumsatz Agentur (Admin-Sicht)</div>
-              <div className="text-4xl font-black text-[#D4AF37] mt-2 font-mono">${gesamtUmsatzAgentur.toFixed(2)}</div>
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Live Agentur-Umsatz (Admin)</div>
+              <div className="text-3xl font-black text-[#D4AF37] mt-2 font-mono">${gesamtBruttoAgentur.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Brutto</span></div>
+              <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">${gesamtNettoAgentur.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Netto (80%)</span></div>
             </>
           ) : (
             <>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dein generierter Live-Umsatz</div>
-              <div className="text-4xl font-black text-emerald-400 mt-2 font-mono">${eigenerUmsatzChatter.toFixed(2)}</div>
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Deine Umsatz-Leistung</div>
+              <div className="text-3xl font-black text-[#D4AF37] mt-2 font-mono">${chatterBrutto.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Brutto</span></div>
+              <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">${chatterNetto.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Netto (80%)</span></div>
             </>
           )}
         </div>
-        <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Team-Platzierung</div>
+        <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center flex flex-col justify-center items-center">
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Agentur Ranglisten-Platz</div>
           <div className="text-4xl font-black text-[#D4AF37] mt-2 font-mono">
-            🏆 #{userStatsArray.findIndex(u => u.revenue === eigenerUmsatzChatter) + 1} / {userStatsArray.length}
+            🏆 #{userStatsArray.findIndex(u => u.brutto === chatterBrutto) + 1} / {userStatsArray.length}
           </div>
         </div>
       </div>
 
       {/* Rangliste */}
       <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg">
-        <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">Agentur Live-Rangliste</h2>
+        <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">Mitarbeiter Live-Rangliste</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
@@ -164,21 +202,22 @@ export default function DashboardPage() {
                 <th className="p-3 w-12">Rang</th>
                 <th className="p-3">Mitarbeiter</th>
                 <th className="p-3">Arbeitszeit</th>
-                <th className="p-3">Umsatz Leistung</th>
-                <th className="p-3 text-emerald-400">Ø / Stunde</th>
+                <th className="p-3 text-amber-200">Umsatz Brutto</th>
+                <th className="p-3 text-emerald-400">Umsatz Netto</th>
+                <th className="p-3 text-slate-400">Ø Netto / h</th>
               </tr>
             </thead>
             <tbody>
               {userStatsArray.map((user, idx) => {
-                const usdPerHr = user.hours > 0 ? user.revenue / user.hours : 0;
-                const istEigenerRow = user.revenue === eigenerUmsatzChatter && eigenerUmsatzChatter > 0 && !isAdmin;
+                const usdPerHr = user.hours > 0 ? user.netto / user.hours : 0;
                 return (
-                  <tr key={idx} className={`border-b border-[#AA7C11]/5 transition ${istEigenerRow ? "bg-[#AA7C11]/20 font-bold text-white" : "hover:bg-black/20"}`}>
+                  <tr key={idx} className="border-b border-[#AA7C11]/5 hover:bg-black/20 transition">
                     <td className="p-3 font-mono font-black text-[#D4AF37]">#{idx + 1}</td>
-                    <td className="p-3 text-white tracking-wide">{user.name}</td>
+                    <td className="p-3 font-semibold text-white tracking-wide">{user.name}</td>
                     <td className="p-3 font-mono text-slate-400">{user.hours.toFixed(2)} h</td>
-                    <td className="p-3 font-mono text-slate-200">${user.revenue.toFixed(2)}</td>
-                    <td className="p-3 font-mono text-emerald-400">${usdPerHr.toFixed(2)}/h</td>
+                    <td className="p-3 font-mono text-amber-200/80">${user.brutto.toFixed(2)}</td>
+                    <td className="p-3 font-mono font-bold text-emerald-400">${user.netto.toFixed(2)}</td>
+                    <td className="p-3 font-mono text-slate-300">${usdPerHr.toFixed(2)}/h</td>
                   </tr>
                 );
               })}
