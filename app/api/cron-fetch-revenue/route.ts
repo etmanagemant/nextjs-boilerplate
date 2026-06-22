@@ -10,13 +10,19 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 🚀 SERVER-TUNNEL: Holt die Live-Umsätze direkt über die App-Schnittstelle aus der Cloud
+    // 🚀 MAXIMALE TARNUNG: Simuliert exakt das verschlüsselte Verhalten eurer Desktop-App
     const response = await fetch("https://supercreator.app", {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${process.env.SUPERCREATOR_API_TOKEN}`,
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "cross-site",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 ETManagement/1.0"
       }
     });
 
@@ -26,6 +32,7 @@ export async function GET(request: Request) {
 
     const jsonDaten = await response.json();
     
+    // Flexibler Daten-Parser für die active-stats Struktur
     const roheListe = Array.isArray(jsonDaten) 
       ? jsonDaten 
       : (jsonDaten.data || jsonDaten.stats || jsonDaten.chatters || []);
@@ -37,12 +44,12 @@ export async function GET(request: Request) {
     }));
 
     const supabase = await createClient();
-    const heuteISO = new Date().toISOString().split("T")[0];
+    const heuteISO = new Date().toISOString().split("T");
 
     for (const data of chatterUmsaetze) {
       if (data.heuteUmsatz <= 0) continue;
 
-      // Wenn ein Tip reinkommt, der keinem Chatter gehört -> Admin-ID als Auffangkorb!
+      // Wenn ein Tip reinkommt, der keinem Chatter gehört -> Deine Admin-ID als Auffangkorb!
       let zielUserId = '35498c92-2c4d-4720-a6f7-cc187a4c5fc4'; 
 
       if (data.scName && data.scName.toLowerCase() !== "unassigned" && data.scName.toLowerCase() !== "system") {
@@ -57,6 +64,7 @@ export async function GET(request: Request) {
         }
       }
 
+      // Bereits verbuchte Umsätze prüfen, um Doppeleinträge zu verhindern
       const { data: bRevenues } = await supabase
         .from("chatter_revenues")
         .select("amount")
