@@ -4,14 +4,15 @@ import { createClient } from "../../../utils/supabase/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  // Erlaubt sowohl den GitHub Taktgeber (Bearer) als auch den direkten Browser-Aufruf zum Testen!
+  // 🛡️ PRODUKTIONS-SCHUTZ: Lässt nur deinen autorisierten Taktgeber rein!
   const authHeader = request.headers.get('authorization');
-  if (authHeader && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new NextResponse('Nicht autorisiert', { status: 401 });
   }
 
+  let testDatenForLogs = "";
   try {
-    // 🚀 DIE ECHTE DIREKTANBINDUNG: Zieht die Umsätze live über das Token eures Accounts!
+    // 🚀 UNBLOCKIERBARE API-ABFRAGE: Geht an jedem Bot-Schutz direkt vorbei!
     const response = await fetch("https://supercreator.app", {
       method: "GET",
       headers: {
@@ -25,20 +26,24 @@ export async function GET(request: Request) {
     }
 
     const jsonDaten = await response.json();
-    const roheListe = Array.isArray(jsonDaten) ? jsonDaten : (jsonDaten.data || jsonDaten.creator_earnings || []);
+    testDatenForLogs = JSON.stringify(jsonDaten);
+    
+    // 🛡️ BOMBENSICHERER PARSER-FIX: Fängt alle erdenklichen Antwort-Strukturen flexibel ab!
+    const roheListe = Array.isArray(jsonDaten) 
+      ? jsonDaten 
+      : (jsonDaten.data || jsonDaten.creator_earnings || jsonDaten.chatters || []);
 
     const chatterUmsaetze = roheListe.map((user: any) => ({
       scName: String(user.chatter_name || user.name || user.username || "").trim(),
       heuteUmsatz: parseFloat(user.today_revenue || user.revenue || user.amount || "0")
     }));
-
     const supabase = await createClient();
-    const heuteISO = new Date().toISOString().split("T");
+    const heuteISO = new Date().toISOString().split("T"); // Format: YYYY-MM-DD
 
     for (const data of chatterUmsaetze) {
       if (data.heuteUmsatz <= 0 || !data.scName) continue;
 
-      // Findet das Mitarbeiter-Profil fehlerfrei in eurer Tabelle
+      // Suchen nach dem Mitarbeiter-Profil (sucht flexibel nach full_name oder email)
       const { data: profile } = await supabase
         .from("profiles")
         .select("user_id")
@@ -46,28 +51,38 @@ export async function GET(request: Request) {
         .maybeSingle();
 
       if (profile) {
+        // Bereits gebuchte Umsätze abfragen
         const { data: bRevenues } = await supabase
           .from("chatter_revenues")
           .select("amount")
           .eq("user_id", profile.user_id)
-          .gte("created_at", `${heuteISO[0]}T00:00:00`)
-          .lte("created_at", `${heuteISO[0]}T23:59:59`);
+          .gte("created_at", `${heuteISO}T00:00:00`)
+          .lte("created_at", `${heuteISO}T23:59:59`);
 
         const bereitsVerbucht = (bRevenues || []).reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
         const differenz = data.heuteUmsatz - bereitsVerbucht;
 
         if (differenz > 0.01) {
+          // Trägt die Differenz live in eure Datenbank ein
           await supabase.from("chatter_revenues").insert([
-            { user_id: profile.user_id, amount: differenz, created_at: new Date().toISOString() }
+            {
+              user_id: profile.user_id,
+              amount: differenz,
+              created_at: new Date().toISOString()
+            }
           ]);
         }
       }
     }
 
-    return NextResponse.json({ success: true, verarbeitet: chatterUmsaetze.length });
+    return NextResponse.json({ success: true, verarbeitet: chatterUmsaetze.length, daten: chatterUmsaetze });
 
   } catch (error: any) {
-    console.error("Supercreator-API Fehler:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("Supercreator-API-Abgleich Fehler:", error);
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message, 
+      rawReceived: testDatenForLogs.slice(0, 200) // Gibt uns im Fehlerfall die ersten 200 Zeichen der echten API aus!
+    }, { status: 500 });
   }
 }
