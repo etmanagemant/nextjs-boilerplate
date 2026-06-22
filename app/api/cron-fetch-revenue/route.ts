@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-// 🛡️ DEFINITIVER REINER PFAD-FIX: Genau 3 Ebenen nach oben, um utils/supabase/server fehlerfrei zu treffen!
 import { createClient } from "../../../utils/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +11,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 🚀 UNBLOCKIERBARE TOKEN-ABFRAGE: Geht an jedem Bot-Schutz und 2FA direkt vorbei!
+    // 🚀 DIREKTE API-ABFRAGE: Geht an jedem Bot-Schutz direkt vorbei!
     const response = await fetch("https://supercreator.app", {
       method: "GET",
       headers: {
@@ -27,10 +26,14 @@ export async function GET(request: Request) {
 
     const jsonDaten = await response.json();
     
-    // Liest die fertigen Einnahmen der Chatter aus der offiziellen Schnittstelle aus
-    const chatterUmsaetze = (jsonDaten.data || []).map((user: any) => ({
-      scName: String(user.chatter_name || "").trim(),
-      heuteUmsatz: parseFloat(user.today_revenue || "0")
+    // 🛡️ BOMBENSICHERER DATEN-FIX: Fängt alle Antwort-Strukturen von Supercreator flexibel ab!
+    const roheListe = Array.isArray(jsonDaten) 
+      ? jsonDaten 
+      : (jsonDaten.data || jsonDaten.creator_earnings || jsonDaten.chatters || []);
+
+    const chatterUmsaetze = roheListe.map((user: any) => ({
+      scName: String(user.chatter_name || user.name || user.username || "").trim(),
+      heuteUmsatz: parseFloat(user.today_revenue || user.revenue || user.amount || "0")
     }));
     const supabase = await createClient();
     const heuteISO = new Date().toISOString().split("T"); // Format: YYYY-MM-DD
