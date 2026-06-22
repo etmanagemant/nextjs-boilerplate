@@ -9,7 +9,6 @@ export default function DashboardPage() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   
-  // Getrennte Kachel-Zustände
   const [gesamtBruttoAgentur, setGesamtBruttoAgentur] = useState<number>(0);
   const [gesamtNettoAgentur, setGesamtNettoAgentur] = useState<number>(0);
   const [chatterBrutto, setChatterBrutto] = useState<number>(0);
@@ -40,16 +39,15 @@ export default function DashboardPage() {
       const revenues = revenueRes.data || [];
       const models = modelsRes.data || [];
 
-      // Speicher-Struktur für getrennte Brutto- und Netto-Werte
-      const statsPerUser: Record<string, { name: string; email: string; hours: number; brutto: number; netto: number }> = {};
+      const statsPerUser: Record<string, { user_id: string; name: string; email: string; hours: number; brutto: number; netto: number }> = {};
 
       profiles.forEach(p => {
         if (p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4") {
-          statsPerUser[p.user_id] = { name: p.full_name || "Mitarbeiter", email: p.email || "", hours: 0, brutto: 0, netto: 0 };
+          // 🛡️ REPARATUR-ZEILE: Wir brennen die user_id fest in das Mitarbeiter-Objekt ein!
+          statsPerUser[p.user_id] = { user_id: p.user_id, name: p.full_name || "Mitarbeiter", email: p.email || "", hours: 0, brutto: 0, netto: 0 };
         }
       });
 
-      // Stechuhr Stunden ausrechnen
       assignments.forEach((a: any) => {
         const tatsaechlicheChatterId = a.chatter_id || a.user_id;
         if (tatsaechlicheChatterId && a.started_at && statsPerUser[tatsaechlicheChatterId]) {
@@ -68,13 +66,11 @@ export default function DashboardPage() {
       revenues.forEach((r: any) => {
         const zielId = r.user_id || r.chatter_id;
         
-        // Freie unzugeordnete Umsätze für die Admin-Box herausfiltern
         if (zielId === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" && adminCheck) {
           const modelName = models.find(m => m.id === r.model_id)?.name || "Unbekanntes Model";
           unassignedList.push({ ...r, modelName });
         }
 
-        // Werte aufaddieren (Fängt alte Zeilen ab, falls gross_amount noch NULL ist)
         const bruttoWert = Number(r.gross_amount || r.amount || 0);
         const nettoWert = Number(r.amount || 0);
 
@@ -107,12 +103,10 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [supabase]);
 
-  // 🛡️ REPARIERTER ZUWEISER: Berechnet Netto (80%) und Brutto (100%) separat und schreibt es in die DB
   async function handleTransferRevenue(revenueId: number, currentAmount: number) {
     const targetChatterId = selectedChatterForTransfer[revenueId];
     if (!targetChatterId) return;
 
-    // Wenn der Eintrag aus einem Brutto-Befehl stammte ($70), machen wir es mathematisch exakt
     const bruttoBetrag = currentAmount;
     const nettoBetrag = bruttoBetrag * 0.80;
 
@@ -120,8 +114,8 @@ export default function DashboardPage() {
       .from("chatter_revenues")
       .update({ 
         user_id: targetChatterId,
-        amount: nettoBetrag,       // Netto landet in amount
-        gross_amount: bruttoBetrag // Brutto landet in gross_amount
+        amount: nettoBetrag,       
+        gross_amount: bruttoBetrag 
       })
       .eq("id", revenueId);
 
@@ -133,14 +127,14 @@ export default function DashboardPage() {
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
       <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
         <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">ET Performance Dashboard</h1>
-        <p className="text-xs text-slate-400 mt-1">Echtzeit-Leistungsanalyse (Brutto / Netto Übersicht)</p>
+        <p className="text-xs text-slate-400 mt-1">Echtzeit-Umsätze & Agentur-Rangliste</p>
       </div>
 
-      {/* Admin Zuweisungsbox */}
+      {/* Die funktionierende goldene Admin-Zuweisungsbox */}
       {isAdmin && unassignedRevenues.length > 0 && (
         <section className="mb-8 bg-amber-950/20 p-5 rounded-xl border-2 border-[#D4AF37]/40 shadow-xl">
           <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-3">⚠️ Offene Trinkgelder / Zuweisungs-Pool ({unassignedRevenues.length})</h2>
-          <p className="text-[11px] text-slate-400 mb-4">Weise die Einnahmen einem Chatter zu. Das System splittet den Eintrag automatisch in Brutto & Netto auf!</p>
+          <p className="text-[11px] text-slate-400 mb-4">Weise die Einnahmen zu. Das System splittet den Eintrag automatisch in Brutto & Netto auf!</p>
           <div className="space-y-2">
             {unassignedRevenues.map((r) => (
               <div key={r.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#050505] p-3 rounded-lg border border-[#AA7C11]/20 gap-3 text-xs">
@@ -167,7 +161,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* Die Umsatz-Kacheln */}
+      {/* Kacheln */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center">
           {isAdmin ? (
