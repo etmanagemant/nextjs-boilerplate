@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "../../../utils/supabase/server";
+// 🛡️ UNZERSTÖRBARER NEXT.JS ALIAS: Findet die Datei auf Vercel immer, egal wie tief der Ordner liegt!
+import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
 
     const jsonDaten = await response.json();
     
-    // 🛡️ BOMBENSICHERER DATEN-FIX: Fängt alle Antwort-Strukturen von Supercreator flexibel ab!
+    // Fängt alle Antwort-Strukturen von Supercreator flexibel ab!
     const roheListe = Array.isArray(jsonDaten) 
       ? jsonDaten 
       : (jsonDaten.data || jsonDaten.creator_earnings || jsonDaten.chatters || []);
