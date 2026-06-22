@@ -16,7 +16,7 @@ export default function AbrechnungPage() {
   const [cryptoWallet, setCryptoWallet] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
 
-  // 1. Stammdaten werden beim ersten Laden unblockierbar geladen
+  // 🛡️ EINFIER-SCHUTZ: Fängt null-Werte ab, damit die Felder NIEMALS blockieren!
   useEffect(() => {
     async function ladeEinmaligeStammdaten() {
       try {
@@ -39,9 +39,7 @@ export default function AbrechnungPage() {
     ladeEinmaligeStammdaten();
   }, [supabase]);
 
-  // 2. Die unzerstörbare Live-Abfrage für die Tabelle
   async function ladeAbrechnungsZentrale() {
-    if (!currentUserId) return;
     try {
       const [profilesRes, revenueRes, shiftsRes] = await Promise.all([
         supabase.from("profiles").select("*"),
@@ -85,16 +83,19 @@ export default function AbrechnungPage() {
           brutto: brutto,
           netto: netto,
           rate: provisionsSatz,
-          auszahlung: netto * (provisionsSatz / 100)
+          auszahlung: netto * (provisionsSatz / 100),
+          chatter_address: p.chatter_address || "",
+          chatter_iban: p.chatter_iban || "",
+          chatter_crypto_network: p.chatter_crypto_network || "",
+          chatter_crypto_wallet: p.chatter_crypto_wallet || ""
         };
       });
 
       setAbrechnungsDaten(berechneteListe);
-      setLoading(false); // Schaltet das Laden erst aus, wenn Daten real existieren!
+      setLoading(false);
     } catch (e) { console.error(e); }
   }
 
-  // Zündet den 5-Sekunden-Timer fehlerfrei, sobald die ID bereitsteht
   useEffect(() => {
     if (currentUserId) {
       ladeAbrechnungsZentrale();
@@ -107,10 +108,10 @@ export default function AbrechnungPage() {
     const { error } = await supabase
       .from("profiles")
       .update({
-        chatter_address: address,
-        chatter_iban: iban,
-        chatter_crypto_network: cryptoNetwork,
-        chatter_crypto_wallet: cryptoWallet
+        chatter_address: address || "",
+        chatter_iban: iban || "",
+        chatter_crypto_network: cryptoNetwork || "",
+        chatter_crypto_wallet: cryptoWallet || ""
       })
       .eq("user_id", currentUserId);
 
@@ -127,8 +128,15 @@ export default function AbrechnungPage() {
     if (!printWindow) return;
 
     const gedruckteAdresse = address.trim() ? address.replace(/\n/g, "<br>") : "<em>[Anschrift manuell eintragen]</em>";
-    const gedruckteIban = iban.trim() ? iban : "<em>[IBAN manuell eintragen]</em>";
-    const gedruckteWallet = cryptoWallet.trim() ? `${cryptoWallet} ${cryptoNetwork ? `(${cryptoNetwork})` : ""}` : "<em>[Wallet manuell eintragen]</em>";
+    
+    // 🧠 DYNAMISCHE STRUKTUR-ANPASSUNG: Erstellt den Kasten nur, wenn Daten real existieren!
+    let auszahlungsHTML = "";
+    if (!iban.trim() && !cryptoWallet.trim()) {
+      auszahlungsHTML = `<strong>Bankverbindung / Wallet:</strong> ____________________________________ <br><span style="font-size:10px; color:#777;">(Manuell vom Aussteller auszufüllen)</span>`;
+    } else {
+      if (iban.trim()) auszahlungsHTML += `<strong>Bankverbindung (IBAN):</strong> ${iban}<br>`;
+      if (cryptoWallet.trim()) auszahlungsHTML += `<strong>Krypto-Auszahlung:</strong> Wallet: ${cryptoWallet} ${cryptoNetwork ? `(${cryptoNetwork})` : ""}`;
+    }
 
     printWindow.document.write(`
       <html>
@@ -194,8 +202,7 @@ export default function AbrechnungPage() {
           </div>
           <div class="payout-details">
             <div class="section-title" style="border:0; margin-bottom:5px;">Hinterlegte Auszahlungsdaten</div>
-            <strong>Bankverbindung (IBAN):</strong> ${gedruckteIban}<br>
-            <strong>Krypto-Auszahlung (Wallet):</strong> ${gedruckteWallet}
+            ${auszahlungsHTML}
           </div>
           <div class="footer">Diese Gutschrift-Abrechnung wurde vollautomatisch erstellt und ist digital gültig.</div>
           <script>window.print();</script>
@@ -213,28 +220,27 @@ export default function AbrechnungPage() {
         <p className="text-xs text-slate-400 mt-1">Verwalte deine Auszahlungsdaten und drucke deine verifizierten Abrechnungsbelege</p>
       </div>
 
-      {/* Unendlich änderbare Stammdaten */}
       {!isAdmin && (
         <section className="mb-8 bg-black/50 p-5 rounded-xl border border-[#AA7C11]/20 shadow-xl">
           <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-4">📝 Deine Rechnungsanschrift & Auszahlungsdaten hinterlegen (Optional)</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div>
               <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Vollständige Anschrift (Straße, PLZ, Ort)</label>
-              <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Musterstraße 1, 12345 Musterstadt (Falls leer, manuelles Ausfüllen auf PDF)" className="w-full h-20 bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
+              <textarea value={address} onChange={(e) => setAddress(e.target.value || "")} placeholder="Musterstraße 1, 12345 Musterstadt (Falls leer, manuelles Ausfüllen auf PDF)" className="w-full h-20 bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
             </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Bankverbindung (IBAN)</label>
-                <input type="text" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="DE12 3456 7890 ... (Optional)" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
+                <input type="text" value={iban} onChange={(e) => setIban(e.target.value || "")} placeholder="DE12 3456 7890 ... (Optional)" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-1">
                   <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Krypto Netz</label>
-                  <input type="text" value={cryptoNetwork} onChange={(e) => setCryptoNetwork(e.target.value)} placeholder="USDT TRC20" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
+                  <input type="text" value={cryptoNetwork} onChange={(e) => setCryptoNetwork(e.target.value || "")} placeholder="USDT TRC20" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Crypto Wallet Adresse</label>
-                  <input type="text" value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value)} placeholder="T9xZ... (Optional)" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
+                  <input type="text" value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value || "")} placeholder="T9xZ... (Optional)" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
                 </div>
               </div>
             </div>
@@ -246,42 +252,34 @@ export default function AbrechnungPage() {
         </section>
       )}
 
-      {/* 🟢 DIE REPARIERTE COMPONENTEN TABELLE IST HIER WIEDER VOLLSTÄNDIG LIVE */}
-      {loading ? (
-        <div className="text-center p-8 font-bold text-slate-500 font-mono animate-pulse">SYNCHRONISIERE AGENTUR PERFORMANCE-DATEN...</div>
-      ) : (
-        <div className="space-y-4">
-          {abrechnungsDaten.map((daten, idx) => (
-            <div key={idx} className="bg-black/40 p-5 rounded-xl border border-[#AA7C11]/10 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition hover:border-[#AA7C11]/20">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-white tracking-wide">{daten.name}</h2>
-                  <span className="bg-[#AA7C11]/10 border border-[#AA7C11]/30 text-[#D4AF37] text-[10px] font-mono px-2 py-0.5 rounded">
-                    {daten.rate}% Provision
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-3 text-xs">
-                  <div className="text-slate-400">Schichtzeit: <span className="text-white font-mono">{daten.hours.toFixed(2)} h</span></div>
-                  <div className="text-slate-400">Umsatz Brutto: <span className="text-amber-200 font-mono">${daten.brutto.toFixed(2)}</span></div>
-                  <div className="text-slate-400">Netto-Eingang: <span className="text-emerald-400 font-mono">${daten.netto.toFixed(2)}</span></div>
-                </div>
+      <div className="space-y-4">
+        {abrechnungsDaten.map((daten, idx) => (
+          <div key={idx} className="bg-black/40 p-5 rounded-xl border border-[#AA7C11]/10 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition hover:border-[#AA7C11]/20">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white tracking-wide">{daten.name}</h2>
+                <span className="bg-[#AA7C11]/10 border border-[#AA7C11]/30 text-[#D4AF37] text-[10px] font-mono px-2 py-0.5 rounded">
+                  {daten.rate}% Provision
+                </span>
               </div>
-              <div className="flex items-center justify-between w-full md:w-auto md:justify-end gap-4 border-t border-[#AA7C11]/5 pt-3 md:border-t-0 md:pt-0">
-                <div className="text-right">
-                  <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Auszahlungsbetrag:</div>
-                  <div className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#F3E5AB] via-[#D4AF37] to-[#AA7C11] font-mono">
-                    ${daten.auszahlung.toFixed(2)}
-                  </div>
-                </div>
-                <button onClick={() => druckeRechnung(daten)} className="bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black text-xs font-black px-4 py-2.5 rounded-lg uppercase tracking-wider shadow-md cursor-pointer transition">🖨️ PDF Rechnung</button>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-3 text-xs">
+                <div className="text-slate-400">Schichtzeit: <span className="text-white font-mono">{daten.hours.toFixed(2)} h</span></div>
+                <div className="text-slate-400">Umsatz Brutto: <span className="text-amber-200 font-mono">${daten.brutto.toFixed(2)}</span></div>
+                <div className="text-slate-400">Netto-Eingang: <span className="text-emerald-400 font-mono">${daten.netto.toFixed(2)}</span></div>
               </div>
             </div>
-          ))}
-          {abrechnungsDaten.length === 0 && (
-            <div className="text-center p-8 text-xs text-slate-500 font-mono">Keine aktiven Leistungsdaten erfasst.</div>
-          )}
-        </div>
-      )}
+            <div className="flex items-center justify-between w-full md:w-auto md:justify-end gap-4 border-t border-[#AA7C11]/5 pt-3 md:border-t-0 md:pt-0">
+              <div className="text-right">
+                <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Auszahlungsbetrag:</div>
+                <div className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#F3E5AB] via-[#D4AF37] to-[#AA7C11] font-mono">
+                  ${daten.auszahlung.toFixed(2)}
+                </div>
+              </div>
+              <button onClick={() => druckeRechnung(daten)} className="bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black text-xs font-black px-4 py-2.5 rounded-lg uppercase tracking-wider shadow-md cursor-pointer transition">🖨️ PDF Rechnung</button>
+            </div>
+          </div>
+        ))}
+      </div>
     </main>
   );
 }
