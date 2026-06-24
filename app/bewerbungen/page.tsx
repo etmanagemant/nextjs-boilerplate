@@ -3,8 +3,8 @@ import path from 'path'
 
 export default async function Bewerbungen() {
   const dir = path.join(process.cwd(), 'funnel-submissions')
-  let files = []
-  try { files = fs.readdirSync(dir) } catch (e) { files = [] }
+  let files: string[] = []
+  try { files = fs.readdirSync(dir) as string[] } catch (e) { files = [] }
   const submissions = files.map(f => {
     const raw = fs.readFileSync(path.join(dir,f),'utf8')
     const obj = JSON.parse(raw)
