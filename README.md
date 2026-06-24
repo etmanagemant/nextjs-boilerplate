@@ -34,3 +34,30 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+Webhook & funnel integration
+
+If you run a separate funnel on its own domain and want submissions forwarded into this webapp, set the following env vars in Vercel for this project:
+
+- `MAIN_APP_INCOMING_SECRET` — secret string the funnel will include in `x-funnel-secret` header.
+
+The funnel should POST submissions to: `https://your-main-app.example.com/api/funnel-submissions`.
+
+Admin access
+
+The header already shows admin-only links when a user has the `admin` role. The new admin page `/bewerbungen` shows incoming funnel submissions stored on disk under `funnel-submissions/`.
+
+Security note: For production, store submissions in a database instead of filesystem and protect the admin routes using your auth provider.
+
+Quick deploy via Vercel (automated)
+
+1. In your Vercel project for the main webapp (`etmanagement`), add environment variable `MAIN_APP_INCOMING_SECRET` with the same secret you set for the funnel.
+2. Obtain a `VERCEL_TOKEN` from your Vercel account and add it to GitHub Secrets so the repository Actions workflow can deploy automatically.
+
+Local deploy using vercel CLI (PowerShell):
+```powershell
+$env:VERCEL_TOKEN = "<your-token>"
+.
+scripts\publish-vercel.ps1
+```
+
