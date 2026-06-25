@@ -26,16 +26,16 @@ export async function POST(req: Request) {
               email: body.email,
               birthday: body.birthday,
               phone: body.phone,
-              contactMethod: body.contactMethod,
+              'contactMethod': body.contactMethod,
               category: body.category,
               social: body.social,
-              showFace: body.showFace,
+              'showFace': body.showFace,
               message: body.message,
               experience: body.experience,
               start: body.start,
               variant: body.variant,
               utm: body.utm,
-              receivedAt: new Date().toISOString(),
+              'receivedAt': new Date().toISOString(),
             }
           ])
 
