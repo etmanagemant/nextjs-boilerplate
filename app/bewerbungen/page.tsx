@@ -1,4 +1,36 @@
+'use server'
 import { createClient } from '@supabase/supabase-js'
+import SubmissionsTable from './submissions-table'
+
+export async function deleteSubmission(id: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  
+  if (!supabaseUrl || !supabaseAnonKey) return { error: 'Config missing' }
+  
+  const supabase = createClient(supabaseUrl, supabaseAnonKey)
+  const { error } = await supabase
+    .from('funnel_submissions')
+    .delete()
+    .eq('id', id)
+  
+  return { error }
+}
+
+export async function updateSubmissionStatus(id: string, status: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  
+  if (!supabaseUrl || !supabaseAnonKey) return { error: 'Config missing' }
+  
+  const supabase = createClient(supabaseUrl, supabaseAnonKey)
+  const { error } = await supabase
+    .from('funnel_submissions')
+    .update({ status })
+    .eq('id', id)
+  
+  return { error }
+}
 
 export default async function Bewerbungen() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -25,20 +57,12 @@ export default async function Bewerbungen() {
   }
 
   return (
-    <main style={{padding:24}}>
-      <h1 style={{marginTop:0}}>Bewerbungen ({submissions.length})</h1>
+    <main style={{padding:24,maxWidth:'1200px',margin:'0 auto'}}>
+      <h1 style={{marginTop:0,marginBottom:24}}>Bewerbungen ({submissions.length})</h1>
       {submissions.length === 0 ? (
         <p style={{color:'#888'}}>Keine Bewerbungen gefunden</p>
       ) : (
-        <ul>
-          {submissions.map((s, idx) => (
-            <li key={s.id || idx} style={{padding:12,borderBottom:'1px solid #222'}}>
-              <div style={{fontWeight:700}}>{s.name} <span style={{fontWeight:400}}>&lt;{s.email || 'keine'}&gt;</span></div>
-              <div style={{fontSize:13,color:'#888'}}>{s.variant || ''} — {new Date(s.receivedAt).toLocaleString('de-DE')}</div>
-              <pre style={{whiteSpace:'pre-wrap',marginTop:8,fontSize:12}}>{JSON.stringify(s, null, 2)}</pre>
-            </li>
-          ))}
-        </ul>
+        <SubmissionsTable submissions={submissions} />
       )}
     </main>
   )
