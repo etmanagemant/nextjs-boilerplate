@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
-import fs from 'fs'
-import path from 'path'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 export async function POST(req: Request) {
   try {
@@ -12,15 +14,41 @@ export async function POST(req: Request) {
 
     const body = await req.json()
     
-    // Try to save to filesystem (works in development, fails on Vercel with read-only FS)
-    try {
-      const outDir = path.join(process.cwd(), 'funnel-submissions')
-      fs.mkdirSync(outDir, { recursive: true })
-      const filename = path.join(outDir, `${Date.now()}-${(body.email||'anon').replace(/[^a-z0-9]/gi,'_')}.json`)
-      fs.writeFileSync(filename, JSON.stringify({ receivedAt: Date.now(), ...body }, null, 2))
-    } catch (fsErr) {
-      // Silently fail on Vercel (read-only filesystem)
-      console.warn('Local filesystem save failed:', fsErr instanceof Error ? fsErr.message : String(fsErr))
+    // Save to Supabase
+    if (supabaseUrl && supabaseAnonKey) {
+      try {
+        const supabase = createClient(supabaseUrl, supabaseAnonKey)
+        const { data, error } = await supabase
+          .from('funnel_submissions')
+          .insert([
+            {
+              name: body.name,
+              email: body.email,
+              birthday: body.birthday,
+              phone: body.phone,
+              contactMethod: body.contactMethod,
+              category: body.category,
+              social: body.social,
+              showFace: body.showFace,
+              message: body.message,
+              experience: body.experience,
+              start: body.start,
+              variant: body.variant,
+              utm: body.utm,
+              receivedAt: new Date().toISOString(),
+            }
+          ])
+
+        if (error) {
+          console.error('Supabase insert error:', error)
+        } else {
+          console.log('Submission saved to Supabase:', data)
+        }
+      } catch (supabaseErr) {
+        console.error('Supabase save failed:', supabaseErr instanceof Error ? supabaseErr.message : String(supabaseErr))
+      }
+    } else {
+      console.warn('Supabase credentials not configured')
     }
     
     return NextResponse.json({ ok: true })
