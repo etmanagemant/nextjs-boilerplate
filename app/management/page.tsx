@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel } from "./actions";
+import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel, deleteMitarbeiter } from "./actions";
 import { revalidatePath } from "next/cache";
 // 🟢 IMPORTE EXAKT BEIBEHALTEN
 import CreateShiftForm from "@/components/layout/CreateShiftForm"; 
@@ -92,6 +92,7 @@ export default async function ManagementPage() {
                 <th className="p-3">E-Mail</th>
                 <th className="p-3 w-[140px] text-amber-300">Provision %</th>
                 <th className="p-3 w-[150px]">Rolle ändern</th>
+                <th className="p-3 w-[80px] text-center">Löschen</th>
               </tr>
             </thead>
             <tbody>
@@ -121,6 +122,16 @@ export default async function ManagementPage() {
 
                   <td className="p-3">
                     <RoleSelect userId={p.user_id} defaultRole={p.role} onUpdateAction={updateMitarbeiterRolle} />
+                  </td>
+                  <td className="p-3 text-center">
+                    {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
+                      <form action={deleteMitarbeiter} onSubmit={(e) => { if (!confirm("Wirklich löschen?")) e.preventDefault(); }} className="inline">
+                        <input type="hidden" name="user_id" value={p.user_id} />
+                        <button type="submit" className="text-red-400 hover:text-red-300 text-sm font-bold transition cursor-pointer">Löschen</button>
+                      </form>
+                    ) : (
+                      <span className="text-xs text-slate-500">-</span>
+                    )}
                   </td>
                 </tr>
               ))}

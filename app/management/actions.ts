@@ -51,6 +51,15 @@ export async function updateModelName(formData: FormData) {
     revalidatePath("/management");
   }
 }
+
+export async function deleteMitarbeiter(formData: FormData) {
+  const userId = formData.get("user_id");
+  if (userId) {
+    const supabaseServer = await createClient();
+    await supabaseServer.from("profiles").delete().eq("user_id", userId);
+    revalidatePath("/management");
+  }
+}
 // 🟢 CRASH-PROOF VERBINDUNG: Liefert jetzt eine reine, ungestörte JSON-Antwort an das Formular
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 
