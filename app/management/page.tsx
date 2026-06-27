@@ -125,7 +125,7 @@ export default async function ManagementPage() {
                   </td>
                   <td className="p-3 text-center">
                     {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
-                      <form action={deleteMitarbeiter} onSubmit={(e) => { if (!confirm("Wirklich löschen?")) e.preventDefault(); }} className="inline">
+                      <form action={deleteMitarbeiter}>
                         <input type="hidden" name="user_id" value={p.user_id} />
                         <button type="submit" className="text-red-400 hover:text-red-300 text-sm font-bold transition cursor-pointer">Löschen</button>
                       </form>
