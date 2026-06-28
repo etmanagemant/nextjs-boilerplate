@@ -54,7 +54,7 @@ export default async function BuchhaltungPage() {
             
             let hrs = 0;
             userShifts.forEach(s => { if (s.started_at && s.ended_at) hrs += (new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / (1000 * 60 * 60); });
-            const rev = userRevenues.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+            const rev = userRevenues.reduce((sum, r) => sum + Number(r.gross_amount || 0), 0);
 
             return (
               <div key={chatter.user_id} className="bg-black/30 border border-[#AA7C11]/20 rounded-xl p-4 flex flex-col justify-between hover:border-[#D4AF37]/40 transition">
