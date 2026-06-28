@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import ContentPlanClient from "@/components/layout/ContentPlanClient";
+import ContentUploader from "@/components/layout/ContentUploader";
 import {
   getModels,
   getContentCommunities,
@@ -57,7 +58,7 @@ export default async function ContentPlanPage({
   return (
     <main className="p-6 max-w-7xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-8 border-b border-[#AA7C11]/20 pb-6 flex-wrap gap-4">
+      <div className="flex justify-between items-center mb-8 border-b border-[#AA7C11]/20 pb-6 flex-wrap gap-4 pt-4">
         <div>
           <h1 className="text-3xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">
             📅 Content-Plan
@@ -103,6 +104,17 @@ export default async function ContentPlanPage({
           )}
         </div>
       </section>
+
+      {/* UPLOAD SECTION */}
+      {selectedModelId && (
+        <ContentUploader
+          modelId={selectedModelId}
+          onUploadSuccess={() => {
+            // Reload page to show new post
+            setTimeout(() => window.location.reload(), 2000);
+          }}
+        />
+      )}
 
       {/* INFO SECTION */}
       {selectedModelId && (
