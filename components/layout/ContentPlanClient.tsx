@@ -175,7 +175,7 @@ export default function ContentPlanClient({
       ...prev,
       communities: prev.communities?.includes(communityId)
         ? (prev.communities?.filter((c) => c !== communityId) as string[])
-        : ([...prev.communities, communityId] as string[]),
+        : ([...(prev.communities || []), communityId] as string[]),
     }));
   };
 
