@@ -43,7 +43,7 @@ ALTER TABLE content_plan_posts ENABLE ROW LEVEL SECURITY;
 
 -- 5. OPTIONAL: Storage Bucket (führe dies über die Supabase UI durch)
 -- 
--- Gehe zu: https://supabase.com/dashboard/project/{YOUR_PROJECT_ID}/storage/buckets
+-- Gehe zu: https://supabase.com/dashboard/project/{qzveuqjjhdqcazhfccjp}/storage/buckets
 -- 
 -- Erstelle einen neuen Bucket mit diesen Einstellungen:
 -- - Name: reddit_content
