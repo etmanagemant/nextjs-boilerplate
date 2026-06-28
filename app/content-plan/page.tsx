@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import ContentPlanClient from "@/components/layout/ContentPlanClient";
-import ContentUploader from "@/components/layout/ContentUploader";
+// import ContentUploader from "@/components/layout/ContentUploader";
 import {
   getModels,
   getContentCommunities,
@@ -106,16 +106,17 @@ export default async function ContentPlanPage({
           </div>
         </section>
 
-        {/* UPLOAD SECTION */}
+        {/* UPLOAD SECTION - DISABLED */}
+        {/* 
         {selectedModelId && (
           <ContentUploader
             modelId={selectedModelId}
             onUploadSuccess={() => {
-              // Reload page to show new post
               setTimeout(() => window.location.reload(), 2000);
             }}
           />
         )}
+        */}
 
         {/* INFO SECTION */}
         {selectedModelId && (
