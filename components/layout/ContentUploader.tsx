@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 interface ContentUploaderProps {
@@ -17,39 +17,42 @@ export default function ContentUploader({
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [supabaseReady, setSupabaseReady] = useState(false);
+  const supabaseRef = useRef<any>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
+  // Initialize Supabase in useEffect - SAFE
   useEffect(() => {
-    if (supabaseUrl && supabaseKey) {
-      setSupabaseReady(true);
-    }
-  }, [supabaseUrl, supabaseKey]);
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseReady) {
+      if (supabaseUrl && supabaseKey) {
+        supabaseRef.current = createClient(supabaseUrl, supabaseKey);
+        setIsInitialized(true);
+      }
+    } catch (err) {
+      console.error("Supabase init error:", err);
+    }
+  }, []);
+
+  if (!isInitialized) {
     return (
       <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 mb-8 shadow-lg">
         <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">
           📸 Bilder hochladen
         </h2>
-        <div className="text-red-400 text-xs text-center py-4">
-          ⚠️ Supabase-Konfiguration fehlt. Bitte überprüfe deine .env.local Datei.
+        <div className="text-yellow-400 text-xs text-center py-4">
+          ⏳ Wird geladen...
         </div>
       </section>
     );
   }
 
-  const supabase = createClient(supabaseUrl!, supabaseKey!);
-
-  // ========================================
-  // HANDLE FILE UPLOAD
-  // ========================================
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     if (!modelId) {
       setErrorMessage("Bitte wähle zuerst ein Model aus!");
+      setTimeout(() => setErrorMessage(null), 3000);
       return;
     }
 
@@ -61,101 +64,67 @@ export default function ContentUploader({
     try {
       const file = files[0];
 
-      // Validate file type
       if (!file.type.startsWith("image/")) {
-        throw new Error("Nur Bilddateien sind erlaubt!");
+        throw new Error("Nur Bilddateien!");
       }
 
-      // Validate file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
-        throw new Error("Datei ist zu groß (max 10MB)!");
+        throw new Error("Datei > 10MB");
       }
 
-      // Create unique filename
       const timestamp = Date.now();
-      const fileExtension = file.name.split(".").pop();
-      const fileName = `${timestamp}-${file.name.replace(/\.[^/.]+$/, "")}.${fileExtension}`;
+      const ext = file.name.split(".").pop();
+      const fileName = `${timestamp}-${Math.random().toString(36).substr(2, 9)}.${ext}`;
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
+      const { error } = await supabaseRef.current.storage
         .from("reddit_content")
-        .upload(fileName, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
+        .upload(fileName, file);
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw error;
 
-      if (!data) {
-        throw new Error("Upload failed - no data returned");
-      }
-
-      setUploadProgress(100);
-
-      // Create post entry in database
-      const { error: dbError } = await supabase
+      const { error: dbError } = await supabaseRef.current
         .from("content_plan_posts")
         .insert([
           {
             model_id: modelId,
             photo_path: fileName,
-            sort_order: new Date().getTime(),
+            sort_order: timestamp,
           },
         ]);
 
-      if (dbError) {
-        // Delete uploaded file if DB insert fails
-        await supabase.storage.from("reddit_content").remove([fileName]);
-        throw new Error(`Datenbankfehler: ${dbError.message}`);
-      }
+      if (dbError) throw dbError;
 
-      setSuccessMessage(
-        `✓ Bild erfolgreich hochgeladen! (${file.name})`
-      );
+      setSuccessMessage("✓ Erfolgreich!");
       setUploadProgress(null);
 
-      // Reset after success
       setTimeout(() => {
         setSuccessMessage(null);
         setIsLoading(false);
         onUploadSuccess();
       }, 2000);
     } catch (error) {
-      const errorMsg =
-        error instanceof Error ? error.message : "Unbekannter Fehler";
-      setErrorMessage(`❌ Fehler: ${errorMsg}`);
+      const msg = error instanceof Error ? error.message : "Fehler";
+      console.error("Upload error:", error);
+      setErrorMessage(`❌ ${msg}`);
       setIsLoading(false);
       setUploadProgress(null);
+      setTimeout(() => setErrorMessage(null), 5000);
     }
   };
 
-  // ========================================
-  // DRAG & DROP
-  // ========================================
   const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setIsDragActive(true);
-    } else if (e.type === "dragleave") {
-      setIsDragActive(false);
-    }
+    setIsDragActive(e.type === "dragenter" || e.type === "dragover");
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
-
     if (e.dataTransfer.files) {
       handleFileUpload(e.dataTransfer.files);
     }
-  };
-
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload(e.target.files);
   };
 
   return (
@@ -164,13 +133,12 @@ export default function ContentUploader({
         📸 Bilder hochladen
       </h2>
 
-      {/* UPLOAD ZONE */}
       <div
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
         onDrop={handleDrop}
-        className={`relative border-2 border-dashed rounded-xl p-8 text-center transition ${
+        className={`relative border-2 border-dashed rounded-xl p-8 text-center transition cursor-pointer ${
           isDragActive
             ? "border-[#D4AF37] bg-[#D4AF37]/10"
             : "border-[#AA7C11]/30 bg-[#050505]/50 hover:border-[#AA7C11]/60"
@@ -179,17 +147,15 @@ export default function ContentUploader({
         <input
           type="file"
           accept="image/*"
-          onChange={handleFileInputChange}
+          onChange={(e) => handleFileUpload(e.target.files)}
           disabled={isLoading}
-          className="absolute inset-0 w-full h-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
         />
 
         {isLoading && uploadProgress !== null ? (
           <div className="space-y-3">
-            <div className="text-[#D4AF37] font-semibold text-sm">
-              Wird hochgeladen...
-            </div>
-            <div className="w-full bg-[#050505] rounded-full h-2 overflow-hidden">
+            <div className="text-[#D4AF37] font-semibold text-sm">⬆️ Lädt...</div>
+            <div className="w-full bg-[#050505] rounded-full h-2">
               <div
                 className="bg-gradient-to-r from-[#D4AF37] to-[#AA7C11] h-full transition-all"
                 style={{ width: `${uploadProgress}%` }}
@@ -198,39 +164,18 @@ export default function ContentUploader({
             <div className="text-xs text-slate-400">{uploadProgress}%</div>
           </div>
         ) : errorMessage ? (
-          <div className="space-y-2">
-            <div className="text-red-400 font-semibold text-sm">
-              {errorMessage}
-            </div>
-            <button
-              onClick={() => setErrorMessage(null)}
-              className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1 rounded hover:bg-red-500/20 cursor-pointer"
-            >
-              Erneut versuchen
-            </button>
-          </div>
+          <div className="text-red-400 text-xs font-semibold">{errorMessage}</div>
         ) : successMessage ? (
-          <div className="text-emerald-400 font-semibold text-sm">
-            {successMessage}
-          </div>
+          <div className="text-emerald-400 text-xs font-semibold">{successMessage}</div>
         ) : (
           <div className="space-y-2">
-            <div className="text-2xl">📁</div>
-            <div className="text-white font-semibold">
-              Bild hier ablegen oder klicken
+            <div className="text-3xl">📤</div>
+            <div className="text-sm text-[#D4AF37] font-bold">
+              Zieh Bilder hier hin oder klick
             </div>
-            <div className="text-xs text-slate-400">
-              Unterstützte Formate: JPG, PNG, GIF, WebP (max 10MB)
-            </div>
+            <div className="text-xs text-slate-400">JPG, PNG, GIF (max 10MB)</div>
           </div>
         )}
-      </div>
-
-      {/* INFO */}
-      <div className="mt-4 text-xs text-slate-500 space-y-1">
-        <p>✓ Bilder werden mit aktuellem Datum hochgeladen</p>
-        <p>✓ Der Post wird direkt erstellt und ist sofort bearbeitbar</p>
-        <p>✓ Mehrere Bilder kannst du nacheinander hochladen</p>
       </div>
     </section>
   );
