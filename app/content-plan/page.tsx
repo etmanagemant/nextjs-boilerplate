@@ -145,13 +145,18 @@ export default async function ContentPlanPage({
       </main>
     );
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("ContentPlan Error:", error);
     return (
       <main className="p-6 max-w-7xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB]">
-        <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-xl text-center">
-          <h1 className="text-xl font-bold text-red-400 mb-2">Fehler beim Laden der Seite</h1>
-          <p className="text-red-400 text-sm mb-4">Es gab einen Fehler beim Laden deiner Content-Plan Seite.</p>
-          <a href="/" className="inline-block bg-[#D4AF37] text-black px-4 py-2 rounded font-bold hover:bg-[#E5C158]">
+        <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-xl">
+          <h1 className="text-xl font-bold text-red-400 mb-2">❌ Fehler beim Laden</h1>
+          <p className="text-red-400 text-sm mb-4">{errorMessage}</p>
+          <details className="text-xs text-slate-400 mt-4 bg-black/40 p-3 rounded border border-red-500/10">
+            <summary className="cursor-pointer font-bold">Vollständiger Error</summary>
+            <pre className="mt-2 overflow-auto whitespace-pre-wrap">{JSON.stringify(error, null, 2)}</pre>
+          </details>
+          <a href="/" className="inline-block bg-[#D4AF37] text-black px-4 py-2 rounded font-bold hover:bg-[#E5C158] mt-4">
             Zur Startseite
           </a>
         </div>
