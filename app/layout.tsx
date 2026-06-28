@@ -34,38 +34,45 @@ export default async function RootLayout({
         <header className="fixed top-0 left-0 right-0 z-50 h-16 border-b border-[#AA7C11]/30 bg-[#0A0A0A]/90 backdrop-blur px-6 shadow-lg shadow-black/50">
           <div className="flex h-full items-center justify-between w-full relative">
             
-            <nav className="flex items-center gap-2 flex-wrap z-10">
-              <a href="/" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Start</a>
-              
-              {/* 🟢 GEMEINSAMER BUTTON: Jeder sieht jetzt das Dashboard im Header! */}
-              <a href="/dashboard" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Dashboard</a>
+            {/* LEFT SIDE - 5 BUTTONS */}
+            <nav className="flex items-center gap-2 flex-wrap z-10 max-w-xs">
+              <a href="/" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md whitespace-nowrap">Start</a>
+              <a href="/dashboard" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md whitespace-nowrap">Dashboard</a>
 
               {role === "admin" && (
                 <>
-                  <a href="/management" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Management</a>
-                  <a href="/bewerbungen" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Bewerbungen</a>
-                  <a href="/massmessage" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Mass Messages</a>
-                  <a href="/content-plan" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">📅 Content-Plan</a>
-                  <a href="/buchhaltung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md border border-amber-400/20">Buchhaltung</a>
-                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Stechuhr</a>
-                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md border border-amber-400/20">Abrechnung</a>
-                </>
-              )}
-
-              {role !== "admin" && (
-                <>
-                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Stechuhr</a>
-                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md border border-amber-400/20">Abrechnung</a>
+                  <a href="/management" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md whitespace-nowrap">Management</a>
+                  <a href="/bewerbungen" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md whitespace-nowrap">Bewerbungen</a>
+                  <a href="/massmessage" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md whitespace-nowrap">Mass Messages</a>
                 </>
               )}
             </nav>
 
+            {/* CENTER - TITLE */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <span className="text-lg font-black tracking-normal uppercase text-transparent bg-clip-text bg-gradient-to-r from-[#F3E5AB] via-[#D4AF37] to-[#AA7C11]">
                 ETManagement
               </span>
             </div>
-            <div className="w-20 z-10"></div>
+
+            {/* RIGHT SIDE - 4 BUTTONS */}
+            <nav className="flex items-center gap-2 flex-wrap z-10 justify-end max-w-xs">
+              {role === "admin" && (
+                <>
+                  <a href="/content-plan" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md whitespace-nowrap">📅 Content-Plan</a>
+                  <a href="/buchhaltung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Buchhaltung</a>
+                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
+                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</a>
+                </>
+              )}
+
+              {role !== "admin" && (
+                <>
+                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
+                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</a>
+                </>
+              )}
+            </nav>
           </div>
         </header>
 
