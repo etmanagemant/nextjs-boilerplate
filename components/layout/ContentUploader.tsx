@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 interface ContentUploaderProps {
@@ -17,19 +17,31 @@ export default function ContentUploader({
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [supabaseReady, setSupabaseReady] = useState(false);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !supabaseKey) {
+  useEffect(() => {
+    if (supabaseUrl && supabaseKey) {
+      setSupabaseReady(true);
+    }
+  }, [supabaseUrl, supabaseKey]);
+
+  if (!supabaseReady) {
     return (
-      <div className="text-red-400 text-xs">
-        Supabase-Variablen nicht konfiguriert
-      </div>
+      <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 mb-8 shadow-lg">
+        <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">
+          📸 Bilder hochladen
+        </h2>
+        <div className="text-red-400 text-xs text-center py-4">
+          ⚠️ Supabase-Konfiguration fehlt. Bitte überprüfe deine .env.local Datei.
+        </div>
+      </section>
     );
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(supabaseUrl!, supabaseKey!);
 
   // ========================================
   // HANDLE FILE UPLOAD
