@@ -76,7 +76,7 @@ export default function DashboardPage() {
         }
 
         const bruttoWert = Number(r.gross_amount || r.amount || 0);
-        const nettoWert = Number(r.amount || 0);
+        const nettoWert = Number(r.amount || (r.gross_amount * 0.8) || 0);
 
         if (zielId && statsPerUser[zielId]) {
           statsPerUser[zielId].brutto += bruttoWert;
