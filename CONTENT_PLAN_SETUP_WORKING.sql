@@ -55,6 +55,45 @@ INSERT INTO content_communities (name) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ========================================
+-- 6️⃣ RLS POLICIES - WICHTIG! 🔓
+-- ========================================
+
+-- Enable RLS on tables
+ALTER TABLE models ENABLE ROW LEVEL SECURITY;
+ALTER TABLE content_communities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE content_plan_posts ENABLE ROW LEVEL SECURITY;
+
+-- MODELS: Allow all authenticated users to read
+CREATE POLICY "Allow authenticated to read models" ON models
+  FOR SELECT USING (true);
+
+CREATE POLICY "Allow authenticated to insert models" ON models
+  FOR INSERT WITH CHECK (true);
+
+-- COMMUNITIES: Allow all authenticated users to read/write
+CREATE POLICY "Allow authenticated to read communities" ON content_communities
+  FOR SELECT USING (true);
+
+CREATE POLICY "Allow authenticated to insert communities" ON content_communities
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow authenticated to delete communities" ON content_communities
+  FOR DELETE USING (true);
+
+-- POSTS: Allow all authenticated users to read/write
+CREATE POLICY "Allow authenticated to read posts" ON content_plan_posts
+  FOR SELECT USING (true);
+
+CREATE POLICY "Allow authenticated to insert posts" ON content_plan_posts
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow authenticated to update posts" ON content_plan_posts
+  FOR UPDATE USING (true) WITH CHECK (true);
+
+CREATE POLICY "Allow authenticated to delete posts" ON content_plan_posts
+  FOR DELETE USING (true);
+
+-- ========================================
 -- NEXT STEP: Storage Bucket erstellen ✅
 -- ========================================
 -- Gehe zu: https://supabase.com/dashboard/project/qzveuqjjhdqcazhfccjp/storage/buckets
