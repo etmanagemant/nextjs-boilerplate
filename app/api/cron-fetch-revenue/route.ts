@@ -46,8 +46,21 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const heuteISO = new Date().toISOString().split("T");
 
+    // Lade alle Models einmalig
+    const { data: allModels } = await supabase.from("models").select("id, name");
+    const modelsByName: Record<string, string> = {};
+    (allModels || []).forEach((m: any) => {
+      if (m.name) modelsByName[m.name.toLowerCase()] = m.id;
+    });
+
     for (const data of chatterUmsaetze) {
       if (data.heuteUmsatz <= 0) continue;
+
+      // Versuche Model-ID zu finden
+      let modelId: string | null = data.modelId || null;
+      if (!modelId && data.scName) {
+        modelId = modelsByName[data.scName.toLowerCase()] || null;
+      }
 
       // Wenn ein Tip reinkommt, der keinem Chatter gehört -> Deine Admin-ID als Auffangkorb!
       let zielUserId = '35498c92-2c4d-4720-a6f7-cc187a4c5fc4'; 
@@ -79,8 +92,9 @@ export async function GET(request: Request) {
         await supabase.from("chatter_revenues").insert([
           {
             user_id: zielUserId,
-            model_id: data.modelId,
-            amount: differenz,
+            model_id: modelId,
+            gross_amount: differenz,
+            amount: differenz * 0.8,
             created_at: new Date().toISOString()
           }
         ]);
