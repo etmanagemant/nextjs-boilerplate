@@ -7,7 +7,6 @@ import {
   deleteContentPlanPost,
   addContentCommunity,
   deleteContentCommunity,
-  uploadAndCreatePost,
 } from "@/app/content-plan/actions";
 
 interface ContentPost {
@@ -215,17 +214,24 @@ export default function ContentPlanClient({
 
     try {
       const formData = new FormData();
-      formData.append("modelId", selectedModelId);
       formData.append("file", file);
+      formData.append("modelId", selectedModelId);
 
-      const result = await uploadAndCreatePost(formData);
+      const response = await fetch("/api/upload-content", {
+        method: "POST",
+        body: formData,
+      });
 
-      if (result.error) {
-        setUploadError(result.error);
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        setUploadError(result.error || "Upload fehlgeschlagen");
         setTimeout(() => setUploadError(null), 3000);
       } else {
-        // Refresh posts
-        window.location.reload();
+        // Füge neuen Post zur Liste hinzu
+        if (result.post) {
+          setPosts((prev) => [...prev, result.post]);
+        }
       }
     } catch (err) {
       console.error("Upload error:", err);
