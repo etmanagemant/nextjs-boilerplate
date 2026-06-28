@@ -144,6 +144,28 @@ export async function updateContentPlanSort(updates: { id: string; sort_order: n
 export async function deleteContentPlanPost(postId: string) {
   try {
     const supabase = await createClient();
+    
+    // Zuerst das Post abrufen um den photo_path zu bekommen
+    const { data: post } = await supabase
+      .from("content_plan_posts")
+      .select("photo_path")
+      .eq("id", postId)
+      .single();
+    
+    // Lösche die Datei aus Supabase Storage wenn sie existiert
+    if (post?.photo_path) {
+      const { error: storageError } = await supabase.storage
+        .from("reddit_content")
+        .remove([post.photo_path]);
+      
+      if (storageError) {
+        console.error("Error deleting file from storage:", storageError);
+      } else {
+        console.log("File deleted from storage:", post.photo_path);
+      }
+    }
+    
+    // Lösche den DB-Eintrag
     await supabase.from("content_plan_posts").delete().eq("id", postId);
     revalidatePath("/content-plan");
   } catch (err) {
