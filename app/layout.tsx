@@ -31,19 +31,25 @@ export default async function RootLayout({
   return (
     <html lang="de" className="dark">
       <body className="min-h-screen bg-[#050505] text-[#F3E5AB] antialiased tracking-wide">
-        <header className="fixed top-0 left-0 right-0 z-50 h-16 border-b border-[#AA7C11]/30 bg-[#0A0A0A]/90 backdrop-blur px-4 shadow-lg shadow-black/50">
+        <header className="fixed top-0 left-0 right-0 z-50 h-16 border-b border-[#AA7C11]/30 bg-[#0A0A0A]/90 backdrop-blur px-3 shadow-lg shadow-black/50">
           <div className="flex h-full items-center justify-between w-full relative">
             
-            {/* LEFT SIDE - 5 BUTTONS */}
-            <nav className="flex items-center gap-1 flex-nowrap z-10 flex-1 min-w-0">
-              <a href="/" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md whitespace-nowrap">Start</a>
-              <a href="/dashboard" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md whitespace-nowrap">Dashboard</a>
+            {/* LEFT SIDE - Start, Dashboard, Stechuhr, Abrechnung */}
+            <nav className="flex items-center gap-0.5 flex-nowrap z-10 flex-1 min-w-0">
+              <a href="/" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Start</a>
+              <a href="/dashboard" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Dashboard</a>
 
               {role === "admin" && (
                 <>
-                  <a href="/management" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md whitespace-nowrap">Mgmt</a>
-                  <a href="/bewerbungen" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md whitespace-nowrap">Bewerb</a>
-                  <a href="/massmessage" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md whitespace-nowrap">Msg</a>
+                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
+                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</a>
+                </>
+              )}
+
+              {role !== "admin" && (
+                <>
+                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
+                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</a>
                 </>
               )}
             </nav>
@@ -55,21 +61,15 @@ export default async function RootLayout({
               </span>
             </div>
 
-            {/* RIGHT SIDE - 4 BUTTONS */}
-            <nav className="flex items-center gap-1 flex-nowrap z-10 flex-1 justify-end min-w-0">
+            {/* RIGHT SIDE - Management, Bewerbungen, Massmessage, Plan, Buchhaltung */}
+            <nav className="flex items-center gap-0.5 flex-nowrap z-10 flex-1 justify-end min-w-0">
               {role === "admin" && (
                 <>
-                  <a href="/content-plan" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md whitespace-nowrap">📅 Plan</a>
-                  <a href="/buchhaltung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Buchh</a>
-                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
-                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrech</a>
-                </>
-              )}
-
-              {role !== "admin" && (
-                <>
-                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
-                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-2 py-1.5 text-[10px] font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrech</a>
+                  <a href="/management" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Management</a>
+                  <a href="/bewerbungen" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Bewerbungen</a>
+                  <a href="/massmessage" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Massmessage</a>
+                  <a href="/content-plan" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">📅 Plan</a>
+                  <a href="/buchhaltung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Buchhaltung</a>
                 </>
               )}
             </nav>
