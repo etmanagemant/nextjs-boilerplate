@@ -47,20 +47,33 @@ export async function POST(request: NextRequest) {
     try {
       await mkdir(join(process.cwd(), "public", "images"), { recursive: true });
     } catch (err) {
-      // Verzeichnis existiert wahrscheinlich schon
+      console.error("Mkdir error:", err);
     }
 
-    await writeFile(imagePath, Buffer.from(buffer));
+    try {
+      await writeFile(imagePath, Buffer.from(buffer));
+      console.log("File saved to:", imagePath);
+    } catch (writeErr) {
+      console.error("WriteFile error:", writeErr);
+      return NextResponse.json(
+        { error: "Fehler beim Speichern der Datei: " + String(writeErr) },
+        { status: 500 }
+      );
+    }
 
     // Erstelle Post in DB
     const supabase = await createClient();
 
-    const { data: posts } = await supabase
+    const { data: posts, error: postsError } = await supabase
       .from("content_plan_posts")
       .select("sort_order")
       .eq("model_id", modelId)
       .order("sort_order", { ascending: false })
       .limit(1);
+
+    if (postsError) {
+      console.error("Supabase query error:", postsError);
+    }
 
     const nextSortOrder =
       posts && posts.length > 0 ? (posts[0].sort_order || 0) + 1 : 1;
@@ -78,9 +91,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
-      console.error("DB Error:", insertError);
+      console.error("DB Insert Error:", insertError);
+      console.error("Error details:", JSON.stringify(insertError, null, 2));
       return NextResponse.json(
-        { error: "Fehler beim Erstellen des Posts" },
+        { error: "Fehler beim Erstellen des Posts: " + insertError.message },
         { status: 500 }
       );
     }

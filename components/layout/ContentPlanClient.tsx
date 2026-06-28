@@ -217,16 +217,25 @@ export default function ContentPlanClient({
       formData.append("file", file);
       formData.append("modelId", selectedModelId);
 
+      console.log("Starting upload for file:", file.name, "model:", selectedModelId);
+
       const response = await fetch("/api/upload-content", {
         method: "POST",
         body: formData,
       });
 
       const result = await response.json();
+      console.log("Upload response:", result);
 
-      if (!response.ok || result.error) {
-        setUploadError(result.error || "Upload fehlgeschlagen");
-        setTimeout(() => setUploadError(null), 3000);
+      if (!response.ok) {
+        const errorMsg = result.error || `HTTP Error: ${response.status}`;
+        console.error("Upload failed:", errorMsg);
+        setUploadError(errorMsg);
+        setTimeout(() => setUploadError(null), 5000);
+      } else if (result.error) {
+        console.error("API returned error:", result.error);
+        setUploadError(result.error);
+        setTimeout(() => setUploadError(null), 5000);
       } else {
         // Füge neuen Post zur Liste hinzu
         if (result.post) {
@@ -234,9 +243,10 @@ export default function ContentPlanClient({
         }
       }
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
       console.error("Upload error:", err);
-      setUploadError("Upload fehlgeschlagen");
-      setTimeout(() => setUploadError(null), 3000);
+      setUploadError("Upload fehlgeschlagen: " + errorMsg);
+      setTimeout(() => setUploadError(null), 5000);
     } finally {
       setUploading(false);
     }
