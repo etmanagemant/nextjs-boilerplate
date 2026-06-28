@@ -366,7 +366,7 @@ export default function ContentPlanClient({
         {posts.length === 0 ? (
           <div className="text-center text-slate-400 py-12">
             <p className="text-sm">Noch keine Posts für dieses Model.</p>
-            <p className="text-xs mt-2">Lege Bilder im <code className="bg-[#050505] px-1 rounded text-[#D4AF37]">public/images/</code> Ordner ab und speichere den Dateinamen in dieser Tabelle.</p>
+            <p className="text-xs mt-2">Lade Fotos oben im Upload-Bereich hoch, um sie hier anzuzeigen.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -386,7 +386,7 @@ export default function ContentPlanClient({
                 {/* PHOTO */}
                 <div className="aspect-square bg-black/80 overflow-hidden relative group">
                   <img
-                    src={`/images/${post.photo_path}`}
+                    src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/reddit_content/${post.photo_path}`}
                     alt="Content"
                     className="w-full h-full object-cover"
                     onError={(e) => {

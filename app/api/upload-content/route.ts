@@ -1,5 +1,3 @@
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
@@ -39,30 +37,28 @@ export async function POST(request: NextRequest) {
       .toLowerCase();
     const fileName = `${timestamp}_${sanitizedName}`;
 
-    // Speichere Datei
-    const buffer = await file.arrayBuffer();
-    const imagePath = join(process.cwd(), "public", "images", fileName);
-    
-    // Stelle sicher dass Verzeichnis existiert
-    try {
-      await mkdir(join(process.cwd(), "public", "images"), { recursive: true });
-    } catch (err) {
-      console.error("Mkdir error:", err);
-    }
+    const supabase = await createClient();
 
-    try {
-      await writeFile(imagePath, Buffer.from(buffer));
-      console.log("File saved to:", imagePath);
-    } catch (writeErr) {
-      console.error("WriteFile error:", writeErr);
+    // Upload zu Supabase Storage
+    const buffer = await file.arrayBuffer();
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("reddit_content")
+      .upload(fileName, Buffer.from(buffer), {
+        contentType: file.type,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("Storage upload error:", uploadError);
       return NextResponse.json(
-        { error: "Fehler beim Speichern der Datei: " + String(writeErr) },
+        { error: "Fehler beim Upload zu Storage: " + uploadError.message },
         { status: 500 }
       );
     }
 
-    // Erstelle Post in DB
-    const supabase = await createClient();
+    console.log("File uploaded to storage:", uploadData);
+
+    // Erstelle Post in DB mit dem Storage-Pfad
 
     const { data: posts, error: postsError } = await supabase
       .from("content_plan_posts")
