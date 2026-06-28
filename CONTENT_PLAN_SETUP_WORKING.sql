@@ -11,14 +11,21 @@
 -- 4. Fertig! ✅
 -- ========================================
 
--- 1️⃣ COMMUNITIES TABELLE
+-- 1️⃣ MODELS TABELLE
+CREATE TABLE IF NOT EXISTS models (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 2️⃣ COMMUNITIES TABELLE
 CREATE TABLE IF NOT EXISTS content_communities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2️⃣ CONTENT PLAN POSTS TABELLE  
+-- 3️⃣ CONTENT PLAN POSTS TABELLE  
 CREATE TABLE IF NOT EXISTS content_plan_posts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   model_id UUID NOT NULL,
@@ -33,7 +40,14 @@ CREATE TABLE IF NOT EXISTS content_plan_posts (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3️⃣ TEST DATEN - 3 Communities hinzufügen
+-- 4️⃣ TEST DATEN - Models erstellen
+INSERT INTO models (name) VALUES
+  ('Model 1'),
+  ('Model 2'),
+  ('Model 3')
+ON CONFLICT DO NOTHING;
+
+-- 5️⃣ TEST DATEN - 3 Communities hinzufügen
 INSERT INTO content_communities (name) VALUES
   ('r/reddit1'),
   ('r/reddit2'),
