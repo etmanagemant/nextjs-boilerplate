@@ -7,6 +7,7 @@ import {
   deleteContentPlanPost,
   addContentCommunity,
   deleteContentCommunity,
+  uploadAndCreatePost,
 } from "@/app/content-plan/actions";
 
 interface ContentPost {
@@ -51,9 +52,13 @@ export default function ContentPlanClient({
   const [expandedPost, setExpandedPost] = useState<string | null>(null);
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<ContentPost>>({});
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragOverUpload, setDragOverUpload] = useState(false);
 
   // ========================================
-  // DRAG & DROP LOGIC
+  // ========================================
+  // DRAG & DROP LOGIC (FOR POSTS)
   // ========================================
   const handleDragStart = (postId: string) => {
     setDraggedItem(postId);
@@ -189,6 +194,66 @@ export default function ContentPlanClient({
     }
   };
 
+  // ========================================
+  // FILE UPLOAD
+  // ========================================
+  const handleFileUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Nur Bilder sind erlaubt!");
+      setTimeout(() => setUploadError(null), 3000);
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError("Datei zu groß (max 10MB)!");
+      setTimeout(() => setUploadError(null), 3000);
+      return;
+    }
+
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("modelId", selectedModelId);
+      formData.append("file", file);
+
+      const result = await uploadAndCreatePost(formData);
+
+      if (result.error) {
+        setUploadError(result.error);
+        setTimeout(() => setUploadError(null), 3000);
+      } else {
+        // Refresh posts
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error("Upload error:", err);
+      setUploadError("Upload fehlgeschlagen");
+      setTimeout(() => setUploadError(null), 3000);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUploadDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverUpload(true);
+  };
+
+  const handleUploadDragLeave = () => {
+    setDragOverUpload(false);
+  };
+
+  const handleUploadDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverUpload(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      await handleFileUpload(files[0]);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* ========================================
@@ -241,6 +306,46 @@ export default function ContentPlanClient({
         <h2 className="text-sm font-bold mb-6 text-[#D4AF37] uppercase tracking-wider">
           🖼️ Content-Fotos & Plan
         </h2>
+
+        {/* UPLOAD ZONE */}
+        <div
+          onDragOver={handleUploadDragOver}
+          onDragLeave={handleUploadDragLeave}
+          onDrop={handleUploadDrop}
+          className={`mb-6 p-8 border-2 border-dashed rounded-lg transition cursor-pointer text-center ${
+            dragOverUpload
+              ? "border-[#D4AF37] bg-[#D4AF37]/10"
+              : "border-[#AA7C11]/30 bg-[#050505] hover:border-[#AA7C11]/50"
+          }`}
+        >
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              if (e.target.files?.[0]) {
+                handleFileUpload(e.target.files[0]);
+              }
+            }}
+            disabled={uploading}
+            className="hidden"
+            id="file-upload"
+          />
+          <label htmlFor="file-upload" className="cursor-pointer block">
+            <div className="text-[#D4AF37] text-2xl mb-2">📤</div>
+            <p className="text-sm font-semibold text-white mb-1">
+              {uploading ? "Hochladen..." : "Bild hierher ziehen oder klicken"}
+            </p>
+            <p className="text-xs text-slate-400">
+              {uploading ? "Bitte warten..." : "PNG, JPG, WEBP • max 10MB"}
+            </p>
+          </label>
+        </div>
+
+        {uploadError && (
+          <div className="mb-4 p-3 bg-red-900/30 border border-red-500/50 rounded-lg text-red-400 text-xs">
+            ❌ {uploadError}
+          </div>
+        )}
 
         {posts.length === 0 ? (
           <div className="text-center text-slate-400 py-12">

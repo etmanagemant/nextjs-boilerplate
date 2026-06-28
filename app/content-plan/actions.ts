@@ -180,3 +180,51 @@ export async function createContentPlanPost(formData: FormData) {
     console.error("Exception creating content plan post:", err);
   }
 }
+
+export async function uploadAndCreatePost(formData: FormData) {
+  try {
+    const modelId = formData.get("model_id") as string;
+    const file = formData.get("file") as File;
+    
+    if (!modelId || !file) {
+      return { error: "Model ID und Datei erforderlich" };
+    }
+
+    // Generiere eindeutigen Dateinamen
+    const timestamp = Date.now();
+    const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const fileName = `${timestamp}_${sanitizedName}`;
+
+    // Speichere die Datei in public/images/
+    const fs = await import("fs").then(m => m.promises);
+    const path = await import("path");
+    const imagePath = path.join(process.cwd(), "public", "images", fileName);
+    
+    const buffer = await file.arrayBuffer();
+    await fs.writeFile(imagePath, Buffer.from(buffer));
+
+    // Erstelle den Post in der DB
+    const supabase = await createClient();
+    
+    const { data: posts } = await supabase
+      .from("content_plan_posts")
+      .select("sort_order")
+      .eq("model_id", modelId)
+      .order("sort_order", { ascending: false })
+      .limit(1);
+    
+    const nextSortOrder = (posts && posts.length > 0) ? (posts[0].sort_order || 0) + 1 : 1;
+    
+    await supabase.from("content_plan_posts").insert([{
+      model_id: modelId,
+      photo_path: fileName,
+      sort_order: nextSortOrder,
+    }]);
+    
+    revalidatePath("/content-plan");
+    return { success: true, fileName };
+  } catch (err) {
+    console.error("Exception uploading and creating post:", err);
+    return { error: "Upload fehlgeschlagen" };
+  }
+}
