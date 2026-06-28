@@ -45,6 +45,7 @@ export default async function RootLayout({
                   <a href="/management" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Management</a>
                   <a href="/bewerbungen" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Bewerbungen</a>
                   <a href="/massmessage" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Mass Messages</a>
+                  <a href="/content-plan" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">📅 Content-Plan</a>
                   <a href="/buchhaltung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md border border-amber-400/20">Buchhaltung</a>
                   <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md">Stechuhr</a>
                   <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-3 py-1.5 text-xs font-bold text-black shadow-md border border-amber-400/20">Abrechnung</a>
