@@ -106,14 +106,19 @@ export async function updateContentPlanPost(
   try {
     const supabase = await createClient();
     
-    const updatePayload: any = {};
-    if (updates.post_date !== undefined) updatePayload.post_date = updates.post_date;
-    if (updates.content_type !== undefined) updatePayload.content_type = updates.content_type;
-    if (updates.title_idea !== undefined) updatePayload.title_idea = updates.title_idea;
-    if (updates.published !== undefined) updatePayload.published = updates.published;
-    if (updates.communities !== undefined) updatePayload.communities = updates.communities;
+    if (!postId) {
+      throw new Error("Keine Post-ID vorhanden");
+    }
     
-    console.log("Updating post", postId, "with:", updatePayload);
+    const updatePayload: any = {};
+    if (updates.post_date !== undefined) updatePayload.post_date = updates.post_date || null;
+    if (updates.content_type !== undefined) updatePayload.content_type = updates.content_type || null;
+    if (updates.title_idea !== undefined) updatePayload.title_idea = updates.title_idea || null;
+    if (updates.published !== undefined) updatePayload.published = updates.published;
+    if (updates.communities !== undefined) updatePayload.communities = updates.communities || [];
+    
+    console.log("[UPDATE] Post ID:", postId);
+    console.log("[UPDATE] Payload:", updatePayload);
     
     const { error, data } = await supabase
       .from("content_plan_posts")
@@ -122,17 +127,17 @@ export async function updateContentPlanPost(
       .select();
     
     if (error) {
-      console.error("Error updating content plan post:", error);
-      throw new Error(error.message);
+      console.error("[ERROR] Supabase update failed:", error);
+      throw new Error(`DB Error: ${error.message}`);
     }
     
-    console.log("Post updated successfully:", data);
+    console.log("[SUCCESS] Post updated:", data);
     revalidatePath("/content-plan");
     return { success: true, data };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error("Exception updating content plan post:", errorMsg);
-    throw new Error(errorMsg);
+    console.error("[EXCEPTION] Update failed:", errorMsg);
+    throw err;
   }
 }
 

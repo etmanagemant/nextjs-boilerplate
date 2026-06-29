@@ -121,7 +121,7 @@ export default function ContentPlanClient({
     
     setIsSaving(true);
     try {
-      await updateContentPlanPost(editingPost, {
+      const result = await updateContentPlanPost(editingPost, {
         post_date: editValues.post_date as string,
         content_type: editValues.content_type as string,
         title_idea: editValues.title_idea as string,
@@ -129,6 +129,7 @@ export default function ContentPlanClient({
         communities: editValues.communities as string[],
       });
 
+      // Update lokale Posts
       setPosts((prevPosts) =>
         prevPosts.map((p) =>
           p.id === editingPost
@@ -144,14 +145,15 @@ export default function ContentPlanClient({
         )
       );
 
-      setSaveSuccess("Gespeichert ✓");
+      setSaveSuccess("✓ Erfolgreich gespeichert!");
       setTimeout(() => setSaveSuccess(null), 2000);
       setEditingPost(null);
       setEditValues({});
-    } catch (error) {
-      console.error("Fehler beim Speichern:", error);
-      setSaveSuccess("Fehler beim Speichern ✗");
-      setTimeout(() => setSaveSuccess(null), 3000);
+    } catch (error: any) {
+      const errorMessage = error?.message || "Fehler beim Speichern";
+      console.error("Fehler beim Speichern:", errorMessage);
+      setSaveSuccess(`✗ ${errorMessage}`);
+      setTimeout(() => setSaveSuccess(null), 4000);
     } finally {
       setIsSaving(false);
     }
@@ -476,13 +478,20 @@ export default function ContentPlanClient({
                           placeholder="Titel..."
                           className="flex-1 bg-[#050505] border border-[#AA7C11]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
                         />
-                        <button
-                          onClick={() => handleCopyTitle(editValues.title_idea)}
-                          className="bg-[#AA7C11]/20 text-[#D4AF37] px-3 py-1 rounded text-xs font-bold hover:bg-[#AA7C11]/40 cursor-pointer transition"
-                          title="Titel kopieren"
-                        >
-                          📋 Kopieren
-                        </button>
+                        {editValues.title_idea && (
+                          <button
+                            onClick={() => handleCopyTitle(editValues.title_idea)}
+                            type="button"
+                            className={`${
+                              copiedTitle === editValues.title_idea
+                                ? "bg-emerald-500 text-white"
+                                : "bg-[#AA7C11]/20 text-[#D4AF37] hover:bg-[#AA7C11]/40"
+                            } px-3 py-1 rounded text-xs font-bold cursor-pointer transition flex-shrink-0`}
+                            title="Titel kopieren"
+                          >
+                            {copiedTitle === editValues.title_idea ? "✓ Kopiert" : "📋"}
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -566,19 +575,21 @@ export default function ContentPlanClient({
                         <span className="text-white flex-1 break-words text-sm">
                           {post.title_idea || "—"}
                         </span>
-                        {post.title_idea && (
-                          <button
-                            onClick={() => handleCopyTitle(post.title_idea)}
-                            className={`${
-                              copiedTitle === post.title_idea
-                                ? "bg-emerald-500 text-white"
-                                : "bg-[#D4AF37] text-black hover:bg-[#E5C158]"
-                            } px-3 py-1 rounded text-xs font-bold cursor-pointer transition flex-shrink-0`}
-                            title="Titel kopieren"
-                          >
-                            {copiedTitle === post.title_idea ? "✓ Kopiert" : "📋 Kopieren"}
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleCopyTitle(post.title_idea)}
+                          disabled={!post.title_idea}
+                          type="button"
+                          className={`${
+                            !post.title_idea
+                              ? "bg-slate-700/30 text-slate-500 cursor-not-allowed"
+                              : copiedTitle === post.title_idea
+                              ? "bg-emerald-500 text-white"
+                              : "bg-[#D4AF37] text-black hover:bg-[#E5C158]"
+                          } px-3 py-1 rounded text-xs font-bold transition flex-shrink-0 cursor-pointer`}
+                          title={post.title_idea ? "Titel kopieren" : "Kein Titel vorhanden"}
+                        >
+                          {copiedTitle === post.title_idea ? "✓ Kopiert" : "📋 Kopieren"}
+                        </button>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
