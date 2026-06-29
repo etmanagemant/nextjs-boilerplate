@@ -113,14 +113,26 @@ export async function updateContentPlanPost(
     if (updates.published !== undefined) updatePayload.published = updates.published;
     if (updates.communities !== undefined) updatePayload.communities = updates.communities;
     
-    await supabase
+    console.log("Updating post", postId, "with:", updatePayload);
+    
+    const { error, data } = await supabase
       .from("content_plan_posts")
       .update(updatePayload)
-      .eq("id", postId);
+      .eq("id", postId)
+      .select();
     
+    if (error) {
+      console.error("Error updating content plan post:", error);
+      throw new Error(error.message);
+    }
+    
+    console.log("Post updated successfully:", data);
     revalidatePath("/content-plan");
+    return { success: true, data };
   } catch (err) {
-    console.error("Exception updating content plan post:", err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("Exception updating content plan post:", errorMsg);
+    throw new Error(errorMsg);
   }
 }
 

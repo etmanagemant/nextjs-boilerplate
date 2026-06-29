@@ -54,6 +54,9 @@ export default function ContentPlanClient({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragOverUpload, setDragOverUpload] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [copiedTitle, setCopiedTitle] = useState<string | null>(null);
 
   // ========================================
   // ========================================
@@ -115,37 +118,61 @@ export default function ContentPlanClient({
 
   const savePostEdits = async () => {
     if (!editingPost) return;
+    
+    setIsSaving(true);
+    try {
+      await updateContentPlanPost(editingPost, {
+        post_date: editValues.post_date as string,
+        content_type: editValues.content_type as string,
+        title_idea: editValues.title_idea as string,
+        published: editValues.published as boolean,
+        communities: editValues.communities as string[],
+      });
 
-    await updateContentPlanPost(editingPost, {
-      post_date: editValues.post_date as string,
-      content_type: editValues.content_type as string,
-      title_idea: editValues.title_idea as string,
-      published: editValues.published as boolean,
-      communities: editValues.communities as string[],
-    });
+      setPosts((prevPosts) =>
+        prevPosts.map((p) =>
+          p.id === editingPost
+            ? {
+                ...p,
+                post_date: editValues.post_date as string,
+                content_type: editValues.content_type as string,
+                title_idea: editValues.title_idea as string,
+                published: editValues.published as boolean,
+                communities: editValues.communities as string[],
+              }
+            : p
+        )
+      );
 
-    setPosts((prevPosts) =>
-      prevPosts.map((p) =>
-        p.id === editingPost
-          ? {
-              ...p,
-              post_date: editValues.post_date as string,
-              content_type: editValues.content_type as string,
-              title_idea: editValues.title_idea as string,
-              published: editValues.published as boolean,
-              communities: editValues.communities as string[],
-            }
-          : p
-      )
-    );
-
-    setEditingPost(null);
-    setEditValues({});
+      setSaveSuccess("Gespeichert ✓");
+      setTimeout(() => setSaveSuccess(null), 2000);
+      setEditingPost(null);
+      setEditValues({});
+    } catch (error) {
+      console.error("Fehler beim Speichern:", error);
+      setSaveSuccess("Fehler beim Speichern ✗");
+      setTimeout(() => setSaveSuccess(null), 3000);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const cancelEdits = () => {
     setEditingPost(null);
     setEditValues({});
+  };
+
+  // ========================================
+  // COPY TITLE TO CLIPBOARD
+  // ========================================
+  const handleCopyTitle = (title: string | null | undefined) => {
+    if (!title) return;
+    navigator.clipboard.writeText(title).then(() => {
+      setCopiedTitle(title);
+      setTimeout(() => setCopiedTitle(null), 2000);
+    }).catch(() => {
+      console.error("Fehler beim Kopieren");
+    });
   };
 
   // ========================================
@@ -439,15 +466,24 @@ export default function ContentPlanClient({
 
                     <div>
                       <label className="text-[#D4AF37] font-semibold block mb-1">Titel-Idee</label>
-                      <input
-                        type="text"
-                        value={editValues.title_idea || ""}
-                        onChange={(e) =>
-                          setEditValues({ ...editValues, title_idea: e.target.value })
-                        }
-                        placeholder="Titel..."
-                        className="w-full bg-[#050505] border border-[#AA7C11]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={editValues.title_idea || ""}
+                          onChange={(e) =>
+                            setEditValues({ ...editValues, title_idea: e.target.value })
+                          }
+                          placeholder="Titel..."
+                          className="flex-1 bg-[#050505] border border-[#AA7C11]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
+                        />
+                        <button
+                          onClick={() => handleCopyTitle(editValues.title_idea)}
+                          className="bg-[#AA7C11]/20 text-[#D4AF37] px-3 py-1 rounded text-xs font-bold hover:bg-[#AA7C11]/40 cursor-pointer transition"
+                          title="Titel kopieren"
+                        >
+                          📋 Kopieren
+                        </button>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -492,17 +528,24 @@ export default function ContentPlanClient({
                     <div className="flex gap-2 pt-2 border-t border-[#AA7C11]/10">
                       <button
                         onClick={savePostEdits}
-                        className="flex-1 bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 cursor-pointer"
+                        disabled={isSaving}
+                        className="flex-1 bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition"
                       >
-                        ✓ Speichern
+                        {isSaving ? "⏳ Speichert..." : "✓ Speichern"}
                       </button>
                       <button
                         onClick={cancelEdits}
-                        className="flex-1 bg-red-600/20 text-red-400 px-2 py-1 rounded text-xs font-bold hover:bg-red-600/40 cursor-pointer"
+                        disabled={isSaving}
+                        className="flex-1 bg-red-600/20 text-red-400 px-2 py-1 rounded text-xs font-bold hover:bg-red-600/40 cursor-pointer disabled:opacity-50 transition"
                       >
                         ✕ Abbrechen
                       </button>
                     </div>
+                    {saveSuccess && (
+                      <div className="mt-2 text-center text-xs font-bold text-emerald-400 bg-emerald-600/20 py-1 rounded">
+                        {saveSuccess}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   // VIEW MODE
@@ -515,11 +558,28 @@ export default function ContentPlanClient({
                       <span className="text-[#D4AF37] font-semibold">Typ:</span>
                       <span className="text-white">{post.content_type || "—"}</span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[#D4AF37] font-semibold">Titel:</span>
-                      <span className="text-white truncate text-right max-w-[140px]">
-                        {post.title_idea || "—"}
-                      </span>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[#D4AF37] font-semibold">Titel:</span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <span className="text-white flex-1 break-words text-sm">
+                          {post.title_idea || "—"}
+                        </span>
+                        {post.title_idea && (
+                          <button
+                            onClick={() => handleCopyTitle(post.title_idea)}
+                            className={`${
+                              copiedTitle === post.title_idea
+                                ? "bg-emerald-500 text-white"
+                                : "bg-[#D4AF37] text-black hover:bg-[#E5C158]"
+                            } px-3 py-1 rounded text-xs font-bold cursor-pointer transition flex-shrink-0`}
+                            title="Titel kopieren"
+                          >
+                            {copiedTitle === post.title_idea ? "✓ Kopiert" : "📋 Kopieren"}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[#D4AF37] font-semibold">Status:</span>
