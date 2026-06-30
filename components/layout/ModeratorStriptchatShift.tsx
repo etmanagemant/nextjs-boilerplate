@@ -201,13 +201,32 @@ export default function ModeratorStriptchatShift({
       // END private show
       const start = new Date(privateShowState.startedAt).getTime();
       const end = Date.now();
-      const hours = (end - start) / (1000 * 60 * 60);
+      const durationMs = end - start;
+      const durationMinutes = durationMs / (1000 * 60);
+      const hours = durationMs / (1000 * 60 * 60);
+      
+      // 🎯 5 MINUTEN REGEL: Show muss mindestens 5 Min sein um zu zählen
+      const countsForPremium = durationMinutes >= 5;
       const newTotal = privateShowState.totalHours + hours;
 
       try {
+        // 🔄 Aktualisiere shift_assignments mit neuen Werten
+        const updateData: any = { privateshow_total_hours: newTotal };
+        
+        // Wenn Show >= 5 Min, erhöhe den Count für Prämien-Berechnung
+        if (countsForPremium) {
+          const { data: currentShift } = await supabase
+            .from("shift_assignments")
+            .select("privateshow_count")
+            .eq("id", shiftState.shiftId)
+            .maybeSingle();
+          
+          updateData.privateshow_count = (currentShift?.privateshow_count || 0) + 1;
+        }
+        
         const { error } = await supabase
           .from("shift_assignments")
-          .update({ privateshow_total_hours: newTotal })
+          .update(updateData)
           .eq("id", shiftState.shiftId);
 
         if (error) throw error;
@@ -217,10 +236,17 @@ export default function ModeratorStriptchatShift({
           totalHours: newTotal,
         });
 
-        setMessage({
-          type: "success",
-          text: `✅ Privat-Show beendet! +${hours.toFixed(2)}h (Total: ${newTotal.toFixed(2)}h)`,
-        });
+        if (countsForPremium) {
+          setMessage({
+            type: "success",
+            text: `✅ Privat-Show gezählt! +${hours.toFixed(2)}h (${durationMinutes.toFixed(0)} min) | Total: ${newTotal.toFixed(2)}h`,
+          });
+        } else {
+          setMessage({
+            type: "success",
+            text: `⏱️ Show war nur ${durationMinutes.toFixed(0)} min - zu kurz! Mindestens 5 Min erforderlich.`,
+          });
+        }
         setTimeout(() => setMessage(null), 3000);
       } catch (err: any) {
         setMessage({
