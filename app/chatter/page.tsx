@@ -210,44 +210,55 @@ export default function ChatterPage() {
       {/* MODERATOR + ADMIN MODE - Stripchat Schicht */}
       {(currentUserRole === "moderator" || currentUserRole === "admin") && (
         <>
+          {currentUserRole === "admin" && (
+            <div className="mb-4 pb-3 border-b-2 border-[#AA7C11]/30">
+              <h2 className="text-lg font-black text-[#D4AF37] uppercase tracking-wider">🎭 Stripchat Schicht</h2>
+            </div>
+          )}
           <ModeratorStriptchatShift
             currentUserId={currentUserId}
             currentUserFullName={currentUserFullName}
             sichereModels={sichereModels}
           />
-          
-          <div className="mt-8">
-            <h2 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider mb-4">📊 Deine Stripchat-Sessions</h2>
-            {loading ? (
-              <div className="text-xs text-slate-500 italic">Lade Daten…</div>
-            ) : (
-              <div className="space-y-3">
-                {rows.map((r) => {
-                  const hours = toDurationHours(r.started_at, r.ended_at);
-                  return (
-                    <div key={r.id} className="rounded-xl border border-[#AA7C11]/10 bg-black/20 p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs font-bold text-slate-200 uppercase tracking-wide">Session #{r.id}</div>
-                        <div className="text-xs font-bold font-mono text-[#D4AF37]">{hours.toFixed(2)} h</div>
+          {currentUserRole === "moderator" && (
+            <div className="mt-8">
+              <h2 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider mb-4">📊 Deine Stripchat-Sessions</h2>
+              {loading ? (
+                <div className="text-xs text-slate-500 italic">Lade Daten…</div>
+              ) : (
+                <div className="space-y-3">
+                  {rows.map((r) => {
+                    const hours = toDurationHours(r.started_at, r.ended_at);
+                    return (
+                      <div key={r.id} className="rounded-xl border border-[#AA7C11]/10 bg-black/20 p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs font-bold text-slate-200 uppercase tracking-wide">Session #{r.id}</div>
+                          <div className="text-xs font-bold font-mono text-[#D4AF37]">{hours.toFixed(2)} h</div>
+                        </div>
+                        <div className="mt-2 text-xs text-slate-400 font-mono">
+                          <div><span className="text-slate-500">Start:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
+                          <div><span className="text-slate-500">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
+                        </div>
                       </div>
-                      <div className="mt-2 text-xs text-slate-400 font-mono">
-                        <div><span className="text-slate-500">Start:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
-                        <div><span className="text-slate-500">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
       {/* REGULAR CHATTER MODE + ADMIN MODE - Normal Stechuhr */}
       {(currentUserRole === "chatter" || currentUserRole === "admin") && (
         <>
+          {currentUserRole === "admin" && (
+            <div className="mt-8 mb-4 pb-3 border-b-2 border-[#AA7C11]/30">
+              <h2 className="text-lg font-black text-[#F3E5AB] uppercase tracking-wider">💼 OnlyFans Stechuhr</h2>
+            </div>
+          )}
           <div className="bg-gradient-to-r from-[#050505] to-black border border-[#AA7C11]/20 rounded-xl p-4 mb-6">
-            <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">Deine Stechuhr:</span>
+            <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">{currentUserRole === "admin" ? "OnlyFans Stechuhr:" : "Deine Stechuhr:"}</span>
             <button onClick={triggerGlobalStart} disabled={!!activeShift} className="rounded-lg bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer">Start Schicht</button>
             <button onClick={triggerGlobalEnd} disabled={!activeShift} className="rounded-lg bg-gradient-to-b from-red-400 to-red-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer ml-2">Ende Schicht</button>
           </div>
