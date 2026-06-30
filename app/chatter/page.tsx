@@ -328,37 +328,3 @@ export default function ChatterPage() {
     </main>
   );
 }
-      </div>
-
-      {err && <div className="mt-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 p-2 rounded mb-4 text-center">{err}</div>}
-
-      {/* HISTORIE */}
-      <div className="mt-6">
-        <h2 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider mb-4">Deine persönliche Schichthistorie</h2>
-        {loading ? (
-          <div className="text-xs text-slate-500 italic">Lade deinen Verlauf…</div>
-        ) : (
-          <div className="space-y-3">
-            {rows.map((r) => {
-              const hours = toDurationHours(r.started_at, r.ended_at);
-              const isLaufend = r.started_at && !r.ended_at;
-              return (
-                <div key={r.id} className={`rounded-xl border p-4 transition-all ${isLaufend ? "border-[#D4AF37] bg-[#AA7C11]/5" : "border-[#AA7C11]/10 bg-black/20"}`}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs font-bold text-slate-200 uppercase tracking-wide">Schicht #{r.id} {isLaufend && <span className="ml-2 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Aktiv</span>}</div>
-                    <div className="text-xs font-bold font-mono text-[#D4AF37]">{hours.toFixed(2)} h</div>
-                  </div>
-                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-slate-400 border-t border-[#AA7C11]/5 pt-2 font-mono">
-                    <div><span className="text-slate-500 font-sans uppercase font-bold text-[9px]">Nutzer:</span> {currentUserEmail}</div>
-                    <div><span className="text-slate-500 font-sans uppercase font-bold text-[9px]">Beginn:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
-                    <div><span className="text-slate-500 font-sans uppercase font-bold text-[9px]">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
