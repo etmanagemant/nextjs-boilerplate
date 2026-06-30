@@ -132,15 +132,19 @@ export default function ModeratorStriptchatShift({
           selectedModelNames: modelNames,
         });
 
-        // Lade Privat-Show-Daten - initialisiere für jedes Model
+        // Lade Private-Show Timer-Daten aus DB
         const newStates: Record<number, { startedAt: string | null; totalHours: number }> = {};
+        const activeShows = active.active_private_shows || [];
+        const totals = active.private_show_totals || {};
+        
         modelIds.forEach((id: number) => {
-          newStates[id] = { startedAt: null, totalHours: 0 };
+          const activeShow = activeShows.find((s: any) => s.modelId === id);
+          const totalHours = totals[id] || 0;
+          newStates[id] = {
+            startedAt: activeShow?.startedAt || null,
+            totalHours: totalHours,
+          };
         });
-        if (active.privateshow_total_hours && modelIds.length > 0) {
-          // Verteile totalHours gleichmäßig (oder besser: speichere pro Model)
-          newStates[modelIds[0]].totalHours = active.privateshow_total_hours;
-        }
         setPrivateShowStates(newStates);
       }
       setLoading(false);
@@ -259,18 +263,32 @@ export default function ModeratorStriptchatShift({
         // 🔄 Aktualisiere shift_assignments mit neuen Werten
         const updateData: any = { privateshow_total_hours: newTotal };
         
+        // Entferne aus active_private_shows in DB
+        const currentShift = await supabase
+          .from("shift_assignments")
+          .select("active_private_shows, private_show_totals, privateshow_count")
+          .eq("id", shiftState.shiftId)
+          .maybeSingle();
+        
+        const activeShows = currentShift.data?.active_private_shows || [];
+        const totals = currentShift.data?.private_show_totals || {};
+        
+        // Entferne Show aus active_private_shows
+        const updatedActiveShows = activeShows.filter((s: any) => s.modelId !== modelId);
+        
+        // Addiere Stunden zu totals
+        totals[modelId] = (totals[modelId] || 0) + hours;
+        
         // Wenn Show >= 5 Min, erhöhe den Count für Prämien-Berechnung
+        let newCount = currentShift.data?.privateshow_count || 0;
         if (countsForPremium) {
-          const { data: currentShift } = await supabase
-            .from("shift_assignments")
-            .select("privateshow_count")
-            .eq("id", shiftState.shiftId)
-            .maybeSingle();
-          
-          updateData.privateshow_count = (currentShift?.privateshow_count || 0) + 1;
-          // Aktualisiere auch den lokalen Count
+          newCount += 1;
           setTotalPrivateShowCount(totalPrivateShowCount + 1);
         }
+        
+        updateData.active_private_shows = updatedActiveShows;
+        updateData.private_show_totals = totals;
+        updateData.privateshow_count = newCount;
         
         const { error } = await supabase
           .from("shift_assignments")
@@ -304,17 +322,47 @@ export default function ModeratorStriptchatShift({
         });
       }
     } else {
-      // START private show
-      setPrivateShowStates({
-        ...privateShowStates,
-        [modelId]: { startedAt: new Date().toISOString(), totalHours: currentState.totalHours },
-      });
-      const modelName = sichereModels.find(m => m.id === modelId)?.name || "Model";
-      setMessage({
-        type: "success",
-        text: `🎭 ${modelName}: Privat-Show gestartet!`,
-      });
-      setTimeout(() => setMessage(null), 2000);
+      // START private show - Speichere Start-Zeit in DB
+      try {
+        const currentShift = await supabase
+          .from("shift_assignments")
+          .select("active_private_shows")
+          .eq("id", shiftState.shiftId)
+          .maybeSingle();
+        
+        const activeShows = currentShift.data?.active_private_shows || [];
+        const newActiveShow = {
+          modelId: modelId,
+          startedAt: new Date().toISOString(),
+        };
+        
+        // Füge neue Show hinzu wenn nicht schon vorhanden
+        const updatedActiveShows = [
+          ...activeShows.filter((s: any) => s.modelId !== modelId),
+          newActiveShow,
+        ];
+        
+        await supabase
+          .from("shift_assignments")
+          .update({ active_private_shows: updatedActiveShows })
+          .eq("id", shiftState.shiftId);
+        
+        setPrivateShowStates({
+          ...privateShowStates,
+          [modelId]: { startedAt: new Date().toISOString(), totalHours: currentState.totalHours },
+        });
+        const modelName = sichereModels.find(m => m.id === modelId)?.name || "Model";
+        setMessage({
+          type: "success",
+          text: `🎭 ${modelName}: Privat-Show gestartet!`,
+        });
+        setTimeout(() => setMessage(null), 2000);
+      } catch (err: any) {
+        setMessage({
+          type: "error",
+          text: `⚠️ Fehler: ${err.message}`,
+        });
+      }
     }
   }
 
