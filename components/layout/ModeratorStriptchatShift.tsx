@@ -71,8 +71,8 @@ export default function ModeratorStriptchatShift({
   const [shiftState, setShiftState] = useState<{
     shiftId: number | null;
     startedAt: string | null;
-    selectedModel: string;
-    striptchatLifetimeStart: number | null;
+    selectedModelIds: number[];
+    selectedModelNames: string[];
   } | null>(null);
 
   const [privateShowState, setPrivateShowState] = useState<{
@@ -82,9 +82,12 @@ export default function ModeratorStriptchatShift({
 
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [striptchatLifetimeStart, setStriptchatLifetimeStart] = useState<string>("");
-  const [striptchatLifetimeEnd, setStriptchatLifetimeEnd] = useState<string>("");
-  const [selectedModel, setSelectedModel] = useState<string>(() => sichereModels[0]?.name || "");
+  
+  // Multi-Model Selection
+  const [selectedModelIds, setSelectedModelIds] = useState<number[]>([]);
+  const [modelLifetimeStarts, setModelLifetimeStarts] = useState<Record<number, string>>({});
+  const [modelLifetimeEnds, setModelLifetimeEnds] = useState<Record<number, string>>({});
+  
   const [totalPrivateShowCount, setTotalPrivateShowCount] = useState(0);
 
   // Lade laufende Schicht beim Start
@@ -114,18 +117,21 @@ export default function ModeratorStriptchatShift({
 
       if (assignments && assignments.length > 0) {
         const active = assignments[0];
-        let parsedNotes = { model: "Stripchat" };
+        let parsedNotes = { models: [] as any[] };
         try {
           if (active.notes && active.notes.startsWith("{")) {
             parsedNotes = JSON.parse(active.notes);
           }
         } catch (e) {}
 
+        const modelIds = parsedNotes.models?.map((m: any) => m.id) || [];
+        const modelNames = parsedNotes.models?.map((m: any) => m.name) || [];
+
         setShiftState({
           shiftId: active.id,
           startedAt: active.started_at,
-          selectedModel: parsedNotes.model || "Stripchat",
-          striptchatLifetimeStart: active.stripchat_lifetime_start,
+          selectedModelIds: modelIds,
+          selectedModelNames: modelNames,
         });
 
         // Lade Privat-Show-Daten
@@ -147,35 +153,54 @@ export default function ModeratorStriptchatShift({
   // SHIFT START
   // ==========================================
   async function handleStartShift() {
-    if (!selectedModel) {
+    if (selectedModelIds.length === 0) {
       setMessage({
         type: "error",
-        text: "⚠️ Bitte Model auswählen",
+        text: "⚠️ Bitte mindestens ein Model auswählen",
       });
       return;
     }
 
-    try {
-      // Lifetime-Umsatz ist optional - Standard 0
-      const lifetimeStartValue = striptchatLifetimeStart === "" ? 0 : parseFloat(striptchatLifetimeStart);
-      if (isNaN(lifetimeStartValue) || lifetimeStartValue < 0) {
+    // Kontrolliere ob für jedes Model ein Lifetime-Start eingegeben wurde
+    for (const modelId of selectedModelIds) {
+      if (!modelLifetimeStarts[modelId] || modelLifetimeStarts[modelId] === "") {
+        const modelName = sichereModels.find(m => m.id === modelId)?.name || "Model";
         setMessage({
           type: "error",
-          text: "⚠️ Bitte einen gültigen Umsatzwert eingeben",
+          text: `⚠️ Bitte Stripchat Lifetime-Umsatz für ${modelName} eingeben`,
         });
         return;
       }
+      
+      const value = parseFloat(modelLifetimeStarts[modelId]);
+      if (isNaN(value) || value < 0) {
+        setMessage({
+          type: "error",
+          text: "⚠️ Bitte gültige Umsatzwerte eingeben",
+        });
+        return;
+      }
+    }
+
+    try {
+      // Speichere ausgewählte Models mit ihren Start-Werten
+      const selectedModelsData = selectedModelIds.map(id => {
+        const model = sichereModels.find(m => m.id === id);
+        return {
+          id: id,
+          name: model?.name || "Unknown",
+          lifetime_start: parseFloat(modelLifetimeStarts[id]),
+        };
+      });
 
       const notes = JSON.stringify({
-        model: selectedModel,
-        stripchat_lifetime_start: lifetimeStartValue,
+        models: selectedModelsData,
       });
 
       const { data, error } = await supabase.from("shift_assignments").insert([
         {
           chatter_id: currentUserId,
           started_at: new Date().toISOString(),
-          stripchat_lifetime_start: lifetimeStartValue,
           notes: notes,
         },
       ]).select();
@@ -187,13 +212,17 @@ export default function ModeratorStriptchatShift({
         setShiftState({
           shiftId: newShift.id,
           startedAt: newShift.started_at,
-          selectedModel: selectedModel,
-          striptchatLifetimeStart: lifetimeStartValue,
+          selectedModelIds: selectedModelIds,
+          selectedModelNames: selectedModelIds.map(id => sichereModels.find(m => m.id === id)?.name || ""),
         });
-        setStriptchatLifetimeStart("");
+        
+        // Reset inputs
+        setModelLifetimeStarts({});
+        setSelectedModelIds([]);
+        
         setMessage({
           type: "success",
-          text: "✅ Schicht gestartet! Stripchat Lifetime-Umsatz erfasst.",
+          text: `✅ Schicht gestartet mit ${selectedModelIds.length} Model(s)!`,
         });
         setTimeout(() => setMessage(null), 3000);
       }
@@ -288,79 +317,79 @@ export default function ModeratorStriptchatShift({
   // SHIFT END
   // ==========================================
   async function handleEndShift() {
-    if (!shiftState || striptchatLifetimeEnd === "") {
-      setMessage({
-        type: "error",
-        text: "⚠️ Bitte den Stripchat Lifetime-Umsatz nach Schichtende angeben",
-      });
-      return;
-    }
+    if (!shiftState) return;
 
-    try {
-      const lifetimeEndValue = parseFloat(striptchatLifetimeEnd);
-      const lifetimeStartValue = shiftState.striptchatLifetimeStart || 0;
-
-      if (isNaN(lifetimeEndValue) || lifetimeEndValue < 0) {
+    // Kontrolliere ob für jedes Model ein Lifetime-End eingegeben wurde
+    for (const modelId of shiftState.selectedModelIds) {
+      if (!modelLifetimeEnds[modelId] || modelLifetimeEnds[modelId] === "") {
+        const modelName = shiftState.selectedModelNames[shiftState.selectedModelIds.indexOf(modelId)];
         setMessage({
           type: "error",
-          text: "⚠️ Bitte einen gültigen Umsatzwert eingeben",
+          text: `⚠️ Bitte Stripchat Lifetime-Umsatz nach Schichtende für ${modelName} eingeben`,
         });
         return;
       }
-
-      const revenueDifference = lifetimeEndValue - lifetimeStartValue;
-
-      // Hole Model-ID
-      let modelId: string | null = null;
-      const { data: models } = await supabase
-        .from("models")
-        .select("id")
-        .eq("name", shiftState.selectedModel);
-
-      if (models && models.length > 0) {
-        modelId = models[0].id;
+      
+      const value = parseFloat(modelLifetimeEnds[modelId]);
+      if (isNaN(value) || value < 0) {
+        setMessage({
+          type: "error",
+          text: "⚠️ Bitte gültige Umsatzwerte eingeben",
+        });
+        return;
       }
+    }
 
+    try {
       // Beende Shift
       const { error: endError } = await supabase
         .from("shift_assignments")
         .update({
           ended_at: new Date().toISOString(),
-          stripchat_lifetime_end: lifetimeEndValue,
         })
         .eq("id", shiftState.shiftId);
 
       if (endError) throw endError;
 
-      // Erstelle Umsatz-Eintrag wenn Differenz > 0
-      if (revenueDifference > 0) {
-        const gross = revenueDifference;
-        const net = gross * 0.8; // 80% nach Plattformgebühr
+      // Erstelle Revenue-Einträge für JEDES ausgewählte Model
+      let totalRevenue = 0;
+      for (const modelId of shiftState.selectedModelIds) {
+        const lifetimeStart = parseFloat(
+          Object.values(modelLifetimeStarts).find(() => true) || "0"
+        ); // Hole aus Shift-State
+        const lifetimeEnd = parseFloat(modelLifetimeEnds[modelId]);
+        const revenueDifference = lifetimeEnd - lifetimeStart;
+        totalRevenue += revenueDifference;
 
-        const { error: revenueError } = await supabase
-          .from("chatter_revenues")
-          .insert([
-            {
-              user_id: currentUserId,
-              model_id: modelId,
-              gross_amount: gross,
-              amount: net,
-              platform: "stripchat",
-              created_at: new Date().toISOString(),
-            },
-          ]);
+        if (revenueDifference > 0) {
+          const gross = revenueDifference;
+          const net = gross * 0.8; // 80% nach Plattformgebühr
 
-        if (revenueError) {
-          console.error("Revenue insert error:", revenueError);
+          const { error: revenueError } = await supabase
+            .from("chatter_revenues")
+            .insert([
+              {
+                user_id: currentUserId,
+                model_id: modelId,
+                gross_amount: gross,
+                amount: net,
+                platform: "stripchat",
+                created_at: new Date().toISOString(),
+              },
+            ]);
+
+          if (revenueError) {
+            console.error("Revenue insert error:", revenueError);
+          }
         }
       }
 
       setShiftState(null);
       setPrivateShowState({ startedAt: null, totalHours: 0 });
-      setStriptchatLifetimeEnd("");
+      setModelLifetimeEnds({});
       setMessage({
         type: "success",
-        text: `✅ Schicht beendet! Umsatz: $${revenueDifference.toFixed(2)}`,
+        text: `✅ Schicht beendet! Umsatz: $${totalRevenue.toFixed(2)} über ${shiftState.selectedModelIds.length} Model(s)`,
       });
 
       router.refresh();
@@ -385,7 +414,7 @@ export default function ModeratorStriptchatShift({
   }
 
   if (!shiftState) {
-    // SHIFT NOT ACTIVE
+    // SHIFT NOT ACTIVE - Model Selection mit Checkboxes
     return (
       <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg space-y-4">
         <h2 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider">
@@ -393,36 +422,68 @@ export default function ModeratorStriptchatShift({
         </h2>
 
         <div className="space-y-3">
+          {/* Model Selection mit Checkboxes */}
           <div>
-            <label className="block text-xs font-semibold text-[#D4AF37] mb-1">
-              Model auswählen
+            <label className="block text-xs font-semibold text-[#D4AF37] mb-2">
+              Models auswählen (mehrere möglich)
             </label>
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="w-full px-3 py-2 bg-[#050505] border border-[#AA7C11]/30 rounded text-white text-sm focus:border-[#D4AF37] outline-none"
-            >
-              {sichereModels.map((m) => (
-                <option key={m.id} value={m.name}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+            <div className="bg-[#050505] border border-[#AA7C11]/30 rounded p-3 space-y-2">
+              {sichereModels.length > 0 ? (
+                sichereModels.map((model) => (
+                  <label key={model.id} className="flex items-center gap-2 cursor-pointer hover:bg-[#1a1a1a] p-2 rounded transition">
+                    <input
+                      type="checkbox"
+                      checked={selectedModelIds.includes(model.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedModelIds([...selectedModelIds, model.id]);
+                        } else {
+                          setSelectedModelIds(selectedModelIds.filter(id => id !== model.id));
+                          const newStarts = { ...modelLifetimeStarts };
+                          delete newStarts[model.id];
+                          setModelLifetimeStarts(newStarts);
+                        }
+                      }}
+                      className="w-4 h-4 accent-[#D4AF37] cursor-pointer"
+                    />
+                    <span className="text-white text-sm">{model.name}</span>
+                  </label>
+                ))
+              ) : (
+                <div className="text-slate-400 text-xs">Keine Stripchat-Models verfügbar</div>
+              )}
+            </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-[#D4AF37] mb-1">
-              Aktueller Stripchat Lifetime-Umsatz vor Schichtbeginn ($) - Optional
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={striptchatLifetimeStart}
-              onChange={(e) => setStriptchatLifetimeStart(e.target.value)}
-              placeholder="z.B. 1250.50"
-              className="w-full px-3 py-2 bg-[#050505] border border-[#AA7C11]/30 rounded text-white text-sm focus:border-[#D4AF37] outline-none"
-            />
-          </div>
+          {/* Lifetime-Start Inputs für ausgewählte Models */}
+          {selectedModelIds.length > 0 && (
+            <div className="space-y-2 border-t border-[#AA7C11]/20 pt-3">
+              <label className="block text-xs font-semibold text-[#D4AF37] mb-1">
+                Stripchat Lifetime-Umsatz VOR Schichtbeginn ($)
+              </label>
+              {selectedModelIds.map((modelId) => {
+                const model = sichereModels.find(m => m.id === modelId);
+                return (
+                  <div key={modelId} className="flex items-center gap-2">
+                    <span className="text-white text-xs min-w-20">{model?.name}:</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={modelLifetimeStarts[modelId] || ""}
+                      onChange={(e) =>
+                        setModelLifetimeStarts({
+                          ...modelLifetimeStarts,
+                          [modelId]: e.target.value,
+                        })
+                      }
+                      placeholder="z.B. 1250.50"
+                      className="flex-1 px-3 py-1.5 bg-[#050505] border border-[#AA7C11]/30 rounded text-white text-xs focus:border-[#D4AF37] outline-none"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <button
             onClick={handleStartShift}
@@ -452,7 +513,7 @@ export default function ModeratorStriptchatShift({
     <section className="bg-black/40 p-6 rounded-xl border border-emerald-500/30 shadow-lg space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold text-emerald-400 uppercase tracking-wider">
-          🟢 Schicht aktiv - {shiftState.selectedModel}
+          🟢 Schicht aktiv - {shiftState.selectedModelNames.join(", ")}
         </h2>
         <LiveTimer startedAt={shiftState.startedAt!} />
       </div>
@@ -537,19 +598,33 @@ export default function ModeratorStriptchatShift({
         </button>
       </div>
 
-      {/* Shift End Section */}
+      {/* Shift End Section - Pro Model ein Input-Feld */}
       <div className="space-y-3 border-t border-[#AA7C11]/10 pt-4">
         <label className="block text-xs font-semibold text-[#D4AF37]">
-          Aktueller Stripchat Lifetime-Umsatz nach Schichtende ($)
+          Stripchat Lifetime-Umsatz NACH Schichtende ($) - Pro Model
         </label>
-        <input
-          type="number"
-          step="0.01"
-          value={striptchatLifetimeEnd}
-          onChange={(e) => setStriptchatLifetimeEnd(e.target.value)}
-          placeholder="z.B. 1350.75"
-          className="w-full px-3 py-2 bg-[#050505] border border-[#AA7C11]/30 rounded text-white text-sm focus:border-[#D4AF37] outline-none"
-        />
+        
+        {shiftState.selectedModelIds.map((modelId, idx) => {
+          const modelName = shiftState.selectedModelNames[idx];
+          return (
+            <div key={modelId} className="flex items-center gap-2">
+              <span className="text-white text-xs min-w-24 font-semibold">{modelName}:</span>
+              <input
+                type="number"
+                step="0.01"
+                value={modelLifetimeEnds[modelId] || ""}
+                onChange={(e) =>
+                  setModelLifetimeEnds({
+                    ...modelLifetimeEnds,
+                    [modelId]: e.target.value,
+                  })
+                }
+                placeholder="z.B. 1350.75"
+                className="flex-1 px-3 py-2 bg-[#050505] border border-[#AA7C11]/30 rounded text-white text-sm focus:border-[#D4AF37] outline-none"
+              />
+            </div>
+          );
+        })}
 
         <button
           onClick={handleEndShift}
