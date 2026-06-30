@@ -75,10 +75,8 @@ export default function ModeratorStriptchatShift({
     selectedModelNames: string[];
   } | null>(null);
 
-  const [privateShowState, setPrivateShowState] = useState<{
-    startedAt: string | null;
-    totalHours: number;
-  }>({ startedAt: null, totalHours: 0 });
+  // Per-Model Private Show Tracking
+  const [privateShowStates, setPrivateShowStates] = useState<Record<number, { startedAt: string | null; totalHours: number }>>({});
 
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -134,13 +132,16 @@ export default function ModeratorStriptchatShift({
           selectedModelNames: modelNames,
         });
 
-        // Lade Privat-Show-Daten
-        if (active.privateshow_total_hours) {
-          setPrivateShowState({
-            startedAt: null,
-            totalHours: active.privateshow_total_hours,
-          });
+        // Lade Privat-Show-Daten - initialisiere für jedes Model
+        const newStates: Record<number, { startedAt: string | null; totalHours: number }> = {};
+        modelIds.forEach((id: number) => {
+          newStates[id] = { startedAt: null, totalHours: 0 };
+        });
+        if (active.privateshow_total_hours && modelIds.length > 0) {
+          // Verteile totalHours gleichmäßig (oder besser: speichere pro Model)
+          newStates[modelIds[0]].totalHours = active.privateshow_total_hours;
         }
+        setPrivateShowStates(newStates);
       }
       setLoading(false);
     } catch (err) {
@@ -237,12 +238,14 @@ export default function ModeratorStriptchatShift({
   // ==========================================
   // PRIVATE SHOW START/END
   // ==========================================
-  async function handleTogglePrivateShow() {
+  async function handleTogglePrivateShow(modelId: number) {
     if (!shiftState) return;
 
-    if (privateShowState.startedAt) {
+    const currentState = privateShowStates[modelId] || { startedAt: null, totalHours: 0 };
+
+    if (currentState.startedAt) {
       // END private show
-      const start = new Date(privateShowState.startedAt).getTime();
+      const start = new Date(currentState.startedAt).getTime();
       const end = Date.now();
       const durationMs = end - start;
       const durationMinutes = durationMs / (1000 * 60);
@@ -250,7 +253,7 @@ export default function ModeratorStriptchatShift({
       
       // 🎯 5 MINUTEN REGEL: Show muss mindestens 5 Min sein um zu zählen
       const countsForPremium = durationMinutes >= 5;
-      const newTotal = privateShowState.totalHours + hours;
+      const newTotal = currentState.totalHours + hours;
 
       try {
         // 🔄 Aktualisiere shift_assignments mit neuen Werten
@@ -276,20 +279,21 @@ export default function ModeratorStriptchatShift({
 
         if (error) throw error;
 
-        setPrivateShowState({
-          startedAt: null,
-          totalHours: newTotal,
+        const modelName = sichereModels.find(m => m.id === modelId)?.name || "Model";
+        setPrivateShowStates({
+          ...privateShowStates,
+          [modelId]: { startedAt: null, totalHours: newTotal },
         });
 
         if (countsForPremium) {
           setMessage({
             type: "success",
-            text: `✅ Privat-Show gezählt! +${hours.toFixed(2)}h (${durationMinutes.toFixed(0)} min) | Total: ${newTotal.toFixed(2)}h`,
+            text: `✅ ${modelName}: Privat-Show gezählt! +${hours.toFixed(2)}h | Total: ${newTotal.toFixed(2)}h`,
           });
         } else {
           setMessage({
             type: "success",
-            text: `⏱️ Show war nur ${durationMinutes.toFixed(0)} min - zu kurz! Mindestens 5 Min erforderlich.`,
+            text: `⏱️ ${modelName}: Show war nur ${durationMinutes.toFixed(0)} min - zu kurz!`,
           });
         }
         setTimeout(() => setMessage(null), 3000);
@@ -301,13 +305,14 @@ export default function ModeratorStriptchatShift({
       }
     } else {
       // START private show
-      setPrivateShowState({
-        startedAt: new Date().toISOString(),
-        totalHours: privateShowState.totalHours,
+      setPrivateShowStates({
+        ...privateShowStates,
+        [modelId]: { startedAt: new Date().toISOString(), totalHours: currentState.totalHours },
       });
+      const modelName = sichereModels.find(m => m.id === modelId)?.name || "Model";
       setMessage({
         type: "success",
-        text: "🎭 Privat-Show gestartet!",
+        text: `🎭 ${modelName}: Privat-Show gestartet!`,
       });
       setTimeout(() => setMessage(null), 2000);
     }
@@ -385,7 +390,7 @@ export default function ModeratorStriptchatShift({
       }
 
       setShiftState(null);
-      setPrivateShowState({ startedAt: null, totalHours: 0 });
+      setPrivateShowStates({});
       setModelLifetimeEnds({});
       setMessage({
         type: "success",
@@ -518,27 +523,44 @@ export default function ModeratorStriptchatShift({
         <LiveTimer startedAt={shiftState.startedAt!} />
       </div>
 
-      {/* Private Show Section */}
-      <div className="bg-purple-950/20 border border-purple-500/20 rounded p-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-purple-300">
-            Privat-Shows: {privateShowState.totalHours.toFixed(2)}h
-          </span>
-          {privateShowState.startedAt && (
-            <PrivateShowTimer startedAt={privateShowState.startedAt} />
-          )}
+      {/* Private Show Section - Pro Model ein separater Timer */}
+      <div className="space-y-3 border-t border-[#AA7C11]/10 pt-4">
+        <label className="block text-xs font-semibold text-[#D4AF37]">
+          🎭 Privat-Shows - Pro Model
+        </label>
+        
+        <div className={`grid gap-3 ${shiftState.selectedModelIds.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+          {shiftState.selectedModelIds.map((modelId, idx) => {
+            const modelName = shiftState.selectedModelNames[idx];
+            const showState = privateShowStates[modelId] || { startedAt: null, totalHours: 0 };
+            
+            return (
+              <div key={modelId} className="bg-purple-600/10 border border-purple-500/20 rounded p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-purple-300">{modelName}</span>
+                  {showState.startedAt && (
+                    <PrivateShowTimer startedAt={showState.startedAt} />
+                  )}
+                </div>
+                
+                <div className="text-[11px] text-slate-400">
+                  Total: <span className="text-purple-400 font-bold">{showState.totalHours.toFixed(2)}h</span>
+                </div>
+                
+                <button
+                  onClick={() => handleTogglePrivateShow(modelId)}
+                  className={`w-full font-bold py-2 rounded text-xs transition cursor-pointer ${
+                    showState.startedAt
+                      ? "bg-red-600 hover:bg-red-700 text-white"
+                      : "bg-purple-600 hover:bg-purple-700 text-white"
+                  }`}
+                >
+                  {showState.startedAt ? "🎭 Beenden" : "🎭 Starten"}
+                </button>
+              </div>
+            );
+          })}
         </div>
-
-        <button
-          onClick={handleTogglePrivateShow}
-          className={`w-full font-bold py-2 rounded text-sm transition cursor-pointer ${
-            privateShowState.startedAt
-              ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-purple-600 hover:bg-purple-700 text-white"
-          }`}
-        >
-          {privateShowState.startedAt ? "🎭 Privat-Show beenden" : "🎭 Privat-Show starten"}
-        </button>
       </div>
 
       {/* Shift End Section - Pro Model ein Input-Feld */}
