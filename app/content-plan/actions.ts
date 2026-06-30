@@ -11,7 +11,8 @@ export async function getModels() {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("models")
-      .select("id, name")
+      .select("id, name, platform_type")
+      .in("platform_type", ["onlyfans", "both"])
       .order("name", { ascending: true });
     
     if (error) {
