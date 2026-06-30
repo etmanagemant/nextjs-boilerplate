@@ -91,7 +91,8 @@ export default function ChatterPage() {
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       if (data?.user) {
-        setCurrentUserEmail(data.user.email || "");, role").eq("user_id", data.user.id).maybeSingle();
+        setCurrentUserEmail(data.user.email || "");
+        const { data: prof } = await supabase.from("profiles").select("full_name, role").eq("user_id", data.user.id).maybeSingle();
         if (prof?.full_name) setCurrentUserFullName(prof.full_name);
         if (prof?.role) setCurrentUserRole(prof.role);
         
@@ -100,8 +101,6 @@ export default function ChatterPage() {
           const { data: models } = await supabase.from("models").select("id, name");
           if (models) setSichereModels(models);
         }
-        const { data: prof } = await supabase.from("profiles").select("full_name").eq("user_id", data.user.id).maybeSingle();
-        if (prof?.full_name) setCurrentUserFullName(prof.full_name);
       }
     });
   }, [supabase]);
