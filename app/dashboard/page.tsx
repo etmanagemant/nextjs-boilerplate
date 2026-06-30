@@ -118,7 +118,9 @@ export default function DashboardPage() {
       revenues.forEach((r: any) => {
         const zielId = r.user_id || r.chatter_id;
         
-        if (zielId === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" && adminCheck) {
+        // 🔴 NUR unzugeordnete Tips anzeigen (assigned_to_chatter = false)
+        // So können Admins die auch als Chatter arbeiten, ihre eigenen Revenues behalten
+        if (zielId === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" && adminCheck && r.assigned_to_chatter === false) {
           const modelName = models.find(m => m.id === r.model_id)?.name || "Unbekanntes Model";
           unassignedList.push({ ...r, modelName });
         }
@@ -209,7 +211,12 @@ export default function DashboardPage() {
 
     const { error } = await supabase
       .from("chatter_revenues")
-      .update({ user_id: targetChatterId, amount: nettoBetrag, gross_amount: bruttoBetrag })
+      .update({ 
+        user_id: targetChatterId, 
+        amount: nettoBetrag, 
+        gross_amount: bruttoBetrag,
+        assigned_to_chatter: true
+      })
       .eq("id", revenueId);
 
     if (!error) { ladeLiveDaten(); }

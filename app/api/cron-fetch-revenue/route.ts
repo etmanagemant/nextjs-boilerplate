@@ -89,12 +89,16 @@ export async function GET(request: Request) {
       const differenz = data.heuteUmsatz - bereitsVerbucht;
 
       if (differenz > 0.01) {
+        // 🔴 Wenn der Tip zur Admin-Auffangkorb-ID geht, markiere ihn als unzugeordnet
+        const isAdminAuffangkorb = zielUserId === '35498c92-2c4d-4720-a6f7-cc187a4c5fc4';
+        
         await supabase.from("chatter_revenues").insert([
           {
             user_id: zielUserId,
             model_id: modelId,
             gross_amount: differenz,
             amount: differenz * 0.8,
+            assigned_to_chatter: !isAdminAuffangkorb,  // false wenn Admin-Auffangkorb, true sonst
             created_at: new Date().toISOString()
           }
         ]);

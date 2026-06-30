@@ -427,6 +427,7 @@ export default function ModeratorStriptchatShift({
                 gross_amount: gross,
                 amount: net,
                 platform: "stripchat",
+                assigned_to_chatter: true,
                 created_at: new Date().toISOString(),
               },
             ]);
