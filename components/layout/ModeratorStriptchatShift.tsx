@@ -518,63 +518,6 @@ export default function ModeratorStriptchatShift({
         <LiveTimer startedAt={shiftState.startedAt!} />
       </div>
 
-      {/* 🎁 PRÄMIEN-FORTSCHRITT */}
-      <div className="grid grid-cols-3 gap-2">
-        {/* 15 Shows = 30€ */}
-        <div className={`p-3 rounded border transition ${
-          totalPrivateShowCount >= 15
-            ? "bg-emerald-600/30 border-emerald-500/50"
-            : "bg-slate-900/30 border-slate-700/30"
-        }`}>
-          <div className="text-xs font-bold text-emerald-400 mb-1">15 Shows</div>
-          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
-            <div
-              className={`h-full transition-all ${totalPrivateShowCount >= 15 ? "bg-emerald-500" : "bg-slate-600"}`}
-              style={{ width: `${Math.min(100, (totalPrivateShowCount / 15) * 100)}%` }}
-            />
-          </div>
-          <div className="text-xs text-slate-400">{totalPrivateShowCount}/15</div>
-          <div className="text-[10px] font-bold text-emerald-400 mt-1">💰 30€</div>
-          {totalPrivateShowCount >= 15 && <div className="text-[10px] font-bold text-emerald-400">✅ FREIGESCHALTEN!</div>}
-        </div>
-
-        {/* 20 Shows = 50€ */}
-        <div className={`p-3 rounded border transition ${
-          totalPrivateShowCount >= 20
-            ? "bg-blue-600/30 border-blue-500/50"
-            : "bg-slate-900/30 border-slate-700/30"
-        }`}>
-          <div className="text-xs font-bold text-blue-400 mb-1">20 Shows</div>
-          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
-            <div
-              className={`h-full transition-all ${totalPrivateShowCount >= 20 ? "bg-blue-500" : "bg-slate-600"}`}
-              style={{ width: `${Math.min(100, (totalPrivateShowCount / 20) * 100)}%` }}
-            />
-          </div>
-          <div className="text-xs text-slate-400">{totalPrivateShowCount}/20</div>
-          <div className="text-[10px] font-bold text-blue-400 mt-1">💰 50€</div>
-          {totalPrivateShowCount >= 20 && <div className="text-[10px] font-bold text-blue-400">✅ FREIGESCHALTEN!</div>}
-        </div>
-
-        {/* 25 Shows = 70€ */}
-        <div className={`p-3 rounded border transition ${
-          totalPrivateShowCount >= 25
-            ? "bg-purple-600/30 border-purple-500/50"
-            : "bg-slate-900/30 border-slate-700/30"
-        }`}>
-          <div className="text-xs font-bold text-purple-400 mb-1">25 Shows</div>
-          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
-            <div
-              className={`h-full transition-all ${totalPrivateShowCount >= 25 ? "bg-purple-500" : "bg-slate-600"}`}
-              style={{ width: `${Math.min(100, (totalPrivateShowCount / 25) * 100)}%` }}
-            />
-          </div>
-          <div className="text-xs text-slate-400">{totalPrivateShowCount}/25</div>
-          <div className="text-[10px] font-bold text-purple-400 mt-1">💰 70€ 🏆</div>
-          {totalPrivateShowCount >= 25 && <div className="text-[10px] font-bold text-purple-400">✅ FREIGESCHALTEN!</div>}
-        </div>
-      </div>
-
       {/* Private Show Section */}
       <div className="bg-purple-950/20 border border-purple-500/20 rounded p-4 space-y-2">
         <div className="flex items-center justify-between">
@@ -632,6 +575,66 @@ export default function ModeratorStriptchatShift({
         >
           ⏹️ Schicht beenden
         </button>
+      </div>
+
+      {/* 🎁 PRÄMIEN-FORTSCHRITT */}
+      <div className="border-t border-[#AA7C11]/10 pt-4">
+        <h3 className="text-xs font-bold text-[#D4AF37] uppercase tracking-wider mb-3">🎁 Dein Prämien-Fortschritt</h3>
+        <div className="grid grid-cols-3 gap-2">
+          {/* 15 Shows = 30€ */}
+          <div className={`p-3 rounded border transition ${
+            totalPrivateShowCount >= 15
+              ? "bg-emerald-600/30 border-emerald-500/50"
+              : "bg-slate-900/30 border-slate-700/30"
+          }`}>
+            <div className="text-xs font-bold text-emerald-400 mb-1">15 Shows</div>
+            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
+              <div
+                className={`h-full transition-all ${totalPrivateShowCount >= 15 ? "bg-emerald-500" : "bg-slate-600"}`}
+                style={{ width: `${Math.min(100, (totalPrivateShowCount / 15) * 100)}%` }}
+              />
+            </div>
+            <div className="text-xs text-slate-400">{totalPrivateShowCount}/15</div>
+            <div className="text-[10px] font-bold text-emerald-400 mt-1">💰 30€</div>
+            {totalPrivateShowCount >= 15 && <div className="text-[10px] font-bold text-emerald-400">✅ FREIGESCHALTEN!</div>}
+          </div>
+
+          {/* 20 Shows = 50€ */}
+          <div className={`p-3 rounded border transition ${
+            totalPrivateShowCount >= 20
+              ? "bg-blue-600/30 border-blue-500/50"
+              : "bg-slate-900/30 border-slate-700/30"
+          }`}>
+            <div className="text-xs font-bold text-blue-400 mb-1">20 Shows</div>
+            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
+              <div
+                className={`h-full transition-all ${totalPrivateShowCount >= 20 ? "bg-blue-500" : "bg-slate-600"}`}
+                style={{ width: `${Math.min(100, (totalPrivateShowCount / 20) * 100)}%` }}
+              />
+            </div>
+            <div className="text-xs text-slate-400">{totalPrivateShowCount}/20</div>
+            <div className="text-[10px] font-bold text-blue-400 mt-1">💰 50€</div>
+            {totalPrivateShowCount >= 20 && <div className="text-[10px] font-bold text-blue-400">✅ FREIGESCHALTEN!</div>}
+          </div>
+
+          {/* 25 Shows = 70€ */}
+          <div className={`p-3 rounded border transition ${
+            totalPrivateShowCount >= 25
+              ? "bg-purple-600/30 border-purple-500/50"
+              : "bg-slate-900/30 border-slate-700/30"
+          }`}>
+            <div className="text-xs font-bold text-purple-400 mb-1">25 Shows</div>
+            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
+              <div
+                className={`h-full transition-all ${totalPrivateShowCount >= 25 ? "bg-purple-500" : "bg-slate-600"}`}
+                style={{ width: `${Math.min(100, (totalPrivateShowCount / 25) * 100)}%` }}
+              />
+            </div>
+            <div className="text-xs text-slate-400">{totalPrivateShowCount}/25</div>
+            <div className="text-[10px] font-bold text-purple-400 mt-1">💰 70€ 🏆</div>
+            {totalPrivateShowCount >= 25 && <div className="text-[10px] font-bold text-purple-400">✅ FREIGESCHALTEN!</div>}
+          </div>
+        </div>
       </div>
 
       {message && (
