@@ -244,7 +244,7 @@ export default function ChatterPage() {
       )}
 
       {/* REGULAR CHATTER MODE + ADMIN MODE - Normal Stechuhr */}
-      {(currentUserRole !== "moderator" || currentUserRole === "admin") && (
+      {(currentUserRole === "chatter" || currentUserRole === "admin") && (
         <>
           <div className="bg-gradient-to-r from-[#050505] to-black border border-[#AA7C11]/20 rounded-xl p-4 mb-6">
             <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">Deine Stechuhr:</span>
