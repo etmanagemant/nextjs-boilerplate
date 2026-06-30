@@ -85,6 +85,7 @@ export default function ModeratorStriptchatShift({
   const [striptchatLifetimeStart, setStriptchatLifetimeStart] = useState<string>("");
   const [striptchatLifetimeEnd, setStriptchatLifetimeEnd] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>(sichereModels[0]?.name || "");
+  const [totalPrivateShowCount, setTotalPrivateShowCount] = useState(0);
 
   // Lade laufende Schicht beim Start
   useEffect(() => {
@@ -98,6 +99,18 @@ export default function ModeratorStriptchatShift({
         .select("*")
         .eq("chatter_id", currentUserId)
         .is("ended_at", null);
+
+      // Berechne totalPrivateShowCount für Prämien-Anzeige
+      let totalCount = 0;
+      const { data: allAssignments } = await supabase
+        .from("shift_assignments")
+        .select("privateshow_count")
+        .eq("chatter_id", currentUserId);
+      
+      if (allAssignments) {
+        totalCount = allAssignments.reduce((sum, a) => sum + (a.privateshow_count || 0), 0);
+      }
+      setTotalPrivateShowCount(totalCount);
 
       if (assignments && assignments.length > 0) {
         const active = assignments[0];
@@ -134,16 +147,17 @@ export default function ModeratorStriptchatShift({
   // SHIFT START
   // ==========================================
   async function handleStartShift() {
-    if (!selectedModel || striptchatLifetimeStart === "") {
+    if (!selectedModel) {
       setMessage({
         type: "error",
-        text: "⚠️ Bitte Model und Stripchat Lifetime-Umsatz vor Schichtbeginn angeben",
+        text: "⚠️ Bitte Model auswählen",
       });
       return;
     }
 
     try {
-      const lifetimeStartValue = parseFloat(striptchatLifetimeStart);
+      // Lifetime-Umsatz ist optional - Standard 0
+      const lifetimeStartValue = striptchatLifetimeStart === "" ? 0 : parseFloat(striptchatLifetimeStart);
       if (isNaN(lifetimeStartValue) || lifetimeStartValue < 0) {
         setMessage({
           type: "error",
@@ -222,6 +236,8 @@ export default function ModeratorStriptchatShift({
             .maybeSingle();
           
           updateData.privateshow_count = (currentShift?.privateshow_count || 0) + 1;
+          // Aktualisiere auch den lokalen Count
+          setTotalPrivateShowCount(totalPrivateShowCount + 1);
         }
         
         const { error } = await supabase
@@ -396,7 +412,7 @@ export default function ModeratorStriptchatShift({
 
           <div>
             <label className="block text-xs font-semibold text-[#D4AF37] mb-1">
-              Aktueller Stripchat Lifetime-Umsatz vor Schichtbeginn ($)
+              Aktueller Stripchat Lifetime-Umsatz vor Schichtbeginn ($) - Optional
             </label>
             <input
               type="number"
@@ -439,6 +455,63 @@ export default function ModeratorStriptchatShift({
           🟢 Schicht aktiv - {shiftState.selectedModel}
         </h2>
         <LiveTimer startedAt={shiftState.startedAt!} />
+      </div>
+
+      {/* 🎁 PRÄMIEN-FORTSCHRITT */}
+      <div className="grid grid-cols-3 gap-2">
+        {/* 15 Shows = 30€ */}
+        <div className={`p-3 rounded border transition ${
+          totalPrivateShowCount >= 15
+            ? "bg-emerald-600/30 border-emerald-500/50"
+            : "bg-slate-900/30 border-slate-700/30"
+        }`}>
+          <div className="text-xs font-bold text-emerald-400 mb-1">15 Shows</div>
+          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
+            <div
+              className={`h-full transition-all ${totalPrivateShowCount >= 15 ? "bg-emerald-500" : "bg-slate-600"}`}
+              style={{ width: `${Math.min(100, (totalPrivateShowCount / 15) * 100)}%` }}
+            />
+          </div>
+          <div className="text-xs text-slate-400">{totalPrivateShowCount}/15</div>
+          <div className="text-[10px] font-bold text-emerald-400 mt-1">💰 30€</div>
+          {totalPrivateShowCount >= 15 && <div className="text-[10px] font-bold text-emerald-400">✅ FREIGESCHALTEN!</div>}
+        </div>
+
+        {/* 20 Shows = 50€ */}
+        <div className={`p-3 rounded border transition ${
+          totalPrivateShowCount >= 20
+            ? "bg-blue-600/30 border-blue-500/50"
+            : "bg-slate-900/30 border-slate-700/30"
+        }`}>
+          <div className="text-xs font-bold text-blue-400 mb-1">20 Shows</div>
+          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
+            <div
+              className={`h-full transition-all ${totalPrivateShowCount >= 20 ? "bg-blue-500" : "bg-slate-600"}`}
+              style={{ width: `${Math.min(100, (totalPrivateShowCount / 20) * 100)}%` }}
+            />
+          </div>
+          <div className="text-xs text-slate-400">{totalPrivateShowCount}/20</div>
+          <div className="text-[10px] font-bold text-blue-400 mt-1">💰 50€</div>
+          {totalPrivateShowCount >= 20 && <div className="text-[10px] font-bold text-blue-400">✅ FREIGESCHALTEN!</div>}
+        </div>
+
+        {/* 25 Shows = 70€ */}
+        <div className={`p-3 rounded border transition ${
+          totalPrivateShowCount >= 25
+            ? "bg-purple-600/30 border-purple-500/50"
+            : "bg-slate-900/30 border-slate-700/30"
+        }`}>
+          <div className="text-xs font-bold text-purple-400 mb-1">25 Shows</div>
+          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
+            <div
+              className={`h-full transition-all ${totalPrivateShowCount >= 25 ? "bg-purple-500" : "bg-slate-600"}`}
+              style={{ width: `${Math.min(100, (totalPrivateShowCount / 25) * 100)}%` }}
+            />
+          </div>
+          <div className="text-xs text-slate-400">{totalPrivateShowCount}/25</div>
+          <div className="text-[10px] font-bold text-purple-400 mt-1">💰 70€ 🏆</div>
+          {totalPrivateShowCount >= 25 && <div className="text-[10px] font-bold text-purple-400">✅ FREIGESCHALTEN!</div>}
+        </div>
       </div>
 
       {/* Private Show Section */}
