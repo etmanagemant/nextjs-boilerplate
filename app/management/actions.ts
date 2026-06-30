@@ -60,6 +60,29 @@ export async function deleteMitarbeiter(formData: FormData) {
     revalidatePath("/management");
   }
 }
+
+// 🎯 NEUE ACTION: Aktualisiert Provision (Chatters) oder Stundenhonorar (Moderatoren)
+export async function updateMitarbeiterCompensation(formData: FormData) {
+  const userId = formData.get("user_id") as string;
+  const role = formData.get("role") as string;
+  const provision = formData.get("provision_rate");
+  const hourlyRate = formData.get("hourly_rate");
+  
+  if (userId) {
+    const supabaseServer = await createClient();
+    
+    if (role === "moderator" && hourlyRate) {
+      // Moderator: Speichere Stundenhonorar
+      await supabaseServer.from("profiles").update({ hourly_rate: Number(hourlyRate) }).eq("user_id", userId);
+    } else if (provision) {
+      // Chatter: Speichere Provision
+      await supabaseServer.from("profiles").update({ provision_rate: Number(provision) }).eq("user_id", userId);
+    }
+    
+    revalidatePath("/management");
+  }
+}
+
 // 🟢 CRASH-PROOF VERBINDUNG: Liefert jetzt eine reine, ungestörte JSON-Antwort an das Formular
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 

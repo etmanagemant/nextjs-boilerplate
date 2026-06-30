@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel, deleteMitarbeiter } from "./actions";
+import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel, deleteMitarbeiter, updateMitarbeiterCompensation } from "./actions";
 import { revalidatePath } from "next/cache";
 // 🟢 IMPORTE EXAKT BEIBEHALTEN
 import CreateShiftForm from "@/components/layout/CreateShiftForm"; 
@@ -25,8 +25,8 @@ export default async function ManagementPage() {
 
   if (!isAdmin) { redirect("/"); }
 
-  // 🛡️ ERWEITERTES SELECT: Zieht provision_rate mit aus der Datenbank heraus!
-  const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name, provision_rate");
+  // 🛡️ ERWEITERTES SELECT: Zieht provision_rate + hourly_rate mit aus der Datenbank heraus!
+  const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name, provision_rate, hourly_rate");
   const { data: modelsListe } = await supabase.from("models").select("id, name, platform_type").order("name", { ascending: true });
   const { data: alleSchichten } = await supabase.from("shift_assignments").select("*");
 
@@ -108,12 +108,23 @@ export default async function ManagementPage() {
                   </td>
                   <td className="p-3 text-slate-400 font-mono text-xs">{p.email || "keine E-Mail"}</td>
                   
-                  {/* 👑 NEUE SPALTE: Ermöglicht das getrennte Speichern der Chatter-Beteiligungen */}
+                  {/* 👑 NEUE SPALTE: Provision (Chatter) oder Stundenhonorar (Moderator) */}
                   <td className="p-3">
                     {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
-                      <form action={updateMitarbeiterProvision} className="flex gap-1.5 items-center">
+                      <form action={updateMitarbeiterCompensation} className="flex gap-1.5 items-center flex-wrap">
                         <input type="hidden" name="user_id" value={p.user_id} />
-                        <input type="number" name="provision_rate" defaultValue={p.provision_rate || 20} className="w-14 bg-[#050505] border border-[#AA7C11]/30 text-white rounded p-1 text-xs text-center outline-none focus:border-[#D4AF37]" />
+                        <input type="hidden" name="role" value={p.role} />
+                        {p.role === "moderator" ? (
+                          <>
+                            <input type="number" step="0.01" name="hourly_rate" defaultValue={p.hourly_rate || 0} placeholder="EUR/h" className="w-20 bg-[#050505] border border-[#AA7C11]/30 text-white rounded p-1 text-xs text-center outline-none focus:border-[#D4AF37]" />
+                            <span className="text-[10px] text-slate-500">EUR/h</span>
+                          </>
+                        ) : (
+                          <>
+                            <input type="number" step="0.1" name="provision_rate" defaultValue={p.provision_rate || 20} placeholder="20" className="w-14 bg-[#050505] border border-[#AA7C11]/30 text-white rounded p-1 text-xs text-center outline-none focus:border-[#D4AF37]" />
+                            <span className="text-[10px] text-slate-500">%</span>
+                          </>
+                        )}
                         <button type="submit" className="text-[10px] bg-emerald-600 text-white font-bold px-1.5 py-1 rounded hover:bg-emerald-700 transition cursor-pointer">✓</button>
                       </form>
                     ) : (

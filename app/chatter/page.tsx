@@ -96,9 +96,9 @@ export default function ChatterPage() {
         if (prof?.full_name) setCurrentUserFullName(prof.full_name);
         if (prof?.role) setCurrentUserRole(prof.role);
         
-        // Lade Models für Moderator
+        // Lade Models für Moderator - NUR Stripchat-Models!
         if (prof?.role === "moderator") {
-          const { data: models } = await supabase.from("models").select("id, name");
+          const { data: models } = await supabase.from("models").select("id, name").eq("platform_type", "stripchat");
           if (models) setSichereModels(models);
         }
       }

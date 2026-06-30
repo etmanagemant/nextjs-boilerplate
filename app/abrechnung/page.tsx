@@ -63,6 +63,7 @@ export default function AbrechnungPage() {
       const berechneteListe = erlaubteProfile.map(p => {
         let stunden = 0;
         let privatShowStunden = 0;
+        let privatShowCount = 0; // 🎭 NEUE METRIK für Prämien
         
         shifts.forEach((s: any) => {
           if ((s.chatter_id || s.user_id) === p.user_id && s.started_at) {
@@ -74,8 +75,23 @@ export default function AbrechnungPage() {
             if (s.privateshow_total_hours) {
               privatShowStunden += Number(s.privateshow_total_hours);
             }
+            if (s.privateshow_count) {
+              privatShowCount += Number(s.privateshow_count);
+            }
           }
         });
+
+        // 🎁 PRÄMIEN-SYSTEM für Moderatoren
+        let praemie = 0;
+        if (p.role === "moderator") {
+          if (privatShowCount >= 25) {
+            praemie = 70; // 25+ Shows = 70€
+          } else if (privatShowCount >= 20) {
+            praemie = 50; // 20+ Shows = 50€
+          } else if (privatShowCount >= 15) {
+            praemie = 30; // 15+ Shows = 30€
+          }
+        }
 
         let brutto = 0;
         let netto = 0;
@@ -98,19 +114,38 @@ export default function AbrechnungPage() {
         });
 
         const provisionsSatz = Number(p.provision_rate || 20);
+        const hourlyRate = Number(p.hourly_rate || 0);
+        
+        // 🎯 UNTERSCHIEDLICHE BERECHNUNG je nach Rolle
+        let auszahlung = 0;
+        let auszahlungStripchat = 0;
+        
+        if (p.role === "moderator") {
+          // Moderator: Stundenhonorar + Prämie
+          auszahlungStripchat = (stunden * hourlyRate) + praemie;
+        } else {
+          // Chatter: Provision (%)
+          auszahlung = netto * (provisionsSatz / 100);
+          auszahlungStripchat = striptchatNetto * (provisionsSatz / 100);
+        }
+        
         return {
           userId: p.user_id,
           name: p.full_name || "Mitarbeiter",
           email: p.email,
+          role: p.role,
           hours: stunden,
           privatShowHours: privatShowStunden,
+          privatShowCount: privatShowCount, // 🎭 Neu
+          praemie: praemie, // 🎁 Neu
           brutto: brutto,
           netto: netto,
           striptchatBrutto: striptchatBrutto,
           striptchatNetto: striptchatNetto,
           rate: provisionsSatz,
-          auszahlung: netto * (provisionsSatz / 100),
-          auszahlungStripchat: striptchatNetto * (provisionsSatz / 100)
+          hourlyRate: hourlyRate, // 💰 Neu
+          auszahlung: auszahlung,
+          auszahlungStripchat: auszahlungStripchat
         };
       });
       
@@ -202,18 +237,38 @@ export default function AbrechnungPage() {
                 <div className="text-slate-400 font-bold text-[10px] mb-1">STUNDEN</div>
                 <div className="font-mono font-bold text-[#D4AF37]">{daten.hours.toFixed(2)}h</div>
               </div>
-              <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
-                <div className="text-slate-400 font-bold text-[10px] mb-1">BRUTTO</div>
-                <div className="font-mono font-bold text-white">${daten.brutto.toFixed(2)}</div>
-              </div>
-              <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
-                <div className="text-slate-400 font-bold text-[10px] mb-1">NETTO</div>
-                <div className="font-mono font-bold text-emerald-400">${daten.netto.toFixed(2)}</div>
-              </div>
-              <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
-                <div className="text-slate-400 font-bold text-[10px] mb-1">AUSZAHLUNG</div>
-                <div className="font-mono font-bold text-[#F3E5AB]">${daten.auszahlung.toFixed(2)}</div>
-              </div>
+              
+              {daten.role === "moderator" ? (
+                <>
+                  <div className="bg-[#050505]/60 p-2 rounded border border-purple-500/20">
+                    <div className="text-slate-400 font-bold text-[10px] mb-1">💰 STUNDENHONORAR</div>
+                    <div className="font-mono font-bold text-purple-300">${(daten.hourlyRate * daten.hours).toFixed(2)}</div>
+                  </div>
+                  <div className="bg-[#050505]/60 p-2 rounded border border-pink-500/20">
+                    <div className="text-slate-400 font-bold text-[10px] mb-1">🎁 PRÄMIE</div>
+                    <div className="font-mono font-bold text-pink-300">${daten.praemie.toFixed(2)}</div>
+                  </div>
+                  <div className="bg-[#050505]/60 p-2 rounded border border-emerald-500/20">
+                    <div className="text-slate-400 font-bold text-[10px] mb-1">💵 AUSZAHLUNG</div>
+                    <div className="font-mono font-bold text-emerald-300">${daten.auszahlungStripchat.toFixed(2)}</div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+                    <div className="text-slate-400 font-bold text-[10px] mb-1">BRUTTO</div>
+                    <div className="font-mono font-bold text-white">${daten.brutto.toFixed(2)}</div>
+                  </div>
+                  <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+                    <div className="text-slate-400 font-bold text-[10px] mb-1">NETTO</div>
+                    <div className="font-mono font-bold text-emerald-400">${daten.netto.toFixed(2)}</div>
+                  </div>
+                  <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+                    <div className="text-slate-400 font-bold text-[10px] mb-1">AUSZAHLUNG ({daten.rate}%)</div>
+                    <div className="font-mono font-bold text-[#F3E5AB]">${daten.auszahlung.toFixed(2)}</div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         ))}
