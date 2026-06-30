@@ -97,8 +97,9 @@ export default function ChatterPage() {
         if (prof?.full_name) setCurrentUserFullName(prof.full_name);
         if (prof?.role) setCurrentUserRole(prof.role);
         
-        // Lade Models für Moderator - NUR Stripchat-Models!
-        if (prof?.role === "moderator") {
+        // 🔴 Lade Models für Moderator + Admin - NUR Stripchat-Models!
+        const isModeratorOrAdmin = prof?.role === "moderator" || data.user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || data.user.email === "etmanagement@gmail.com" || data.user.email === "etmanagemant@gmail.com";
+        if (isModeratorOrAdmin) {
           const { data: models } = await supabase.from("models").select("id, name").eq("platform_type", "stripchat").order("name");
           if (models && models.length > 0) setSichereModels(models);
         }
@@ -198,16 +199,16 @@ export default function ChatterPage() {
       {/* Header-Zustand */}
       <div className="flex justify-between items-center border-b border-[#AA7C11]/20 pb-4 mb-6">
         <div>
-          <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">{currentUserRole === "moderator" ? "🎭 Stripchat Stechuhr" : "Mitarbeiter Stechuhr"}</h1>
-          <p className="text-xs text-slate-400 mt-0.5">{currentUserRole === "moderator" ? "Stripchat Sessions & Umsatz-Tracking" : "Schichten erfassen und Live-Mass-Messages kopieren"}</p>
+          <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">{currentUserRole === "moderator" ? "🎭 Stripchat Stechuhr" : currentUserRole === "admin" ? "👑 Admin: Dual-Mode Stechuhr" : "Mitarbeiter Stechuhr"}</h1>
+          <p className="text-xs text-slate-400 mt-0.5">{currentUserRole === "moderator" ? "Stripchat Sessions & Umsatz-Tracking" : currentUserRole === "admin" ? "OnlyFans + Stripchat Stechuhr-Systeme" : "Schichten erfassen und Live-Mass-Messages kopieren"}</p>
         </div>
         <form action="/api/logout" method="POST">
           <button type="submit" className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg hover:bg-red-500/20 transition font-bold cursor-pointer">Abmelden</button>
         </form>
       </div>
 
-      {/* MODERATOR MODE - Stripchat Schicht */}
-      {currentUserRole === "moderator" && (
+      {/* MODERATOR + ADMIN MODE - Stripchat Schicht */}
+      {(currentUserRole === "moderator" || currentUserRole === "admin") && (
         <>
           <ModeratorStriptchatShift
             currentUserId={currentUserId}
@@ -242,8 +243,8 @@ export default function ChatterPage() {
         </>
       )}
 
-      {/* REGULAR CHATTER MODE - Normal Stechuhr */}
-      {currentUserRole !== "moderator" && (
+      {/* REGULAR CHATTER MODE + ADMIN MODE - Normal Stechuhr */}
+      {(currentUserRole !== "moderator" || currentUserRole === "admin") && (
         <>
           <div className="bg-gradient-to-r from-[#050505] to-black border border-[#AA7C11]/20 rounded-xl p-4 mb-6">
             <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">Deine Stechuhr:</span>
