@@ -16,8 +16,9 @@ export default function RoleSelect({ userId, defaultRole, onUpdateAction }: Role
         onChange={(e) => e.target.form?.requestSubmit()} // 🟢 Hier absolut sicher und erlaubt!
         className="w-full px-2 py-1 rounded border text-xs font-semibold bg-slate-900 text-white border-slate-700 cursor-pointer"
       >
-        <option value="chatter">Chatter</option>
-        <option value="admin">Admin</option>
+        <option value="chatter">🎬 Chatter</option>
+        <option value="moderator">🎭 Moderator (Stripchat)</option>
+        <option value="admin">👑 Admin</option>
       </select>
     </form>
   );

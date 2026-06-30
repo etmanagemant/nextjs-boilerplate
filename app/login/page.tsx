@@ -19,8 +19,26 @@ export default function LoginPage() {
     setSuccessMsg(null);
 
     if (isRegister) {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) { setErrorMsg(error.message); setLoading(false); return; }
+      
+      // 🟢 Erstelle automatisch ein Profile für den neuen Benutzer
+      if (data?.user?.id) {
+        const { error: profileError } = await supabase.from("profiles").insert([
+          {
+            user_id: data.user.id,
+            email: email,
+            full_name: "",
+            role: "chatter",
+            provision_rate: 20
+          }
+        ]);
+        if (profileError) {
+          console.error("Profile creation error:", profileError);
+          // Nicht als Fehler anzeigen - Auth war erfolgreich
+        }
+      }
+      
       setSuccessMsg("Erfolgreich! Du kannst dich jetzt einloggen.");
       setIsRegister(false);
       setLoading(false);
