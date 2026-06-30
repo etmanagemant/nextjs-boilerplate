@@ -191,6 +191,7 @@ export default function ChatterPage() {
     setCopiedShiftId(id);
     setTimeout(() => setCopiedShiftId(null), 2000);
   }
+
   return (
     <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
       {/* Header-Zustand */}
@@ -242,62 +243,91 @@ export default function ChatterPage() {
 
       {/* REGULAR CHATTER MODE - Normal Stechuhr */}
       {currentUserRole !== "moderator" && (
-          <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">Deine Stechuhr:</span>
-          <button onClick={triggerGlobalStart} disabled={!!activeShift} className="rounded-lg bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer">Start Schicht</button>
-          <button onClick={triggerGlobalEnd} disabled={!activeShift} className="rounded-lg bg-gradient-to-b from-red-400 to-red-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer">Ende Schicht</button>
-        </div>
-        
-        {activeShift && activeShift.started_at && (
-          <div className="flex items-center gap-4 bg-emerald-500/5 border border-emerald-500/20 px-4 py-1.5 rounded-xl">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">Aktiv:</span>
-              <span className="text-xs text-[#D4AF37] font-black uppercase tracking-wide">{aktiveLiveModels.join(", ")}</span>
-            </div>
-            <LiveTimer startedAt={activeShift.started_at} />
+        <>
+          <div className="bg-gradient-to-r from-[#050505] to-black border border-[#AA7C11]/20 rounded-xl p-4 mb-6">
+            <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">Deine Stechuhr:</span>
+            <button onClick={triggerGlobalStart} disabled={!!activeShift} className="rounded-lg bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer">Start Schicht</button>
+            <button onClick={triggerGlobalEnd} disabled={!activeShift} className="rounded-lg bg-gradient-to-b from-red-400 to-red-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer ml-2">Ende Schicht</button>
           </div>
-        )}
-      </div>
-
-      <div className="mt-2 text-xs text-slate-400 mb-6 font-medium">
-        )}
-      </div>
-    </main>
-  );
-en Gesamtstunden: <span className="text-white font-bold font-mono">{totalHours.toFixed(2)} h</span>
-      </div>
-
-      {/* 📋 VORSCHAU: Geplante Schichten */}
-      <div className="mb-8">
-        <h3 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">Deine aktuellen Schicht-Zuteilungen</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {naechsteZweiSchichten.map((s) => (
-            <div key={s.id} className="bg-black/30 border border-[#AA7C11]/20 rounded-xl p-4 flex flex-col justify-between min-h-[140px] hover:border-[#D4AF37]/40 transition">
-              <div>
-                <div className="flex justify-between items-center border-b border-[#AA7C11]/10 pb-1.5 mb-2">
-                  <span className="text-xs font-black text-[#D4AF37] uppercase tracking-wide">Model: {s.model}</span>
-                  <span className="text-[10px] text-slate-400 font-semibold font-mono">{new Date(s.datum).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} | {s.von} - {s.bis} Uhr</span>
-                </div>
-                {s.nachricht ? (
-                  <p className="text-xs text-slate-300 italic line-clamp-2 bg-[#050505]/60 p-2.5 rounded border border-[#AA7C11]/5 break-words">"{s.nachricht}"</p>
-                ) : (
-                  <p className="text-xs text-slate-500 italic p-2">Keine Mass Message für diese Schicht.</p>
-                )}
+          
+          {activeShift && activeShift.started_at && (
+            <div className="flex items-center gap-4 bg-emerald-500/5 border border-emerald-500/20 px-4 py-1.5 rounded-xl mb-6">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">Aktiv:</span>
+                <span className="text-xs text-[#D4AF37] font-black uppercase tracking-wide">{aktiveLiveModels.join(", ")}</span>
               </div>
-              {s.nachricht && (
-                <button type="button" onClick={() => handleCopyMessage(s.nachricht, s.id)} className="w-full mt-3 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#AA7C11]/30 text-[#D4AF37] rounded py-1 text-xs font-bold transition cursor-pointer">
-                  {copiedShiftId === s.id ? "✓ Nachricht kopiert!" : "📋 Mass Message kopieren"}
-                </button>
+              <LiveTimer startedAt={activeShift.started_at} />
+            </div>
+          )}
+
+          <div className="mt-2 text-xs text-slate-400 mb-6 font-medium">
+            Deine Gesamtstunden: <span className="text-white font-bold font-mono">{totalHours.toFixed(2)} h</span>
+          </div>
+
+          {/* 📋 VORSCHAU: Geplante Schichten */}
+          <div className="mb-8">
+            <h3 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">Deine aktuellen Schicht-Zuteilungen</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {naechsteZweiSchichten.map((s) => (
+                <div key={s.id} className="bg-black/30 border border-[#AA7C11]/20 rounded-xl p-4 flex flex-col justify-between min-h-[140px] hover:border-[#D4AF37]/40 transition">
+                  <div>
+                    <div className="flex justify-between items-center border-b border-[#AA7C11]/10 pb-1.5 mb-2">
+                      <span className="text-xs font-black text-[#D4AF37] uppercase tracking-wide">Model: {s.model}</span>
+                      <span className="text-[10px] text-slate-400 font-semibold font-mono">{new Date(s.datum).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} | {s.von} - {s.bis} Uhr</span>
+                    </div>
+                    {s.nachricht ? (
+                      <p className="text-xs text-slate-300 italic line-clamp-2 bg-[#050505]/60 p-2.5 rounded border border-[#AA7C11]/5 break-words">"{s.nachricht}"</p>
+                    ) : (
+                      <p className="text-xs text-slate-500 italic p-2">Keine Mass Message für diese Schicht.</p>
+                    )}
+                  </div>
+                  {s.nachricht && (
+                    <button type="button" onClick={() => handleCopyMessage(s.nachricht, s.id)} className="w-full mt-3 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#AA7C11]/30 text-[#D4AF37] rounded py-1 text-xs font-bold transition cursor-pointer">
+                      {copiedShiftId === s.id ? "✓ Nachricht kopiert!" : "📋 Mass Message kopieren"}
+                    </button>
+                  )}
+                </div>
+              ))}
+              {naechsteZweiSchichten.length === 0 && (
+                <div className="col-span-2 text-xs text-slate-500 italic p-6 text-center border border-dashed border-[#AA7C11]/10 rounded-xl">Aktuell keine anstehenden Schichten geplant.</div>
               )}
             </div>
-          ))}
-          {naechsteZweiSchichten.length === 0 && (
-            <div className="col-span-2 text-xs text-slate-500 italic p-6 text-center border border-dashed border-[#AA7C11]/10 rounded-xl">Aktuell keine anstehenden Schichten geplant.</div>
-          )}
-        </div>
+          </div>
+
+          {/* 📊 SCHICHT HISTORY */}
+          <div>
+            <h3 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">📊 Deine Schicht-Historie</h3>
+            {loading ? (
+              <div className="text-xs text-slate-500 italic">Lade Daten…</div>
+            ) : (
+              <div className="space-y-3">
+                {rows.map((r) => {
+                  const hours = toDurationHours(r.started_at, r.ended_at);
+                  return (
+                    <div key={r.id} className="rounded-xl border border-[#AA7C11]/10 bg-black/20 p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-bold text-slate-200 uppercase tracking-wide">Schicht #{r.id}</div>
+                        <div className="text-xs font-bold font-mono text-[#D4AF37]">{hours.toFixed(2)} h</div>
+                      </div>
+                      <div className="mt-2 text-xs text-slate-400 font-mono">
+                        <div><span className="text-slate-500">Start:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
+                        <div><span className="text-slate-500">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </main>
+  );
+}
       </div>
 
       {err && <div className="mt-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 p-2 rounded mb-4 text-center">{err}</div>}
