@@ -92,14 +92,15 @@ export default function ChatterPage() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (data?.user) {
         setCurrentUserEmail(data.user.email || "");
+        setCurrentUserId(data.user.id);
         const { data: prof } = await supabase.from("profiles").select("full_name, role").eq("user_id", data.user.id).maybeSingle();
         if (prof?.full_name) setCurrentUserFullName(prof.full_name);
         if (prof?.role) setCurrentUserRole(prof.role);
         
         // Lade Models für Moderator - NUR Stripchat-Models!
         if (prof?.role === "moderator") {
-          const { data: models } = await supabase.from("models").select("id, name").eq("platform_type", "stripchat");
-          if (models) setSichereModels(models);
+          const { data: models } = await supabase.from("models").select("id, name").eq("platform_type", "stripchat").order("name");
+          if (models && models.length > 0) setSichereModels(models);
         }
       }
     });

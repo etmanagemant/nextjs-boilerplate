@@ -246,57 +246,6 @@ export default function DashboardPage() {
             <div className="text-xs text-blue-400 mt-1">Gesamt-Zeit</div>
           </div>
         </section>
-
-        {/* 🎁 PRÄMIEN-SYSTEM: Motivations-Display */}
-        <section className="mb-8">
-          <h2 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider mb-4">🎁 Dein Prämien-Fortschritt (Diese Schicht)</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* 15 Shows = 30€ */}
-            <div className={`rounded-xl p-5 border transition-all ${moderatorStriptchatStats.totalPrivateShowCount >= 15 ? "bg-gradient-to-br from-green-950/60 to-green-900/40 border-green-500/50 shadow-lg shadow-green-500/20" : "bg-slate-950/40 border-slate-700/30"}`}>
-              <div className="flex justify-between items-center mb-2">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-300">15 Shows = 30€</div>
-                <span className={`font-bold text-sm ${moderatorStriptchatStats.totalPrivateShowCount >= 15 ? "text-green-400" : "text-slate-500"}`}>{moderatorStriptchatStats.totalPrivateShowCount}/15</span>
-              </div>
-              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
-                <div 
-                  className={`h-full transition-all ${moderatorStriptchatStats.totalPrivateShowCount >= 15 ? "bg-gradient-to-r from-green-500 to-green-400" : "bg-slate-600"}`}
-                  style={{ width: `${Math.min((moderatorStriptchatStats.totalPrivateShowCount / 15) * 100, 100)}%` }}
-                />
-              </div>
-              <div className="text-xs text-slate-400 mt-2">{moderatorStriptchatStats.totalPrivateShowCount >= 15 ? "✅ FREIGESCHALTEN!" : `Noch ${15 - moderatorStriptchatStats.totalPrivateShowCount} Shows nötig`}</div>
-            </div>
-
-            {/* 20 Shows = 50€ */}
-            <div className={`rounded-xl p-5 border transition-all ${moderatorStriptchatStats.totalPrivateShowCount >= 20 ? "bg-gradient-to-br from-blue-950/60 to-blue-900/40 border-blue-500/50 shadow-lg shadow-blue-500/20" : "bg-slate-950/40 border-slate-700/30"}`}>
-              <div className="flex justify-between items-center mb-2">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-300">20 Shows = 50€</div>
-                <span className={`font-bold text-sm ${moderatorStriptchatStats.totalPrivateShowCount >= 20 ? "text-blue-400" : "text-slate-500"}`}>{moderatorStriptchatStats.totalPrivateShowCount}/20</span>
-              </div>
-              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
-                <div 
-                  className={`h-full transition-all ${moderatorStriptchatStats.totalPrivateShowCount >= 20 ? "bg-gradient-to-r from-blue-500 to-blue-400" : "bg-slate-600"}`}
-                  style={{ width: `${Math.min((moderatorStriptchatStats.totalPrivateShowCount / 20) * 100, 100)}%` }}
-                />
-              </div>
-              <div className="text-xs text-slate-400 mt-2">{moderatorStriptchatStats.totalPrivateShowCount >= 20 ? "✅ FREIGESCHALTEN!" : `Noch ${20 - moderatorStriptchatStats.totalPrivateShowCount} Shows nötig`}</div>
-            </div>
-
-            {/* 25 Shows = 70€ */}
-            <div className={`rounded-xl p-5 border transition-all ${moderatorStriptchatStats.totalPrivateShowCount >= 25 ? "bg-gradient-to-br from-purple-950/60 to-purple-900/40 border-purple-500/50 shadow-lg shadow-purple-500/20" : "bg-slate-950/40 border-slate-700/30"}`}>
-              <div className="flex justify-between items-center mb-2">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-300">25 Shows = 70€</div>
-                <span className={`font-bold text-sm ${moderatorStriptchatStats.totalPrivateShowCount >= 25 ? "text-purple-400" : "text-slate-500"}`}>{moderatorStriptchatStats.totalPrivateShowCount}/25</span>
-              </div>
-              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
-                <div 
-                  className={`h-full transition-all ${moderatorStriptchatStats.totalPrivateShowCount >= 25 ? "bg-gradient-to-r from-purple-500 to-purple-400" : "bg-slate-600"}`}
-                  style={{ width: `${Math.min((moderatorStriptchatStats.totalPrivateShowCount / 25) * 100, 100)}%` }}
-                />
-              </div>
-              <div className="text-xs text-slate-400 mt-2">{moderatorStriptchatStats.totalPrivateShowCount >= 25 ? "🏆 MEGA-BONUS FREIGESCHALTEN!" : `Noch ${25 - moderatorStriptchatStats.totalPrivateShowCount} Shows nötig`}</div>
-            </div>
-          </div>
-        </section>
       </main>
     );
   }

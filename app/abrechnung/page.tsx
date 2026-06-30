@@ -230,7 +230,11 @@ export default function AbrechnungPage() {
           <div key={idx} className="bg-black/40 p-5 rounded-xl border border-[#AA7C11]/10 shadow-lg">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-bold text-white">{daten.name}</h2>
-              <span className="bg-[#AA7C11]/10 border border-[#AA7C11]/30 text-[#D4AF37] text-[10px] font-mono px-2 py-0.5 rounded">{daten.rate}% Provision</span>
+              {daten.role === "moderator" ? (
+                <span className="bg-purple-600/20 border border-purple-500/30 text-purple-300 text-[10px] font-mono px-2 py-0.5 rounded">💰 EUR {daten.hourlyRate.toFixed(2)}/h</span>
+              ) : (
+                <span className="bg-[#AA7C11]/10 border border-[#AA7C11]/30 text-[#D4AF37] text-[10px] font-mono px-2 py-0.5 rounded">{daten.rate}% Provision</span>
+              )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">

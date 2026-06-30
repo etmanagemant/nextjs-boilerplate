@@ -84,7 +84,7 @@ export default function ModeratorStriptchatShift({
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [striptchatLifetimeStart, setStriptchatLifetimeStart] = useState<string>("");
   const [striptchatLifetimeEnd, setStriptchatLifetimeEnd] = useState<string>("");
-  const [selectedModel, setSelectedModel] = useState<string>(sichereModels[0]?.name || "");
+  const [selectedModel, setSelectedModel] = useState<string>(() => sichereModels[0]?.name || "");
   const [totalPrivateShowCount, setTotalPrivateShowCount] = useState(0);
 
   // Lade laufende Schicht beim Start
