@@ -7,6 +7,7 @@ export default function DashboardPage() {
   const supabase = createClient();
   const [loading, setLoading] = useState<boolean>(true);
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [currentUserRole, setCurrentUserRole] = useState<string>("chatter");
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   
   const [gesamtBruttoAgentur, setGesamtBruttoAgentur] = useState<number>(0);
@@ -18,6 +19,9 @@ export default function DashboardPage() {
   
   const [unassignedRevenues, setUnassignedRevenues] = useState<any[]>([]);
   const [selectedChatterForTransfer, setSelectedChatterForTransfer] = useState<Record<number, string>>({});
+  
+  // Moderator-specific stats
+  const [moderatorStriptchatStats, setModeratorStriptchatStats] = useState<any>(null);
 
   async function ladeLiveDaten() {
     try {
@@ -27,12 +31,18 @@ export default function DashboardPage() {
       setCurrentUserId(user.id);
       const adminCheck = user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com" || user.email === "etmanagemant@gmail.com";
       setIsAdmin(adminCheck);
+      
+      // Lade Benutzer-Role
+      const { data: userProfile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+      if (userProfile?.role) {
+        setCurrentUserRole(userProfile.role);
+      }
 
       const [profilesRes, assignmentsRes, revenueRes, modelsRes] = await Promise.all([
         supabase.from("profiles").select("user_id, full_name, email"),
         supabase.from("shift_assignments").select("*"),
         supabase.from("chatter_revenues").select("*"),
-        supabase.from("models").select("id, name")
+        supabase.from("models").select("id, name, platform_type")
       ]);
 
       const profiles = profilesRes.data || [];
@@ -40,11 +50,42 @@ export default function DashboardPage() {
       const revenues = revenueRes.data || [];
       const models = modelsRes.data || [];
 
+      // MODERATOR-SPEZIFISCH: Stripchat Stats berechnen
+      if (userProfile?.role === "moderator") {
+        let striptchatBrutto = 0;
+        let striptchatNetto = 0;
+        let totalPrivateShowHours = 0;
+        
+        // Berechne Stripchat-Umsätze nur für diesen Moderator
+        revenues.forEach((r: any) => {
+          if (r.user_id === user.id && r.platform === "stripchat") {
+            striptchatBrutto += Number(r.gross_amount || 0);
+            striptchatNetto += Number(r.amount || 0);
+          }
+        });
+        
+        // Berechne Private-Show-Stunden
+        assignments.forEach((a: any) => {
+          if (a.chatter_id === user.id && a.privateshow_total_hours) {
+            totalPrivateShowHours += Number(a.privateshow_total_hours);
+          }
+        });
+        
+        setModeratorStriptchatStats({
+          striptchatBrutto,
+          striptchatNetto,
+          totalPrivateShowHours,
+        });
+      }
+
       const statsPerUser: Record<string, { user_id: string; name: string; email: string; hours: number; brutto: number; netto: number }> = {};
       const statsPerModel: Record<string, { name: string; brutto: number; netto: number }> = {};
-
+      
+      // 🎭 NEUES MAPPING: Model-ID zu platform_type für schnelle Filterung
+      const modelPlatformMap: Record<string, string> = {};
       models.forEach(m => {
         statsPerModel[m.id] = { name: m.name || "Unbekannt", brutto: 0, netto: 0 };
+        modelPlatformMap[m.id] = m.platform_type || "onlyfans";
       });
 
       profiles.forEach(p => {
@@ -78,18 +119,38 @@ export default function DashboardPage() {
         const bruttoWert = Number(r.gross_amount || r.amount || 0);
         const nettoWert = Number(r.amount || (r.gross_amount * 0.8) || 0);
 
-        if (zielId && statsPerUser[zielId]) {
+        // 🔐 FILTERUNG NACH BENUTZER-ROLLE & REVENUE-PLATFORM
+        let shouldCountForUser = true;
+        let shouldCountForModel = true;
+
+        if (userProfile?.role === "chatter") {
+          // Chatter sieht nur OnlyFans-Umsätze
+          shouldCountForUser = r.platform !== "stripchat";
+          shouldCountForModel = r.platform !== "stripchat";
+        } else if (userProfile?.role === "moderator") {
+          // Moderator sieht nur Stripchat-Umsätze
+          shouldCountForUser = r.platform === "stripchat";
+          shouldCountForModel = r.platform === "stripchat";
+        }
+        // Admin sieht alles (shouldCountForUser und shouldCountForModel bleiben true)
+
+        if (zielId && statsPerUser[zielId] && shouldCountForUser) {
           statsPerUser[zielId].brutto += bruttoWert;
           statsPerUser[zielId].netto += nettoWert;
         }
 
-        // 👑 MODEL RANGLISTE STATS ZUORDNEN
-        if (r.model_id && statsPerModel[r.model_id]) {
+        // 👑 MODEL RANGLISTE STATS ZUORDNEN (MIT PLATFORM-FILTERUNG)
+        if (r.model_id && statsPerModel[r.model_id] && shouldCountForModel) {
           statsPerModel[r.model_id].brutto += bruttoWert;
           statsPerModel[r.model_id].netto += nettoWert;
         }
         
-        if (zielId === user.id) {
+        if (zielId === user.id && r.platform !== "stripchat") {
+          // Zähle nur NonStripchat für Moderator-Anzeige in der Chatter-Sektion
+          summeBruttoChatter += bruttoWert;
+          summeNettoChatter += nettoWert;
+        } else if (zielId === user.id && !userProfile?.role) {
+          // Für normale Chatter: alles zählen
           summeBruttoChatter += bruttoWert;
           summeNettoChatter += nettoWert;
         }
@@ -101,8 +162,27 @@ export default function DashboardPage() {
       setChatterNetto(summeNettoChatter);
       setUnassignedRevenues(unassignedList);
       
+      // 🎭 MODELL-FILTERUNG NACH PLATTFORM-TYP
+      let filteredModelStats = Object.entries(statsPerModel)
+        .filter(([modelId]) => {
+          const platformType = modelPlatformMap[modelId] || "onlyfans";
+          
+          if (isAdmin) return true; // Admin sieht alles
+          
+          if (userProfile?.role === "chatter") {
+            // Chatter sieht nur OnlyFans/Both Models
+            return platformType === "onlyfans" || platformType === "both";
+          } else if (userProfile?.role === "moderator") {
+            // Moderator sieht nur Stripchat/Both Models
+            return platformType === "stripchat" || platformType === "both";
+          }
+          return true;
+        })
+        .map(([_, stat]) => stat)
+        .sort((a: any, b: any) => b.netto - a.netto);
+      
       setUserStatsArray(Object.values(statsPerUser).sort((a: any, b: any) => b.netto - a.netto));
-      setModelStatsArray(Object.values(statsPerModel).sort((a: any, b: any) => b.netto - a.netto));
+      setModelStatsArray(filteredModelStats);
       setLoading(false);
     } catch (e) { console.error(e); }
   }
@@ -129,7 +209,45 @@ export default function DashboardPage() {
   }
 
   if (loading) return <div className="text-center pt-24 font-bold text-[#D4AF37] animate-pulse">Lade Live-Dashboard...</div>;
-  return (
+  
+  // MODERATOR-SPEZIFISCHES DASHBOARD
+  if (currentUserRole === "moderator" && moderatorStriptchatStats) {
+    return (
+      <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
+        <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
+          <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">🎭 Stripchat Dashboard</h1>
+          <p className="text-xs text-slate-400 mt-1">Deine persönlichen Stripchat-Session-Daten & Umsätze</p>
+        </div>
+
+        {/* KPI Boxen */}
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <div className="bg-gradient-to-br from-purple-950/40 to-purple-900/20 border border-purple-500/30 rounded-xl p-5 shadow-lg">
+            <div className="text-[10px] font-black text-purple-300 uppercase tracking-widest mb-2">Stripchat Brutto</div>
+            <div className="text-2xl font-black text-purple-100">${moderatorStriptchatStats.striptchatBrutto.toFixed(2)}</div>
+            <div className="text-xs text-purple-400 mt-1">Gesamt-Umsatz</div>
+          </div>
+
+          <div className="bg-gradient-to-br from-green-950/40 to-green-900/20 border border-green-500/30 rounded-xl p-5 shadow-lg">
+            <div className="text-[10px] font-black text-green-300 uppercase tracking-widest mb-2">Stripchat Netto</div>
+            <div className="text-2xl font-black text-green-100">${moderatorStriptchatStats.striptchatNetto.toFixed(2)}</div>
+            <div className="text-xs text-green-400 mt-1">Nach Plattformgebühr</div>
+          </div>
+
+          <div className="bg-gradient-to-br from-blue-950/40 to-blue-900/20 border border-blue-500/30 rounded-xl p-5 shadow-lg">
+            <div className="text-[10px] font-black text-blue-300 uppercase tracking-widest mb-2">Privat-Show Stunden</div>
+            <div className="text-2xl font-black text-blue-100">{moderatorStriptchatStats.totalPrivateShowHours.toFixed(2)}h</div>
+            <div className="text-xs text-blue-400 mt-1">Gesamt-Zeit</div>
+          </div>
+        </section>
+
+        <div className="text-xs text-slate-400 text-center p-4 bg-black/30 rounded-lg border border-[#AA7C11]/10">
+          💡 Die Stripchat-Daten werden automatisch aus deinen Schicht-Logs berechnet.
+        </div>
+      </main>
+    );
+  }
+  
+  // ADMIN DASHBOARD (Original)
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
       <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
         <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">ET Performance Dashboard</h1>

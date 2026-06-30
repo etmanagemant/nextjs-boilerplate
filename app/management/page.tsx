@@ -4,7 +4,8 @@ import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel, d
 import { revalidatePath } from "next/cache";
 // 🟢 IMPORTE EXAKT BEIBEHALTEN
 import CreateShiftForm from "@/components/layout/CreateShiftForm"; 
-import RoleSelect from "@/components/layout/RoleSelect"; 
+import RoleSelect from "@/components/layout/RoleSelect";
+import ModelPlatformSelect from "@/components/layout/ModelPlatformSelect"; 
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function ManagementPage() {
 
   // 🛡️ ERWEITERTES SELECT: Zieht provision_rate mit aus der Datenbank heraus!
   const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name, provision_rate");
-  const { data: modelsListe } = await supabase.from("models").select("id, name").order("name", { ascending: true });
+  const { data: modelsListe } = await supabase.from("models").select("id, name, platform_type").order("name", { ascending: true });
   const { data: alleSchichten } = await supabase.from("shift_assignments").select("*");
 
   const sichereProfile = profilListe || [];
@@ -149,7 +150,10 @@ export default async function ManagementPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           {sichereModels.map((model) => (
             <div key={model.id} className="flex justify-between items-center p-3 border border-[#AA7C11]/20 rounded-md bg-[#050505]/40 hover:border-[#D4AF37]/50 transition">
-              <span className="font-semibold text-white tracking-wide">{model.name}</span>
+              <div className="flex items-center gap-3 flex-1">
+                <span className="font-semibold text-white tracking-wide">{model.name}</span>
+                <ModelPlatformSelect modelId={model.id} defaultPlatform={model.platform_type || "onlyfans"} />
+              </div>
               <form action={deleteModel}>
                 <input type="hidden" name="id" value={model.id} />
                 <button type="submit" className="text-red-400 hover:text-red-300 text-sm font-bold transition cursor-pointer">Löschen</button>

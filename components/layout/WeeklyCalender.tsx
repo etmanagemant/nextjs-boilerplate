@@ -10,6 +10,7 @@ type WeeklyCalendarProps = {
   role: string;
   userEmail: string | null;
   userId: string;
+  profileMap: Map<string, string>;
 };
 
 function pad2(n: number) { return String(n).padStart(2, "0"); }
@@ -20,7 +21,7 @@ function startOfWeekMonday(date: Date) {
   d.setDate(d.getDate() - diffToMonday); return d;
 }
 
-export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userEmail, userId }: WeeklyCalendarProps) {
+export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userEmail, userId, profileMap }: WeeklyCalendarProps) {
   const router = useRouter();
   const supabase = createClient();
   const [baseWeekStart, setBaseWeekStart] = useState(() => startOfWeekMonday(new Date()));
@@ -117,7 +118,32 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
           {days.map((d) => {
             const dateKey = formatDateISO(d);
             const isToday = dateKey === formatDateISO(new Date());
-            const schichtenAnDiesemTag = sichereShifts.filter((s) => s.shift_date && s.shift_date === dateKey);
+            
+            // 🔑 KRITISCHE FILTERUNG: Schichten nach Benutzer-Rolle und zugewiesener Mitarbeiter-Rolle filtern
+            let schichtenAnDiesemTag = sichereShifts.filter((s) => s.shift_date && s.shift_date === dateKey);
+            
+            if (role !== "admin") {
+              // Extrahiere die Rolle des zugewiesenen Mitarbeiters aus den Schicht-Notizen
+              schichtenAnDiesemTag = schichtenAnDiesemTag.filter((s) => {
+                let assignedUserRole = "chatter"; // Fallback
+                try {
+                  if (s.notes && s.notes.startsWith("{")) {
+                    const parsed = JSON.parse(s.notes);
+                    // Versuche User-ID oder assigned_user_id aus den Notes zu finden
+                    // Wenn nicht vorhanden, verwende default "chatter"
+                  }
+                } catch (e) { /* parsing error, verwende fallback */ }
+                
+                // Wenn nur Benutzer-ID in der Schicht gespeichert ist (als assigned_user_id oder chatter_id)
+                if (s.chatter_id || s.user_id || s.assigned_user_id) {
+                  const assignedUserId = s.chatter_id || s.user_id || s.assigned_user_id;
+                  assignedUserRole = profileMap?.get(assignedUserId) || "chatter";
+                }
+                
+                // Benutzer sieht nur Schichten von Personen mit der gleichen Rolle
+                return assignedUserRole === role;
+              });
+            }
 
             return (
               <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[480px] ${
@@ -139,8 +165,19 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                           if (schicht.notes && schicht.notes.startsWith("{")) { parsedNotes = JSON.parse(schicht.notes); }
                           else { parsedNotes.mitarbeiter = schicht.notes || "Geplant"; }
                         } catch (e) { parsedNotes.mitarbeiter = "Geplant"; }
+                        
+                        // 🎨 OPTIONALE VISUELLE UNTERSCHEIDUNG FÜR ADMIN
+                        let shiftColorClass = "border-[#AA7C11]/20 bg-[#050505]"; // Default (Chatter - Gold)
+                        if (role === "admin") {
+                          const assignedUserId = schicht.chatter_id || schicht.user_id || schicht.assigned_user_id;
+                          const assignedUserRole = profileMap?.get(assignedUserId) || "chatter";
+                          if (assignedUserRole === "moderator") {
+                            shiftColorClass = "border-slate-500/40 bg-slate-900/30"; // Moderator - Silber/Grau
+                          }
+                        }
+                        
                         return (
-                          <div key={schicht.id} className="rounded-lg bg-[#050505] border border-[#AA7C11]/20 p-3 shadow-md relative group hover:border-[#D4AF37]/50 transition">
+                          <div key={schicht.id} className={`rounded-lg border p-3 shadow-md relative group hover:border-[#D4AF37]/50 transition ${shiftColorClass}`}>
                             {role === "admin" && editingShiftId !== schicht.id && (
                               <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button type="button" onClick={() => startEditing(schicht)} className="p-1 bg-[#D4AF37]/10 text-[#D4AF37] rounded hover:bg-[#D4AF37]/20 text-[10px] font-bold cursor-pointer">✏️</button>

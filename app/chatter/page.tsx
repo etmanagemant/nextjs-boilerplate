@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import ModeratorStriptchatShift from "@/components/layout/ModeratorStriptchatShift";
 
 type AssignmentRow = {
   id: number;
@@ -74,6 +75,8 @@ export default function ChatterPage() {
   const [currentUserFullName, setCurrentUserFullName] = useState<string>("");
   const [copiedShiftId, setCopiedShiftId] = useState<number | null>(null);
   const [jetztZeit, setJetztZeit] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState<string>("chatter");
+  const [sichereModels, setSichereModels] = useState<any[]>([]);
 
   useEffect(() => {
     const calcZeit = () => {
@@ -88,8 +91,15 @@ export default function ChatterPage() {
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       if (data?.user) {
-        setCurrentUserEmail(data.user.email || "");
-        setCurrentUserId(data.user.id);
+        setCurrentUserEmail(data.user.email || "");, role").eq("user_id", data.user.id).maybeSingle();
+        if (prof?.full_name) setCurrentUserFullName(prof.full_name);
+        if (prof?.role) setCurrentUserRole(prof.role);
+        
+        // Lade Models für Moderator
+        if (prof?.role === "moderator") {
+          const { data: models } = await supabase.from("models").select("id, name");
+          if (models) setSichereModels(models);
+        }
         const { data: prof } = await supabase.from("profiles").select("full_name").eq("user_id", data.user.id).maybeSingle();
         if (prof?.full_name) setCurrentUserFullName(prof.full_name);
       }
@@ -187,17 +197,52 @@ export default function ChatterPage() {
       {/* Header-Zustand */}
       <div className="flex justify-between items-center border-b border-[#AA7C11]/20 pb-4 mb-6">
         <div>
-          <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">Mitarbeiter Stechuhr</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Schichten erfassen und Live-Mass-Messages kopieren</p>
+          <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">{currentUserRole === "moderator" ? "🎭 Stripchat Stechuhr" : "Mitarbeiter Stechuhr"}</h1>
+          <p className="text-xs text-slate-400 mt-0.5">{currentUserRole === "moderator" ? "Stripchat Sessions & Umsatz-Tracking" : "Schichten erfassen und Live-Mass-Messages kopieren"}</p>
         </div>
         <form action="/api/logout" method="POST">
           <button type="submit" className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg hover:bg-red-500/20 transition font-bold cursor-pointer">Abmelden</button>
         </form>
       </div>
 
-      {/* Stechuhr-Kontrollzentrum */}
-      <div className="bg-black/40 border border-[#AA7C11]/10 p-4 rounded-xl mb-6 flex gap-4 items-center flex-wrap justify-between shadow-lg">
-        <div className="flex gap-2 items-center flex-wrap">
+      {/* MODERATOR MODE - Stripchat Schicht */}
+      {currentUserRole === "moderator" && (
+        <>
+          <ModeratorStriptchatShift
+            currentUserId={currentUserId}
+            currentUserFullName={currentUserFullName}
+            sichereModels={sichereModels}
+          />
+          
+          <div className="mt-8">
+            <h2 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider mb-4">📊 Deine Stripchat-Sessions</h2>
+            {loading ? (
+              <div className="text-xs text-slate-500 italic">Lade Daten…</div>
+            ) : (
+              <div className="space-y-3">
+                {rows.map((r) => {
+                  const hours = toDurationHours(r.started_at, r.ended_at);
+                  return (
+                    <div key={r.id} className="rounded-xl border border-[#AA7C11]/10 bg-black/20 p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-bold text-slate-200 uppercase tracking-wide">Session #{r.id}</div>
+                        <div className="text-xs font-bold font-mono text-[#D4AF37]">{hours.toFixed(2)} h</div>
+                      </div>
+                      <div className="mt-2 text-xs text-slate-400 font-mono">
+                        <div><span className="text-slate-500">Start:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
+                        <div><span className="text-slate-500">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* REGULAR CHATTER MODE - Normal Stechuhr */}
+      {currentUserRole !== "moderator" && (
           <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">Deine Stechuhr:</span>
           <button onClick={triggerGlobalStart} disabled={!!activeShift} className="rounded-lg bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer">Start Schicht</button>
           <button onClick={triggerGlobalEnd} disabled={!activeShift} className="rounded-lg bg-gradient-to-b from-red-400 to-red-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer">Ende Schicht</button>
@@ -219,7 +264,11 @@ export default function ChatterPage() {
       </div>
 
       <div className="mt-2 text-xs text-slate-400 mb-6 font-medium">
-        Deine erfassten Gesamtstunden: <span className="text-white font-bold font-mono">{totalHours.toFixed(2)} h</span>
+        )}
+      </div>
+    </main>
+  );
+en Gesamtstunden: <span className="text-white font-bold font-mono">{totalHours.toFixed(2)} h</span>
       </div>
 
       {/* 📋 VORSCHAU: Geplante Schichten */}

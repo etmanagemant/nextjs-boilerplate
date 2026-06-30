@@ -24,7 +24,11 @@ export default async function RootLayout({
       role = "admin";
     } else {
       const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
-      if (profile && profile.role === "admin") role = "admin";
+      if (profile && profile.role === "moderator") {
+        role = "moderator";
+      } else if (profile && profile.role === "admin") {
+        role = "admin";
+      }
     }
   }
 
@@ -46,7 +50,14 @@ export default async function RootLayout({
                 </>
               )}
 
-              {role !== "admin" && (
+              {role === "moderator" && (
+                <>
+                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
+                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</a>
+                </>
+              )}
+
+              {role !== "admin" && role !== "moderator" && (
                 <>
                   <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
                   <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</a>
@@ -61,7 +72,7 @@ export default async function RootLayout({
               </span>
             </div>
 
-            {/* RIGHT SIDE - Management, Bewerbungen, Massmessage, Plan, Buchhaltung */}
+            {/* RIGHT SIDE - Management, Bewerbungen, Massmessage, Plan, Buchhaltung (ADMIN ONLY!) */}
             <nav className="flex items-center gap-0.5 flex-nowrap z-10 flex-1 justify-end min-w-0">
               {role === "admin" && (
                 <>

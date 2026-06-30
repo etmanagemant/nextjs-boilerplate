@@ -8,7 +8,9 @@ export default function AbrechnungPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [currentUserRole, setCurrentUserRole] = useState<string>("chatter");
   const [abrechnungsDaten, setAbrechnungsDaten] = useState<any[]>([]);
+  const [moderatorStriptchatData, setModeratorStriptchatData] = useState<any>(null);
   
   const [address, setAddress] = useState("");
   const [iban, setIban] = useState("");
@@ -16,7 +18,6 @@ export default function AbrechnungPage() {
   const [cryptoWallet, setCryptoWallet] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
 
-  // Stammdaten werden beim ersten Laden unblockierbar geladen
   useEffect(() => {
     async function ladeEinmaligeStammdaten() {
       try {
@@ -26,13 +27,16 @@ export default function AbrechnungPage() {
         setCurrentUserId(user.id);
         const adminCheck = user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com";
         setIsAdmin(adminCheck);
-
-        const { data: meinProfil } = await supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
-        if (meinProfil) {
-          setAddress(meinProfil.chatter_address || "");
-          setIban(meinProfil.chatter_iban || "");
-          setCryptoNetwork(meinProfil.chatter_crypto_network || "");
-          setCryptoWallet(meinProfil.chatter_crypto_wallet || "");
+        
+        const { data: userProfile } = await supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
+        if (userProfile?.role) {
+          setCurrentUserRole(userProfile.role);
+        }
+        if (userProfile) {
+          setAddress(userProfile.chatter_address || "");
+          setIban(userProfile.chatter_iban || "");
+          setCryptoNetwork(userProfile.chatter_crypto_network || "");
+          setCryptoWallet(userProfile.chatter_crypto_wallet || "");
         }
       } catch (err) { console.error(err); }
     }
@@ -58,20 +62,38 @@ export default function AbrechnungPage() {
 
       const berechneteListe = erlaubteProfile.map(p => {
         let stunden = 0;
+        let privatShowStunden = 0;
+        
         shifts.forEach((s: any) => {
           if ((s.chatter_id || s.user_id) === p.user_id && s.started_at) {
             const von = new Date(s.started_at).getTime();
             const bis = s.ended_at ? new Date(s.ended_at).getTime() : Date.now();
-            if (bis > von) stunden += (bis - von) / (1000 * 60 * 60);
+            if (bis > von) {
+              stunden += (bis - von) / (1000 * 60 * 60);
+            }
+            if (s.privateshow_total_hours) {
+              privatShowStunden += Number(s.privateshow_total_hours);
+            }
           }
         });
 
         let brutto = 0;
         let netto = 0;
+        let striptchatBrutto = 0;
+        let striptchatNetto = 0;
+        
         revenues.forEach((r: any) => {
           if ((r.user_id || r.chatter_id) === p.user_id) {
-            brutto += Number(r.gross_amount || r.amount || 0);
-            netto += Number(r.amount || 0);
+            const bruttoWert = Number(r.gross_amount || r.amount || 0);
+            const nettoWert = Number(r.amount || 0);
+            
+            if (r.platform === "stripchat") {
+              striptchatBrutto += bruttoWert;
+              striptchatNetto += nettoWert;
+            } else {
+              brutto += bruttoWert;
+              netto += nettoWert;
+            }
           }
         });
 
@@ -81,12 +103,20 @@ export default function AbrechnungPage() {
           name: p.full_name || "Mitarbeiter",
           email: p.email,
           hours: stunden,
+          privatShowHours: privatShowStunden,
           brutto: brutto,
           netto: netto,
+          striptchatBrutto: striptchatBrutto,
+          striptchatNetto: striptchatNetto,
           rate: provisionsSatz,
-          auszahlung: netto * (provisionsSatz / 100)
+          auszahlung: netto * (provisionsSatz / 100),
+          auszahlungStripchat: striptchatNetto * (provisionsSatz / 100)
         };
       });
+      
+      if (currentUserRole === "moderator" && berechneteListe.length > 0) {
+        setModeratorStriptchatData(berechneteListe[0]);
+      }
 
       setAbrechnungsDaten(berechneteListe);
       setLoading(false);
@@ -100,6 +130,7 @@ export default function AbrechnungPage() {
       return () => clearInterval(interval);
     }
   }, [currentUserId, isAdmin]);
+
   async function handleSaveProfile() {
     setSaveStatus("Speichert...");
     const { error } = await supabase
@@ -113,167 +144,76 @@ export default function AbrechnungPage() {
       .eq("user_id", currentUserId);
 
     if (!error) {
-      setSaveStatus("Erfolgreich aktualisiert!");
+      setSaveStatus("✅ Erfolgreich gespeichert!");
       setTimeout(() => setSaveStatus(""), 2000);
     } else {
-      setSaveStatus("Fehler beim Speichern!");
+      setSaveStatus("❌ Fehler beim Speichern");
     }
   }
 
-  function druckeRechnung(daten: any) {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+  if (loading) return <div className="text-center pt-24 font-bold text-[#D4AF37] animate-pulse">Lade Abrechnungsdaten...</div>;
 
-    // 🛡️ ABSOLUT CLEAN: Wenn das Feld leer ist, wird der Zeilenblock komplett weggelassen!
-    const gedruckteAdresse = address.trim() ? `<strong>${daten.name}</strong><br>${address.replace(/\n/g, "<br>")}<br>Email: ${daten.email}` : `<strong>${daten.name}</strong><br>Email: ${daten.email}`;
-    
-    let auszahlungsHTML = "";
-    if (iban.trim()) {
-      auszahlungsHTML += `<strong>Bankverbindung (IBAN):</strong> ${iban}<br>`;
-    }
-    if (cryptoWallet.trim()) {
-      auszahlungsHTML += `<strong>Krypto-Auszahlung:</strong> Wallet: ${cryptoWallet} ${cryptoNetwork.trim() ? `(${cryptoNetwork})` : ""}`;
-    }
-
-    // Die graue Box für Auszahlungsdaten wird NUR erzeugt, wenn auch wirklich Text existiert!
-    const payoutBoxHTML = auszahlungsHTML.trim() 
-      ? `<div class="payout-details"><div class="section-title" style="border:0; margin-bottom:5px;">Hinterlegte Auszahlungsdaten</div>${auszahlungsHTML}</div>`
-      : "";
-
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Abrechnung - ${daten.name}</title>
-          <style>
-            body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #111; padding: 45px; line-height: 1.5; }
-            .header-grid { display: flex; justify-content: space-between; border-bottom: 3px solid #AA7C11; padding-bottom: 20px; margin-bottom: 30px; }
-            .title { font-size: 26px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #AA7C11; }
-            .meta { font-size: 11px; color: #555; text-align: right; font-family: monospace; }
-            .address-box { display: flex; justify-content: space-between; gap: 40px; margin-bottom: 35px; font-size: 12px; }
-            .address-col { flex: 1; }
-            .section-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #AA7C11; margin-bottom: 10px; border-bottom: 1px solid #ddd; padding-bottom: 4px; letter-spacing: 1px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
-            th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
-            th { background: #f9f9f9; font-weight: bold; color: #444; text-transform: uppercase; font-size: 10px; }
-            .total-box { background: #fffdf6; border: 1px solid #AA7C11; padding: 20px; border-radius: 6px; text-align: right; margin-top: 35px; }
-            .total-label { font-size: 11px; font-weight: bold; text-transform: uppercase; color: #666; letter-spacing: 1px; }
-            .total-amount { font-size: 24px; font-weight: 900; color: #AA7C11; font-family: monospace; margin-top: 5px; }
-            .payout-details { margin-top: 30px; background: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 6px; font-size: 12px; }
-            .footer { margin-top: 60px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
-          </style>
-        </head>
-        <body>
-          <div class="header-grid">
-            <div>
-              <div class="title">ET MANAGEMENT INVOICE</div>
-              <div style="font-size: 12px; color: #666; margin-top: 4px;">Leistungsabrechnung für Chatter-Dienstleistungen</div>
-            </div>
-            <div class="meta">
-              <strong>Rechnungs-ID:</strong> INV-${daten.userId.slice(0,8).toUpperCase()}-${new Date().getMonth() + 1}<br>
-              <strong>Datum:</strong> ${new Date().toLocaleDateString('de-DE')}<br>
-              <strong>Status:</strong> Berechnet / Auszahlungsbereit
-            </div>
-          </div>
-          <div class="address-box">
-            <div class="address-col">${gedruckteAdresse}</div>
-            <div class="address-col">
-              <div class="section-title">Rechnungsempfänger (Leistungsnehmer)</div>
-              <strong>ET Management Agency</strong><br>etmanagement@gmail.com<br>Deutschland / Europa
-            </div>
-          </div>
-          <div class="section">
-            <div class="section-title">Leistungsübersicht & Performance-Nachweis</div>
-            <table>
-              <thead>
-                <tr><th>Beschreibung der Dienstleistung</th><th>Einheiten / Umsatz</th><th>Plattform-Status</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>Geleistete Schicht-Arbeitszeit via Stechuhr</td><td><strong>${daten.hours.toFixed(2)} h</strong></td><td>Verifiziert</td></tr>
-                <tr><td>Generierter Brutto-Gesamtumsatz</td><td><strong>$${daten.brutto.toFixed(2)}</strong></td><td>Supercreator Brutto</td></tr>
-                <tr><td>Netto OnlyFans Account-Eingang (80%)</td><td><strong>$${daten.netto.toFixed(2)}</strong></td><td>Netto nach OF-Gebühr</td></tr>
-                <tr><td>Vereinbarte prozentuale Beteiligung</td><td><strong>${daten.rate}%</strong></td><td>Vertragliche Provision</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="total-box">
-            <div class="total-label">Guthaben / Rechnungsbetrag zur Auszahlung</div>
-            <div class="total-amount">$${daten.auszahlung.toFixed(2)}</div>
-          </div>
-          ${payoutBoxHTML}
-          <div class="footer">Diese Gutschrift-Abrechnung wurde vollautomatisch erstellt und ist digital gültig.</div>
-          <script>window.print();</script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  }
   return (
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
       <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
         <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">
-          {isAdmin ? "ET Agency Abrechnungs-Zentrale" : "Deine Chatter Abrechnung & Stammdaten"}
+          {isAdmin ? "💰 ET Agency Abrechnungs-Zentrale" : "Deine Abrechnung & Auszahlungsdaten"}
         </h1>
-        <p className="text-xs text-slate-400 mt-1">Verwalte deine Auszahlungsdaten und drucke deine verifizierten Abrechnungsbelege</p>
+        <p className="text-xs text-slate-400 mt-1">Übersicht deiner Einnahmen, Schichtstunden und Provisionsberechnungen</p>
       </div>
 
-      {/* 🛡️ AUTOFILL-SCHUTZ: Jedes Feld blockiert ab jetzt unblockierbar das automatische Reinfuschen des Browsers! */}
       {!isAdmin && (
         <section className="mb-8 bg-black/50 p-5 rounded-xl border border-[#AA7C11]/20 shadow-xl">
-          <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-4">📝 Deine Rechnungsanschrift & Auszahlungsdaten hinterlegen (Optional)</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-4">📝 Deine Zahlungsdaten hinterlegen</h2>
+          <div className="space-y-3">
             <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Vollständige Anschrift (Straße, PLZ, Ort)</label>
-              <textarea value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="new-password" placeholder="Musterstraße 1, 12345 Musterstadt" className="w-full h-20 bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
+              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Adresse</label>
+              <textarea value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="off" placeholder="Straße, PLZ, Ort" className="w-full h-16 bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
             </div>
-            <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Bankverbindung (IBAN)</label>
-                <input type="text" value={iban} onChange={(e) => setIban(e.target.value)} autoComplete="new-password" placeholder="DE12 3456 7890 ..." className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">IBAN</label>
+                <input type="text" value={iban} onChange={(e) => setIban(e.target.value)} autoComplete="off" placeholder="DE..." className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-1">
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Krypto Netz</label>
-                  <input type="text" value={cryptoNetwork} onChange={(e) => setCryptoNetwork(e.target.value)} autoComplete="new-password" placeholder="USDT TRC20" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Crypto Wallet Adresse</label>
-                  <input type="text" value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value)} autoComplete="new-password" placeholder="T9xZ..." className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37] transition" />
-                </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Crypto Netz</label>
+                <input type="text" value={cryptoNetwork} onChange={(e) => setCryptoNetwork(e.target.value)} autoComplete="off" placeholder="z.B. TRC20" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
               </div>
             </div>
-          </div>
-          <div className="flex justify-between items-center mt-4">
-            <button onClick={handleSaveProfile} className="bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black text-xs font-black px-5 py-2 rounded uppercase cursor-pointer transition">Auszahlungsdaten Aktualisieren / Speichern</button>
-            {saveStatus && <span className="text-xs font-mono text-emerald-400 animate-pulse">{saveStatus}</span>}
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Crypto Wallet</label>
+              <input type="text" value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value)} autoComplete="off" placeholder="Wallet Adresse..." className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
+            </div>
+            <button onClick={handleSaveProfile} className="w-full bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black text-xs font-bold px-3 py-2 rounded uppercase cursor-pointer">💾 Daten speichern</button>
+            {saveStatus && <div className="text-center text-xs font-mono text-emerald-400">{saveStatus}</div>}
           </div>
         </section>
       )}
 
-      {/* Abrechnungsliste */}
       <div className="space-y-4">
         {abrechnungsDaten.map((daten, idx) => (
-          <div key={idx} className="bg-black/40 p-5 rounded-xl border border-[#AA7C11]/10 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition hover:border-[#AA7C11]/20">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white tracking-wide">{daten.name}</h2>
-                <span className="bg-[#AA7C11]/10 border border-[#AA7C11]/30 text-[#D4AF37] text-[10px] font-mono px-2 py-0.5 rounded">
-                  {daten.rate}% Provision
-                </span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5 mt-3 text-xs">
-                <div className="text-slate-400">Schichtzeit: <span className="text-white font-mono">{daten.hours.toFixed(2)} h</span></div>
-                <div className="text-slate-400">Umsatz Brutto: <span className="text-amber-200 font-mono">${daten.brutto.toFixed(2)}</span></div>
-                <div className="text-slate-400">Netto-Eingang: <span className="text-emerald-400 font-mono">${daten.netto.toFixed(2)}</span></div>
-              </div>
+          <div key={idx} className="bg-black/40 p-5 rounded-xl border border-[#AA7C11]/10 shadow-lg">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-bold text-white">{daten.name}</h2>
+              <span className="bg-[#AA7C11]/10 border border-[#AA7C11]/30 text-[#D4AF37] text-[10px] font-mono px-2 py-0.5 rounded">{daten.rate}% Provision</span>
             </div>
-            <div className="flex items-center justify-between w-full md:w-auto md:justify-end gap-4 border-t border-[#AA7C11]/5 pt-3 md:border-t-0 md:pt-0">
-              <div className="text-right">
-                <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Auszahlungsbetrag:</div>
-                <div className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#F3E5AB] via-[#D4AF37] to-[#AA7C11] font-mono">
-                  ${daten.auszahlung.toFixed(2)}
-                </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+                <div className="text-slate-400 font-bold text-[10px] mb-1">STUNDEN</div>
+                <div className="font-mono font-bold text-[#D4AF37]">{daten.hours.toFixed(2)}h</div>
               </div>
-              <button onClick={() => druckeRechnung(daten)} className="bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black text-xs font-black px-4 py-2.5 rounded-lg uppercase tracking-wider shadow-md cursor-pointer transition">🖨️ PDF Rechnung</button>
+              <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+                <div className="text-slate-400 font-bold text-[10px] mb-1">BRUTTO</div>
+                <div className="font-mono font-bold text-white">${daten.brutto.toFixed(2)}</div>
+              </div>
+              <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+                <div className="text-slate-400 font-bold text-[10px] mb-1">NETTO</div>
+                <div className="font-mono font-bold text-emerald-400">${daten.netto.toFixed(2)}</div>
+              </div>
+              <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+                <div className="text-slate-400 font-bold text-[10px] mb-1">AUSZAHLUNG</div>
+                <div className="font-mono font-bold text-[#F3E5AB]">${daten.auszahlung.toFixed(2)}</div>
+              </div>
             </div>
           </div>
         ))}

@@ -20,6 +20,8 @@ export default async function CalendarPage() {
     const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
     if (profile && profile.role === "admin") {
       role = "admin";
+    } else if (profile && profile.role) {
+      role = profile.role;
     }
   }
 
@@ -29,6 +31,10 @@ export default async function CalendarPage() {
   // 3. Echte Models live aus der Tabelle laden!
   const { data: models } = await supabase.from("models").select("id, name").order("name", { ascending: true });
 
+  // 4. 🔑 NEUE ERGÄNZUNG: Profile laden für Rollen-Mapping
+  const { data: profiles } = await supabase.from("profiles").select("user_id, role");
+  const profileMap = new Map((profiles || []).map(p => [p.user_id, p.role || "chatter"]));
+
   return (
     <main className="min-h-screen bg-slate-950 p-4">
       <WeeklyCalendar 
@@ -36,7 +42,8 @@ export default async function CalendarPage() {
         modelsListe={models || []} 
         role={role} 
         userEmail={user.email || ""} 
-        userId={user.id} 
+        userId={user.id}
+        profileMap={profileMap}
       />
     </main>
   );

@@ -1,7 +1,7 @@
 // lib/authz.ts
 import { createClient } from "@/utils/supabase/server";
 
-export type Role = "admin" | "chatter";
+export type Role = "admin" | "chatter" | "moderator";
 
 export async function getCurrentRole(): Promise<Role | null> {
   try {
@@ -25,7 +25,12 @@ export async function getCurrentRole(): Promise<Role | null> {
       return "chatter"; // Fallback, falls kein Profil existiert
     }
     
-    return (profiles[0].role as Role) ?? "chatter";
+    const role = profiles[0].role as Role;
+    if (role === "moderator" || role === "admin") {
+      return role;
+    }
+    
+    return "chatter";
   } catch (e) {
     // Falls irgendwas abstürzt, fangen wir es ab
     return "chatter";
