@@ -19,6 +19,7 @@ export default function DashboardPage() {
   
   const [unassignedRevenues, setUnassignedRevenues] = useState<any[]>([]);
   const [selectedChatterForTransfer, setSelectedChatterForTransfer] = useState<Record<number, string>>({});
+  const [abandonedLeads, setAbandonedLeads] = useState<any[]>([]);
   
   // Moderator-specific stats
   const [moderatorStriptchatStats, setModeratorStriptchatStats] = useState<any>(null);
@@ -38,17 +39,19 @@ export default function DashboardPage() {
         setCurrentUserRole(userProfile.role);
       }
 
-      const [profilesRes, assignmentsRes, revenueRes, modelsRes] = await Promise.all([
+      const [profilesRes, assignmentsRes, revenueRes, modelsRes, abandonedLeadsRes] = await Promise.all([
         supabase.from("profiles").select("user_id, full_name, email"),
         supabase.from("shift_assignments").select("*"),
         supabase.from("chatter_revenues").select("*"),
-        supabase.from("models").select("id, name, platform_type")
+        supabase.from("models").select("id, name, platform_type"),
+        supabase.from("abandoned_leads").select("*").order("abandoned_at", { ascending: false }).limit(50)
       ]);
 
       const profiles = profilesRes.data || [];
       const assignments = assignmentsRes.data || [];
       const revenues = revenueRes.data || [];
       const models = modelsRes.data || [];
+      const abandoned = abandonedLeadsRes.data || [];
 
       // MODERATOR-SPEZIFISCH: Stripchat Stats berechnen
       if (userProfile?.role === "moderator") {
@@ -170,6 +173,7 @@ export default function DashboardPage() {
       setChatterBrutto(summeBruttoChatter);
       setChatterNetto(summeNettoChatter);
       setUnassignedRevenues(unassignedList);
+      setAbandonedLeads(abandoned);
       
       // 🎭 MODELL-FILTERUNG NACH PLATTFORM-TYP
       let filteredModelStats = Object.entries(statsPerModel)
@@ -355,7 +359,7 @@ export default function DashboardPage() {
       </section>
 
       {/* 👑 NEUE MODEL RANGLISTE (Vollautomatisch basierend auf der Herkunft der Einnahmen!) */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg">
+      <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg mb-8">
         <h2 className="text-sm font-bold mb-4 text-[#AA7C11] uppercase tracking-wider">Model Live-Umsatz-Performance</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
@@ -380,6 +384,49 @@ export default function DashboardPage() {
           </table>
         </div>
       </section>
+
+      {/* ⚠️ UNVOLLSTÄNDIGE BEWERBUNGEN (ABBRÜCHE) */}
+      {abandonedLeads.length > 0 && (
+        <section className="bg-black/40 p-6 rounded-xl border border-amber-600/30 shadow-lg">
+          <h2 className="text-sm font-bold mb-4 text-amber-500 uppercase tracking-wider">⚠️ Unvollständige Bewerbungen (Abbrüche) ({abandonedLeads.length})</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-amber-600/20 bg-[#050505] text-amber-500 font-semibold text-xs uppercase tracking-wider">
+                  <th className="p-3">Name</th>
+                  <th className="p-3">Handynummer</th>
+                  <th className="p-3">Abgebrochen am</th>
+                  <th className="p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {abandonedLeads.map((lead, idx) => {
+                  const abandonedDate = new Date(lead.abandoned_at);
+                  const formattedDate = abandonedDate.toLocaleDateString("de-DE", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  });
+                  return (
+                    <tr key={lead.id} className="border-b border-amber-600/10 hover:bg-amber-950/10 transition">
+                      <td className="p-3 font-semibold text-white tracking-wide">{lead.name || "Unbekannt"}</td>
+                      <td className="p-3 font-mono text-slate-300">{lead.phone || "—"}</td>
+                      <td className="p-3 text-slate-400 text-xs">{formattedDate}</td>
+                      <td className="p-3">
+                        <span className="inline-flex items-center gap-1 bg-amber-900/30 text-amber-400 px-3 py-1 rounded-full text-xs font-semibold border border-amber-600/20">
+                          📝 Beim Tippen abgebrochen
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </main>
   );
 }
