@@ -68,8 +68,9 @@ export default function BrowserLoginStreamComponent({
         );
       }
 
-      // Store session ID for verification
-      setSessionId(data.sessionId);
+      // Store session ID for verification - MUST use local variable for polling closure!
+      const sessionIdFromResponse = data.sessionId;
+      setSessionId(sessionIdFromResponse);  // Also set state for debugging
       setIsBrowserRunning(true);
       setAuthStatus("waiting");
       setStatusMessage("🚀 Browser-Session erstellt!\n\n👉 Bitte loggen Sie sich in dem geöffneten Browser ein.\n\nKlicken Sie unten den Button wenn Sie fertig sind.");
@@ -83,12 +84,14 @@ export default function BrowserLoginStreamComponent({
         setVerificationAttempts(attempts);
 
         try {
+          // ⚠️ CRITICAL: Use sessionIdFromResponse (local var) not sessionId state!
+          // React state updates are batched, so sessionId state might still be ""
           const verifyResponse = await fetch(
             "/api/crm/browser-login/verify",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ modelId, sessionId }),
+              body: JSON.stringify({ modelId, sessionId: sessionIdFromResponse }),
             }
           );
 

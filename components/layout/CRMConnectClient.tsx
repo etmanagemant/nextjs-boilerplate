@@ -104,6 +104,31 @@ export default function CRMConnectClient({
     }
   };
 
+  const handleDisconnectSession = async (modelId: string, sessionId?: string) => {
+    if (!sessionId) {
+      console.error("No session ID available for disconnect");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/crm/browser-login/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, sessionId }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Disconnect failed");
+      }
+
+      // Refresh sessions after disconnect
+      fetchSessions();
+    } catch (err) {
+      console.error("Disconnect error:", err);
+    }
+  };
+
   const handleOpenPanel = (model: Model) => {
     setSelectedModel(model);
     setIsPanelOpen(true);
@@ -233,16 +258,21 @@ export default function CRMConnectClient({
                           <span>🌐</span> Browser-Login
                         </button>
                       )}
-                      <button
-                        onClick={() => handleOpenPanel(model)}
-                        className={`w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition ${
-                          isConnected
-                            ? "bg-slate-600/30 text-slate-300 hover:bg-slate-600/50"
-                            : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/40"
-                        }`}
-                      >
-                        {isConnected ? <><span>🔄</span> Update Session</> : <><span>🔗</span> Manuell</>}
-                      </button>
+                      {isConnected ? (
+                        <button
+                          onClick={() => handleDisconnectSession(model.id, session?.id)}
+                          className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-red-600/40 text-red-300 hover:bg-red-600/60 hover:shadow-lg hover:shadow-red-600/40"
+                        >
+                          <span>🔴</span> Disconnect
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenPanel(model)}
+                          className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/40"
+                        >
+                          <span>🔗</span> Manuell
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
