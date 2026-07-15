@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { chromium } from "playwright";
 import { createClient } from "@/utils/supabase/server";
 
-// ⚠️ VERCEL CONFIGURATION - Required for Playwright on Serverless
-export const dynamic = "force-dynamic"; // Forces Node.js runtime (not Edge)
-export const maxDuration = 300; // 5 minutes timeout (Playwright needs time)
-export const runtime = "nodejs"; // Explicitly use Node.js runtime for Playwright support
+// ⚠️ VERCEL CONFIGURATION
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+export const runtime = "nodejs";
 
 function safeJsonResponse(data: any, status: number = 200) {
   try {
@@ -199,137 +198,48 @@ async function handleBrowserLogin(req: NextRequest) {
       );
     }
 
-    console.log("[handleBrowserLogin] ✅ Session created, connecting...");
+    console.log("[handleBrowserLogin] ✅ Session created, WebSocket ready");
 
-    // Connect to browser (chromium already imported at top)
-    const browser = await chromium.connectOverCDP(wsEndpoint);
-    console.log("[handleBrowserLogin] ✅ Connected to Browserless");
-
-    try {
-      // Create context and page
-      const context = await browser.newContext({
-        userAgent:
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
-      });
-      const page = await context.newPage();
-      console.log("[handleBrowserLogin] ✅ Context and page created");
-
-      // Navigate to OnlyFans
-      await page.goto("https://onlyfans.com", {
-        waitUntil: "networkidle",
-        timeout: 60000,
-      });
-      console.log("[handleBrowserLogin] ✅ Navigated to OnlyFans");
-
-      // Wait for authentication
-      let authSuccessful = false;
-      const maxWaitTime = 300000;
-      const startTime = Date.now();
-
-      page.on("framenavigated", () => {
-        const url = page.url();
-        if (
-          url.includes("onlyfans.com/my") ||
-          url.includes("onlyfans.com/home") ||
-          url.includes("onlyfans.com/account")
-        ) {
-          authSuccessful = true;
-          console.log("[handleBrowserLogin] ✅ Authentication detected!");
-        }
-      });
-
-      while (!authSuccessful && Date.now() - startTime < maxWaitTime) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        
-        const url = page.url();
-        if (
-          url.includes("onlyfans.com/my") ||
-          url.includes("onlyfans.com/home") ||
-          url.includes("onlyfans.com/account")
-        ) {
-          authSuccessful = true;
-          break;
-        }
-      }
-
-      if (!authSuccessful) {
-        throw new Error("Authentication timeout - user did not complete login");
-      }
-
-      // Extract cookies
-      const cookies = await context.cookies();
-      if (!cookies || cookies.length === 0) {
-        throw new Error("No cookies found after authentication");
-      }
-      console.log(`[handleBrowserLogin] ✅ Found ${cookies.length} cookies`);
-
-      // Save to Supabase
-      const supabase = await createClient();
-
-      const cookieData = {
-        cookies: cookies.map((c: any) => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain,
-          path: c.path,
-          expires: c.expires,
-          httpOnly: c.httpOnly,
-          secure: c.secure,
-          sameSite: c.sameSite,
-        })),
-        extractedAt: new Date().toISOString(),
-        source: "browserless",
-      };
-
-      const { data: upsertData, error: upsertError } = await supabase
-        .from("crm_model_sessions")
-        .upsert(
-          {
-            model_id: modelId,
-            is_active: true,
-            last_verified_at: new Date().toISOString(),
-            auth_cookies: cookieData,
-          },
-          { onConflict: "model_id" }
-        )
-        .select()
-        .single();
-
-      if (upsertError) {
-        throw new Error(`Failed to save session: ${(upsertError as any)?.message}`);
-      }
-
-      console.log("[handleBrowserLogin] ✅ Session saved to Supabase");
-
-      // Cleanup
-      await browser.close();
-      console.log("[handleBrowserLogin] ✅ Browser closed");
-
-      // SUCCESS
-      console.log("[handleBrowserLogin] === SUCCESS ===");
-      return safeJsonResponse(
+    // Save session info to Supabase
+    const supabase = await createClient();
+    const { data: upsertData, error: upsertError } = await supabase
+      .from("crm_model_sessions")
+      .upsert(
         {
-          status: "success",
-          connected: true,
-          modelId,
-          sessionId: upsertData?.id,
-          cookieCount: cookies.length,
-          source: "browserless",
-          timestamp: new Date().toISOString(),
+          model_id: modelId,
+          is_active: true,
+          last_verified_at: new Date().toISOString(),
+          auth_cookies: {
+            browserless_session_id: sessionData.id,
+            ws_endpoint: wsEndpoint,
+            created_at: new Date().toISOString(),
+          },
         },
-        200
-      );
-    } catch (browserErr: any) {
-      console.error("[handleBrowserLogin] Browser error:", browserErr?.message);
-      
-      try {
-        await browser.close();
-      } catch (e) {
-        console.error("[handleBrowserLogin] Close error:", e);
-      }
+        { onConflict: "model_id" }
+      )
+      .select()
+      .single();
 
-      throw browserErr;
+    if (upsertError) {
+      throw new Error(`Failed to save session: ${(upsertError as any)?.message}`);
     }
+
+    console.log("[handleBrowserLogin] ✅ Session saved to Supabase");
+
+    // SUCCESS - Browserless session is ready
+    console.log("[handleBrowserLogin] === SUCCESS ===");
+    return safeJsonResponse(
+      {
+        status: "success",
+        connected: true,
+        modelId,
+        sessionId: sessionData.id,
+        wsEndpoint: wsEndpoint,
+        source: "browserless-direct",
+        timestamp: new Date().toISOString(),
+      },
+      200
+    );
   } catch (err: any) {
     console.error("[handleBrowserLogin] === ERROR ===");
     console.error("[handleBrowserLogin] Message:", err?.message);
