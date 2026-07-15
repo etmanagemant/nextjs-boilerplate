@@ -43,6 +43,8 @@ async function validateAdmin(req: NextRequest) {
 
 async function handleBrowserLogin(req: NextRequest) {
   console.log("[handleBrowserLogin] === START BROWSERLESS MODE ===");
+  console.log("[handleBrowserLogin] Method:", req.method);
+  console.log("[handleBrowserLogin] Content-Type:", req.headers.get("content-type"));
   
   try {
     // Validate admin
@@ -61,12 +63,17 @@ async function handleBrowserLogin(req: NextRequest) {
     // Parse request body
     let body: any = {};
     try {
+      console.log("[handleBrowserLogin] Attempting to parse request body...");
       body = await req.json();
-    } catch (parseErr) {
+      console.log("[handleBrowserLogin] ✅ Body parsed successfully:", JSON.stringify(body));
+    } catch (parseErr: any) {
+      console.error("[handleBrowserLogin] ❌ JSON parsing failed:", parseErr?.message);
+      console.error("[handleBrowserLogin] Error type:", parseErr?.constructor?.name);
       return safeJsonResponse(
         { 
           status: "error",
-          error: "Invalid JSON in request body",
+          error: `Failed to parse JSON: ${parseErr?.message || "Unknown error"}`,
+          details: "Check server logs for debugging info",
           timestamp: new Date().toISOString()
         },
         400
@@ -74,11 +81,15 @@ async function handleBrowserLogin(req: NextRequest) {
     }
     
     const { modelId } = body;
+    console.log("[handleBrowserLogin] Extracted modelId:", modelId, "| Type:", typeof modelId);
+    
     if (!modelId || typeof modelId !== "string") {
+      console.error("[handleBrowserLogin] ❌ Invalid modelId:", modelId);
       return safeJsonResponse(
         { 
           status: "error",
           error: "Missing or invalid modelId parameter",
+          received: { modelId, bodyKeys: Object.keys(body) },
           timestamp: new Date().toISOString()
         },
         400
@@ -100,28 +111,51 @@ async function handleBrowserLogin(req: NextRequest) {
 
     // Start Browserless session
     console.log("[handleBrowserLogin] Starting Browserless session...");
-    const sessionResponse = await fetch(`https://chrome.browserless.io/session?token=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-
-    const sessionData = await sessionResponse.json();
+    console.log("[handleBrowserLogin] API Key configured:", !!apiKey);
     
-    if (!sessionResponse.ok || !sessionData.webSocketDebuggerUrl) {
-      console.error("[handleBrowserLogin] Browserless error:", sessionData);
+    let sessionData: any = null;
+    let wsEndpoint: string = "";
+    
+    try {
+      const sessionResponse = await fetch(`https://chrome.browserless.io/session?token=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      console.log("[handleBrowserLogin] Browserless response status:", sessionResponse.status);
+      console.log("[handleBrowserLogin] Browserless response content-type:", sessionResponse.headers.get("content-type"));
+
+      sessionData = await sessionResponse.json();
+      console.log("[handleBrowserLogin] ✅ Browserless session data parsed:", sessionData);
+      
+      if (!sessionResponse.ok || !sessionData.webSocketDebuggerUrl) {
+        console.error("[handleBrowserLogin] ❌ Browserless error:", sessionData);
+        return safeJsonResponse(
+          { 
+            status: "error",
+            error: "Failed to create Browserless session",
+            details: sessionData.message || "Unknown error",
+            timestamp: new Date().toISOString()
+          },
+          500
+        );
+      }
+      
+      wsEndpoint = sessionData.webSocketDebuggerUrl;
+    } catch (browserlessErr: any) {
+      console.error("[handleBrowserLogin] ❌ Browserless fetch failed:", browserlessErr?.message);
+      console.error("[handleBrowserLogin] Error stack:", browserlessErr?.stack?.substring(0, 500));
       return safeJsonResponse(
         { 
           status: "error",
-          error: "Failed to create Browserless session",
-          details: sessionData.message || "Unknown error",
+          error: `Browserless connection error: ${browserlessErr?.message || "Unknown"}`,
           timestamp: new Date().toISOString()
         },
         500
       );
     }
 
-    const wsEndpoint = sessionData.webSocketDebuggerUrl;
     console.log("[handleBrowserLogin] ✅ Session created, connecting...");
 
     // Connect to browser
