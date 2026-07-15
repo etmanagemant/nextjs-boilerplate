@@ -3,46 +3,28 @@ import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-async function validateAdmin(req: NextRequest) {
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
-    return (
-      user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
-      user.email === "etmanagement@gmail.com" ||
-      user.email === "etmanagemant@gmail.com"
-    );
-  } catch {
-    return false;
-  }
-}
-
 export async function POST(req: NextRequest) {
   console.log("[CONFIRM-LOGIN] User clicked confirmation button");
 
   try {
-    if (!(await validateAdmin(req))) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
-
     const body = await req.json();
-    const { modelId } = body;
+    const { modelId, sessionId } = body;
 
-    if (!modelId) {
+    if (!modelId || !sessionId) {
       return NextResponse.json(
-        { status: "error", error: "Missing modelId" },
+        { status: "error", error: "Missing modelId or sessionId" },
         { status: 400 }
       );
     }
 
     const supabase = await createClient();
 
-    // Get current session
+    // Get current session and verify sessionId matches
     const { data: session, error: sessionError } = await supabase
       .from("crm_model_sessions")
       .select("*")
       .eq("model_id", modelId)
+      .eq("id", sessionId)
       .maybeSingle();
 
     if (sessionError || !session) {
@@ -79,7 +61,8 @@ export async function POST(req: NextRequest) {
           confirmed_at: new Date().toISOString(),
         },
       })
-      .eq("model_id", modelId);
+      .eq("model_id", modelId)
+      .eq("id", sessionId);
 
     if (updateError) {
       console.error("[CONFIRM-LOGIN] ❌ Update failed:", updateError.message);

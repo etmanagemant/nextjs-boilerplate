@@ -88,7 +88,7 @@ export default function BrowserLoginStreamComponent({
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ modelId }),
+              body: JSON.stringify({ modelId, sessionId }),
             }
           );
 
@@ -151,7 +151,7 @@ export default function BrowserLoginStreamComponent({
       const confirmResponse = await fetch("/api/crm/browser-login/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId }),
+        body: JSON.stringify({ modelId, sessionId }),
       });
 
       if (!confirmResponse.ok) {
