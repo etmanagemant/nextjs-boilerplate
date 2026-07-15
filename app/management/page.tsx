@@ -1,11 +1,12 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel, deleteMitarbeiter, updateMitarbeiterCompensation } from "./actions";
+import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel, deleteMitarbeiter, updateMitarbeiterCompensation, updateModelName } from "./actions";
 import { revalidatePath } from "next/cache";
 // 🟢 IMPORTE EXAKT BEIBEHALTEN
 import CreateShiftForm from "@/components/layout/CreateShiftForm"; 
 import RoleSelect from "@/components/layout/RoleSelect";
 import ModelPlatformSelect from "@/components/layout/ModelPlatformSelect"; 
+import ModelsManagementClient from "@/components/layout/ModelsManagementClient"; 
 
 export const dynamic = "force-dynamic";
 
@@ -158,20 +159,12 @@ export default async function ManagementPage() {
           <input type="text" name="name" placeholder="Model Name" required className="flex-1 px-3 py-2 border border-[#AA7C11]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#D4AF37] outline-none" />
           <button type="submit" className="bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black px-4 py-2 rounded-md text-sm font-bold hover:from-[#E5C158] transition cursor-pointer">Model hinzufügen</button>
         </form>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {sichereModels.map((model) => (
-            <div key={model.id} className="flex justify-between items-center p-3 border border-[#AA7C11]/20 rounded-md bg-[#050505]/40 hover:border-[#D4AF37]/50 transition">
-              <div className="flex items-center gap-3 flex-1">
-                <span className="font-semibold text-white tracking-wide">{model.name}</span>
-                <ModelPlatformSelect modelId={model.id} defaultPlatform={model.platform_type || "onlyfans"} />
-              </div>
-              <form action={deleteModel}>
-                <input type="hidden" name="id" value={model.id} />
-                <button type="submit" className="text-red-400 hover:text-red-300 text-sm font-bold transition cursor-pointer">Löschen</button>
-              </form>
-            </div>
-          ))}
-        </div>
+        
+        <ModelsManagementClient 
+          models={sichereModels}
+          onDeleteClick={deleteModel}
+          onNameChange={updateModelName}
+        />
       </section>
     </main>
   );

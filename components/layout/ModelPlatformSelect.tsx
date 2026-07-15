@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
-export default function ModelPlatformSelect({ modelId, defaultPlatform }: { modelId: number; defaultPlatform: string }) {
+export default function ModelPlatformSelect({ modelId, defaultPlatform }: { modelId: string | number; defaultPlatform: string }) {
   const supabase = createClient();
   const router = useRouter();
   const [platform, setPlatform] = useState(defaultPlatform || "onlyfans");
