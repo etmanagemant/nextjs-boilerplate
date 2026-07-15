@@ -73,7 +73,20 @@ export default function BrowserLoginStreamComponent({
       setSessionId(sessionIdFromResponse);  // Also set state for debugging
       setIsBrowserRunning(true);
       setAuthStatus("waiting");
-      setStatusMessage("🚀 Browser-Session erstellt!\n\n👉 Bitte loggen Sie sich in dem geöffneten Browser ein.\n\nKlicken Sie unten den Button wenn Sie fertig sind.");
+      setStatusMessage("🚀 Browser-Session erstellt!\n\n👉 OnlyFans öffnet sich jetzt in neuem Fenster...\n\nMelden Sie sich an und klicken Sie danach den grünen Button.");
+
+      // 🌐 OPEN ONLYFANS IN NEW WINDOW - User logs in there
+      setTimeout(() => {
+        const onlyFansWindow = window.open('https://onlyfans.com', 'OnlyFans_Login', 'width=1200,height=800');
+        if (!onlyFansWindow) {
+          console.error("❌ Pop-up blocked! Please allow pop-ups for this site.");
+          setAuthStatus("error");
+          setErrorMessage("Pop-up wurde blockiert. Bitte erlauben Sie Pop-ups für diese Website.");
+          setIsBrowserRunning(false);
+        } else {
+          console.log("✅ OnlyFans window opened");
+        }
+      }, 500);
 
       // 📊 START POLLING - only for status, NOT for auto-verification
       let attempts = 0;
