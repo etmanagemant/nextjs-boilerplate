@@ -52,7 +52,7 @@ export default async function CRMInboxPage() {
     return (
       <div className="flex items-center justify-center h-screen bg-[#0A0A0A]">
         <div className="text-center text-[#F3E5AB]">
-          <h1 className="text-2xl font-bold mb-2">⚠️ Error Loading Inbox</h1>
+          <h1 className="text-2xl font-bold mb-2"><span>⚠️</span> <span>Error Loading Inbox</span></h1>
           <p className="text-slate-400 mb-4">
             There was a problem loading your chat interface. Please try again.
           </p>

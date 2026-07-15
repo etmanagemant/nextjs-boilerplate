@@ -199,7 +199,7 @@ export default function AbrechnungPage() {
 
       {!isAdmin && (
         <section className="mb-8 bg-black/50 p-5 rounded-xl border border-[#AA7C11]/20 shadow-xl">
-          <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-4">📝 Deine Zahlungsdaten hinterlegen</h2>
+          <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-4"><span>📝</span> <span>Deine Zahlungsdaten hinterlegen</span></h2>
           <div className="space-y-3">
             <div>
               <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Adresse</label>

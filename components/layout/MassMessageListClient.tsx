@@ -68,13 +68,13 @@ export default function MassMessageListClient({ aktuelleWoche, archivierteMonate
     <div className="space-y-8">
       {/* 1. SEKTION: Aktuelle Woche (Immer ausgeklappt) */}
       <div className="space-y-3">
-        <h3 className="text-xs font-extrabold text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 px-3 py-1.5 rounded-lg tracking-wider uppercase">✨ Aktuelle Woche (Neueste Vorlagen)</h3>
+        <h3 className="text-xs font-extrabold text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 px-3 py-1.5 rounded-lg tracking-wider uppercase"><span>✨</span> <span>Aktuelle Woche (Neueste Vorlagen)</span></h3>
         {aktuelleWoche.length > 0 ? renderKarten(aktuelleWoche) : <p className="text-xs text-slate-500 italic p-2">In dieser Woche noch keine Nachrichten erfasst.</p>}
       </div>
 
       {/* 2. SEKTION: Archivierte Vormonate (Klickbare Akkordeons) */}
       <div className="space-y-3">
-        <h3 className="text-xs font-extrabold text-[#D4AF37] bg-[#AA7C11]/5 border border-[#AA7C11]/10 px-3 py-1.5 rounded-lg tracking-wider uppercase">📦 Archivierte Vormonate</h3>
+        <h3 className="text-xs font-extrabold text-[#D4AF37] bg-[#AA7C11]/5 border border-[#AA7C11]/10 px-3 py-1.5 rounded-lg tracking-wider uppercase"><span>📦</span> <span>Archivierte Vormonate</span></h3>
         <div className="space-y-2">
           {Object.entries(archivierteMonate).map(([monat, liste]) => {
             const isOpen = !!openMonate[monat];

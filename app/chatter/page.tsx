@@ -199,7 +199,7 @@ export default function ChatterPage() {
       {/* Header-Zustand */}
       <div className="flex justify-between items-center border-b border-[#AA7C11]/20 pb-4 mb-6">
         <div>
-          <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">{currentUserRole === "moderator" ? "🎭 Stripchat Stechuhr" : currentUserRole === "admin" ? "👑 Admin: Dual-Mode Stechuhr" : "Mitarbeiter Stechuhr"}</h1>
+          <h1 className="text-2xl font-black uppercase tracking-wider">{currentUserRole === "moderator" ? <><span>🎭</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Stripchat Stechuhr</span></> : currentUserRole === "admin" ? <><span>👑</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Admin: Dual-Mode Stechuhr</span></> : <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Mitarbeiter Stechuhr</span>}</h1>
           <p className="text-xs text-slate-400 mt-0.5">{currentUserRole === "moderator" ? "Stripchat Sessions & Umsatz-Tracking" : currentUserRole === "admin" ? "OnlyFans + Stripchat Stechuhr-Systeme" : "Schichten erfassen und Live-Mass-Messages kopieren"}</p>
         </div>
         <form action="/api/logout" method="POST">
@@ -212,7 +212,7 @@ export default function ChatterPage() {
         <>
           {currentUserRole === "admin" && (
             <div className="mb-4 pb-3 border-b-2 border-[#AA7C11]/30">
-              <h2 className="text-lg font-black text-[#D4AF37] uppercase tracking-wider">🎭 Stripchat Schicht</h2>
+              <h2 className="text-lg font-black text-[#D4AF37] uppercase tracking-wider"><span>🎭</span> <span>Stripchat Schicht</span></h2>
             </div>
           )}
           <ModeratorStriptchatShift

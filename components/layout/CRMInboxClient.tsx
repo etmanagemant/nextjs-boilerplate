@@ -146,8 +146,8 @@ export default function CRMInboxClient({
         // HERO BANNER MODE
         <div className="w-full h-screen flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
           <div className="text-center mb-8">
-            <h1 className="text-4xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent mb-3 uppercase tracking-wider">
-              💬 CRM Live Inbox
+            <h1 className="text-4xl font-black mb-3 uppercase tracking-wider">
+              <span>💬</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">CRM Live Inbox</span>
             </h1>
             <p className="text-slate-400">
               Select a fan to start chatting and injecting sales scripts

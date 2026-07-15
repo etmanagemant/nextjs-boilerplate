@@ -151,7 +151,7 @@ export default async function ContentPlanPage({
     return (
       <main className="p-6 max-w-7xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB]">
         <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-xl">
-          <h1 className="text-xl font-bold text-red-400 mb-2">❌ Fehler beim Laden</h1>
+          <h1 className="text-xl font-bold text-red-400 mb-2"><span>❌</span> <span>Fehler beim Laden</span></h1>
           <p className="text-red-400 text-sm mb-4">{errorMessage}</p>
           <details className="text-xs text-slate-400 mt-4 bg-black/40 p-3 rounded border border-red-500/10">
             <summary className="cursor-pointer font-bold">Vollständiger Error</summary>

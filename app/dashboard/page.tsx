@@ -233,7 +233,7 @@ export default function DashboardPage() {
     return (
       <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
         <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
-          <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">🎭 Stripchat Dashboard</h1>
+          <h1 className="text-2xl font-black uppercase tracking-wider"><span>🎭</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Stripchat Dashboard</span></h1>
           <p className="text-xs text-slate-400 mt-1">Deine persönlichen Stripchat-Session-Daten & Umsätze</p>
         </div>
 
@@ -272,7 +272,7 @@ export default function DashboardPage() {
       {/* Zuweisungsbox */}
       {isAdmin && unassignedRevenues.length > 0 && (
         <section className="mb-8 bg-amber-950/20 p-5 rounded-xl border-2 border-[#D4AF37]/40 shadow-xl">
-          <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-3">⚠️ Offene Einnahmen & Tips Pool ({unassignedRevenues.length})</h2>
+          <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-3"><span>⚠️</span> <span>Offene Einnahmen & Tips Pool ({unassignedRevenues.length})</span></h2>
           <div className="space-y-2">
             {unassignedRevenues.map((r) => (
               <div key={r.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#050505] p-3 rounded-lg border border-[#AA7C11]/20 gap-3 text-xs">
@@ -433,7 +433,7 @@ export default function DashboardPage() {
       {/* ⚠️ UNVOLLSTÄNDIGE BEWERBUNGEN (ABBRÜCHE) */}
       {abandonedLeads.length > 0 && (
         <section className="bg-black/40 p-6 rounded-xl border border-amber-600/30 shadow-lg">
-          <h2 className="text-sm font-bold mb-4 text-amber-500 uppercase tracking-wider">⚠️ Unvollständige Bewerbungen (Abbrüche) ({abandonedLeads.length})</h2>
+          <h2 className="text-sm font-bold mb-4 text-amber-500 uppercase tracking-wider"><span>⚠️</span> <span>Unvollständige Bewerbungen (Abbrüche) ({abandonedLeads.length})</span></h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
               <thead>

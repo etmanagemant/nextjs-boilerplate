@@ -650,7 +650,7 @@ export default function ModeratorStriptchatShift({
 
       {/* 🎁 PRÄMIEN-FORTSCHRITT */}
       <div className="border-t border-[#AA7C11]/10 pt-4">
-        <h3 className="text-xs font-bold text-[#D4AF37] uppercase tracking-wider mb-3">🎁 Dein Prämien-Fortschritt</h3>
+        <h3 className="text-xs font-bold text-[#D4AF37] uppercase tracking-wider mb-3"><span>🎁</span> <span>Dein Prämien-Fortschritt</span></h3>
         <div className="grid grid-cols-3 gap-2">
           {/* 15 Shows = 30€ */}
           <div className={`p-3 rounded border transition ${
