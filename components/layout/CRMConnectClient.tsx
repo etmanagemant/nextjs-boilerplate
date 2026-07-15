@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabaseClient";
 import { ModelCardSkeleton, ScriptLibrarySkeleton } from "./CRMSkeletonLoaders";
 import ConnectCreatorPanel from "./ConnectCreatorPanel";
 import ScriptLibraryManager from "./ScriptLibraryManager";
+import BrowserLoginStreamComponent from "./BrowserLoginStreamComponent";
 
 interface Model {
   id: string;
@@ -53,6 +54,9 @@ export default function CRMConnectClient({
   const [isLoadingScripts, setIsLoadingScripts] = useState(true);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isBrowserLoginOpen, setIsBrowserLoginOpen] = useState(false);
+  const [selectedModelForBrowserLogin, setSelectedModelForBrowserLogin] =
+    useState<Model | null>(null);
 
   const supabase = createClient();
 
@@ -112,6 +116,21 @@ export default function CRMConnectClient({
 
   const handleConnectionSuccess = () => {
     fetchSessions();
+  };
+
+  const handleOpenBrowserLogin = (model: Model) => {
+    setSelectedModelForBrowserLogin(model);
+    setIsBrowserLoginOpen(true);
+  };
+
+  const handleCloseBrowserLogin = () => {
+    setIsBrowserLoginOpen(false);
+    setSelectedModelForBrowserLogin(null);
+  };
+
+  const handleBrowserConnectionSuccess = () => {
+    fetchSessions();
+    handleCloseBrowserLogin();
   };
 
   return (
@@ -203,17 +222,27 @@ export default function CRMConnectClient({
                       </p>
                     )}
 
-                    {/* Action Button */}
-                    <button
-                      onClick={() => handleOpenPanel(model)}
-                      className={`w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition ${
-                        isConnected
-                          ? "bg-slate-600/30 text-slate-300 hover:bg-slate-600/50"
-                          : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/40"
-                      }`}
-                    >
-                      {isConnected ? "🔄 Update Session" : "🔗 Connect Now"}
-                    </button>
+                    {/* Action Buttons */}
+                    <div className="space-y-2">
+                      {!isConnected && (
+                        <button
+                          onClick={() => handleOpenBrowserLogin(model)}
+                          className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black hover:shadow-lg hover:shadow-[#D4AF37]/40"
+                        >
+                          <span>🌐</span> Browser-Login
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleOpenPanel(model)}
+                        className={`w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition ${
+                          isConnected
+                            ? "bg-slate-600/30 text-slate-300 hover:bg-slate-600/50"
+                            : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/40"
+                        }`}
+                      >
+                        {isConnected ? <><span>🔄</span> Update Session</> : <><span>🔗</span> Manuell</>}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -309,6 +338,16 @@ export default function CRMConnectClient({
           isOpen={isPanelOpen}
           onClose={handleClosePanel}
           onSuccess={handleConnectionSuccess}
+        />
+      )}
+
+      {/* Browser Login Stream Component */}
+      {isBrowserLoginOpen && selectedModelForBrowserLogin && (
+        <BrowserLoginStreamComponent
+          modelId={selectedModelForBrowserLogin.id}
+          modelName={selectedModelForBrowserLogin.name}
+          onConnectionSuccess={handleBrowserConnectionSuccess}
+          onClose={handleCloseBrowserLogin}
         />
       )}
     </main>
