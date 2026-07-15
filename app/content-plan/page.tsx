@@ -61,8 +61,8 @@ export default async function ContentPlanPage({
         {/* HEADER */}
         <div className="flex justify-between items-center mb-8 border-b border-[#AA7C11]/20 pb-6 flex-wrap gap-4 pt-4">
           <div>
-            <h1 className="text-3xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">
-              📅 Content-Plan
+            <h1 className="text-3xl font-black uppercase tracking-wider">
+              <span>📅</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Content-Plan</span>
             </h1>
             <p className="text-xs text-slate-400 mt-2">
               Digitale Verwaltung deines Reddit-Content-Plans mit visuellem Explorer

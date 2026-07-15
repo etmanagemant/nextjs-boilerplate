@@ -222,7 +222,7 @@ export default function ChatterPage() {
           />
           {currentUserRole === "moderator" && (
             <div className="mt-8">
-              <h2 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider mb-4">📊 Deine Stripchat-Sessions</h2>
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-4"><span>📊</span> <span className="text-[#D4AF37]">Deine Stripchat-Sessions</span></h2>
               {loading ? (
                 <div className="text-xs text-slate-500 italic">Lade Daten…</div>
               ) : (
@@ -254,7 +254,7 @@ export default function ChatterPage() {
         <>
           {currentUserRole === "admin" && (
             <div className="mt-8 mb-4 pb-3 border-b-2 border-[#AA7C11]/30">
-              <h2 className="text-lg font-black text-[#F3E5AB] uppercase tracking-wider">💼 OnlyFans Stechuhr</h2>
+              <h2 className="text-lg font-black uppercase tracking-wider"><span>💼</span> <span className="text-[#F3E5AB]">OnlyFans Stechuhr</span></h2>
             </div>
           )}
           <div className="bg-gradient-to-r from-[#050505] to-black border border-[#AA7C11]/20 rounded-xl p-4 mb-6">
@@ -313,7 +313,7 @@ export default function ChatterPage() {
 
           {/* 📊 SCHICHT HISTORY */}
           <div>
-            <h3 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">📊 Deine Schicht-Historie</h3>
+            <h3 className="text-[11px] font-extrabold uppercase tracking-widest mb-3"><span>📊</span> <span className="text-slate-400">Deine Schicht-Historie</span></h3>
             {loading ? (
               <div className="text-xs text-slate-500 italic">Lade Daten…</div>
             ) : (

@@ -306,7 +306,7 @@ export default function DashboardPage() {
             <div className="bg-gradient-to-br from-[#1a1a1a] to-black p-6 rounded-xl border-2 border-[#D4AF37]/40 shadow-2xl hover:border-[#D4AF37]/80 hover:shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all duration-300 transform hover:scale-102">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-black text-[#D4AF37] uppercase tracking-widest group-hover:text-[#F3E5AB] transition">🖥️ CRM Model-Verbindung & Settings</h2>
+                  <h2 className="text-lg font-black uppercase tracking-widest transition"><span>🖥️</span> <span className="text-[#D4AF37] group-hover:text-[#F3E5AB]">CRM Model-Verbindung & Settings</span></h2>
                   <p className="text-xs text-slate-400 mt-2">Verwalte OnlyFans Session-Daten, Script-Bibliotheken und Chatter-Emoji-Konfiguration</p>
                 </div>
                 <div className="text-4xl group-hover:scale-110 transition">⚙️</div>
@@ -326,7 +326,7 @@ export default function DashboardPage() {
             <div className="bg-gradient-to-br from-amber-900/30 to-black p-8 rounded-xl border-2 border-[#D4AF37]/60 shadow-2xl hover:border-[#F3E5AB]/80 hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-300 transform hover:scale-105">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-black text-[#F3E5AB] uppercase tracking-widest group-hover:text-[#D4AF37] transition animate-pulse">💬 Live-Inbox & Chat-Zentrale (CRM)</h2>
+                  <h2 className="text-2xl font-black uppercase tracking-widest animate-pulse"><span>💬</span> <span className="text-[#F3E5AB] group-hover:text-[#D4AF37] transition">Live-Inbox & Chat-Zentrale (CRM)</span></h2>
                   <p className="text-sm text-slate-300 mt-3 font-semibold">Verwalte Fan-Konversationen • Injiziere Sales-Scripts • Nutze personalisierte Emoji-Leiste</p>
                   <div className="mt-3 flex gap-3 text-xs font-bold text-[#D4AF37]">
                     <span className="bg-[#D4AF37]/20 px-3 py-1 rounded">📨 Live-Messaging</span>
