@@ -58,23 +58,14 @@ async function testChromium() {
   try {
     console.log("[testChromium] Testing Chromium...");
     
-    // Try to import the chromium package with actual binary
-    const chromium = await import("@playwright/browser-chromium");
+    // Import playwright package
+    const { chromium } = await import("playwright");
     
-    console.log("[testChromium] ✅ @playwright/browser-chromium available");
+    console.log("[testChromium] ✅ playwright available");
     return true;
   } catch (err) {
     console.error("[testChromium] Error:", err);
-    console.log("[testChromium] Trying fallback...");
-    
-    try {
-      const { chromium } = await import("playwright-core");
-      console.log("[testChromium] ✅ playwright-core available");
-      return true;
-    } catch (err2) {
-      console.error("[testChromium] Both imports failed:", err2);
-      return false;
-    }
+    return false;
   }
 }
 
@@ -149,34 +140,29 @@ async function handleBrowserLogin(req: NextRequest) {
     console.log("[handleBrowserLogin] ✅ Chromium available");
 
     // Step 4: Import chromium dynamically
-    console.log("[handleBrowserLogin] Step 4: Importing chromium...");
+    console.log("[handleBrowserLogin] Step 4: Importing playwright...");
     
     let chromium: any = null;
     try {
-      // Try the full package first (has browser binaries)
-      chromium = await import("@playwright/browser-chromium");
-      console.log("[handleBrowserLogin] ✅ Using @playwright/browser-chromium");
+      // Import playwright (includes browser binaries)
+      const pw = await import("playwright");
+      chromium = pw.chromium;
+      console.log("[handleBrowserLogin] ✅ playwright imported");
     } catch (e1: any) {
-      console.warn("[handleBrowserLogin] @playwright/browser-chromium not available:", e1?.message);
-      try {
-        // Fallback to playwright-core
-        const pw = await import("playwright-core");
-        chromium = pw;
-        console.log("[handleBrowserLogin] ✅ Using playwright-core (fallback)");
-      } catch (e2: any) {
-        console.error("[handleBrowserLogin] Both chromium imports failed!");
-        throw new Error("Cannot import chromium/playwright");
-      }
+      console.error("[handleBrowserLogin] Playwright import failed:", e1?.message);
+      throw new Error("Cannot import playwright");
     }
     
-    console.log("[handleBrowserLogin] ✅ Chromium module imported");
+    if (!chromium) {
+      throw new Error("Chromium not available in playwright");
+    }
 
     // Step 5: Launch browser
     console.log("[handleBrowserLogin] Step 5: Launching browser...");
     let browser: any = null;
     
     try {
-      browser = await chromium.chromium.launch({
+      browser = await chromium.launch({
         headless: true,
         args: [
           "--no-sandbox",
