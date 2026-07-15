@@ -99,15 +99,19 @@ async function handleBrowserLogin(req: NextRequest) {
     // Get API Key
     const apiKey = process.env.BROWSERLESS_API_KEY;
     if (!apiKey) {
+      console.error("[handleBrowserLogin] ❌ BROWSERLESS_API_KEY is undefined in environment");
       return safeJsonResponse(
         { 
           status: "error",
-          error: "Browserless API key not configured",
+          error: "Browserless API key not configured in environment",
           timestamp: new Date().toISOString()
         },
         500
       );
     }
+    
+    console.log("[handleBrowserLogin] API Key length:", apiKey.length);
+    console.log("[handleBrowserLogin] API Key first 10 chars:", apiKey.substring(0, 10));
 
     // Start Browserless session
     console.log("[handleBrowserLogin] Starting Browserless session...");
@@ -117,6 +121,7 @@ async function handleBrowserLogin(req: NextRequest) {
     let wsEndpoint: string = "";
     
     try {
+      console.log("[handleBrowserLogin] Calling Browserless REST API...");
       const sessionResponse = await fetch(`https://chrome.browserless.io/session?token=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -124,18 +129,45 @@ async function handleBrowserLogin(req: NextRequest) {
       });
 
       console.log("[handleBrowserLogin] Browserless response status:", sessionResponse.status);
-      console.log("[handleBrowserLogin] Browserless response content-type:", sessionResponse.headers.get("content-type"));
+      const contentType = sessionResponse.headers.get("content-type") || "unknown";
+      console.log("[handleBrowserLogin] Browserless response content-type:", contentType);
+
+      // Check if response is JSON
+      if (!contentType.includes("application/json")) {
+        const htmlBody = await sessionResponse.text();
+        console.error("[handleBrowserLogin] ❌ Browserless returned non-JSON response (HTML):");
+        console.error("[handleBrowserLogin] First 500 chars:", htmlBody.substring(0, 500));
+        
+        // Common Browserless errors
+        if (htmlBody.includes("POST Body")) {
+          console.error("[handleBrowserLogin] Detected: Browserless auth/validation error (POST Body response)");
+        }
+        if (htmlBody.includes("401") || htmlBody.includes("Unauthorized")) {
+          console.error("[handleBrowserLogin] Detected: 401 Unauthorized - Invalid API key");
+        }
+        
+        return safeJsonResponse(
+          { 
+            status: "error",
+            error: "Browserless returned error (likely invalid API key)",
+            details: htmlBody.substring(0, 200),
+            timestamp: new Date().toISOString()
+          },
+          500
+        );
+      }
 
       sessionData = await sessionResponse.json();
-      console.log("[handleBrowserLogin] ✅ Browserless session data parsed:", sessionData);
+      console.log("[handleBrowserLogin] ✅ Browserless session data parsed successfully");
+      console.log("[handleBrowserLogin] webSocketDebuggerUrl present:", !!sessionData.webSocketDebuggerUrl);
       
       if (!sessionResponse.ok || !sessionData.webSocketDebuggerUrl) {
-        console.error("[handleBrowserLogin] ❌ Browserless error:", sessionData);
+        console.error("[handleBrowserLogin] ❌ Browserless error response:", sessionData);
         return safeJsonResponse(
           { 
             status: "error",
             error: "Failed to create Browserless session",
-            details: sessionData.message || "Unknown error",
+            details: sessionData.message || sessionData.error || "Unknown error",
             timestamp: new Date().toISOString()
           },
           500
@@ -145,6 +177,7 @@ async function handleBrowserLogin(req: NextRequest) {
       wsEndpoint = sessionData.webSocketDebuggerUrl;
     } catch (browserlessErr: any) {
       console.error("[handleBrowserLogin] ❌ Browserless fetch failed:", browserlessErr?.message);
+      console.error("[handleBrowserLogin] Error type:", browserlessErr?.constructor?.name);
       console.error("[handleBrowserLogin] Error stack:", browserlessErr?.stack?.substring(0, 500));
       return safeJsonResponse(
         { 
