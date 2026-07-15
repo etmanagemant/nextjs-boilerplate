@@ -49,13 +49,8 @@ export default function CRMInboxClient({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
-  const [isHydrated, setIsHydrated] = useState(false);
 
   // Fetch chatter's emojis on mount
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
-
   useEffect(() => {
     const loadEmojis = async () => {
       const emojiList = await fetchChatterEmojis(chatterId);
@@ -145,20 +140,20 @@ export default function CRMInboxClient({
   };
 
   return (
-    <main className="h-screen flex bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden" suppressHydrationWarning>
-      {/* Hero Banner (Full Width at Top) */}
-      {isHydrated && !selectedFanId && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black z-0">
-          <div className="text-center">
-            <h1 className="text-4xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent mb-3 uppercase tracking-wider">
-              💬 CRM Live Inbox
-            </h1>
-            <p className="text-slate-400">
-              Select a fan to start chatting and injecting sales scripts
-            </p>
-          </div>
+    <main className="h-screen flex bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
+      {/* Hero Banner (Full Width at Top) - Always rendered, hidden via CSS */}
+      <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black ${
+        selectedFanId ? "hidden" : "z-0"
+      }`}>
+        <div className="text-center">
+          <h1 className="text-4xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent mb-3 uppercase tracking-wider">
+            💬 CRM Live Inbox
+          </h1>
+          <p className="text-slate-400">
+            Select a fan to start chatting and injecting sales scripts
+          </p>
         </div>
-      )}
+      </div>
 
       {/* Three Column Layout */}
       <div className={`flex w-full h-screen ${selectedFanId ? "visible" : "hidden"}`}>
@@ -199,17 +194,17 @@ export default function CRMInboxClient({
         </div>
       </div>
 
-      {/* Fallback: Show chat list even when no fan selected */}
-      {isHydrated && !selectedFanId && (
-        <div className="w-1/4 border-r border-[#D4AF37]/20 relative z-10">
-          <ChatListColumn
-            fans={fans}
-            selectedFanId={selectedFanId}
-            onSelectFan={handleSelectFan}
-            isLoading={isLoadingFans}
-          />
-        </div>
-      )}
+      {/* Fallback: Show chat list even when no fan selected - Always rendered, hidden via CSS */}
+      <div className={`w-1/4 border-r border-[#D4AF37]/20 relative ${
+        selectedFanId ? "hidden" : "z-10"
+      }`}>
+        <ChatListColumn
+          fans={fans}
+          selectedFanId={selectedFanId}
+          onSelectFan={handleSelectFan}
+          isLoading={isLoadingFans}
+        />
+      </div>
     </main>
   );
 }
