@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chromium } from "playwright"; // ✅ STATIC IMPORT - Required for Vercel
+import { createClient } from "@/utils/supabase/server"; // ✅ STATIC IMPORT - NO dynamic imports on Vercel!
 
 // ⚠️ VERCEL CONFIGURATION - Required for Playwright on Serverless
 export const dynamic = "force-dynamic"; // Forces Node.js runtime (not Edge)
@@ -20,7 +21,6 @@ function safeJsonResponse(data: any, status: number = 200) {
 
 async function validateAdmin(req: NextRequest) {
   try {
-    const { createClient } = await import("@/utils/supabase/server");
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -264,7 +264,6 @@ async function handleBrowserLogin(req: NextRequest) {
       console.log(`[handleBrowserLogin] ✅ Found ${cookies.length} cookies`);
 
       // Save to Supabase
-      const { createClient } = await import("@/utils/supabase/server");
       const supabase = await createClient();
 
       const cookieData = {
