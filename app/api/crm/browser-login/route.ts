@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { chromium } from "playwright"; // ✅ STATIC IMPORT - Required for Vercel
 
 // ⚠️ VERCEL CONFIGURATION - Required for Playwright on Serverless
 export const dynamic = "force-dynamic"; // Forces Node.js runtime (not Edge)
@@ -200,8 +201,7 @@ async function handleBrowserLogin(req: NextRequest) {
 
     console.log("[handleBrowserLogin] ✅ Session created, connecting...");
 
-    // Connect to browser
-    const { chromium } = await import("playwright");
+    // Connect to browser (chromium already imported at top)
     const browser = await chromium.connectOverCDP(wsEndpoint);
     console.log("[handleBrowserLogin] ✅ Connected to Browserless");
 

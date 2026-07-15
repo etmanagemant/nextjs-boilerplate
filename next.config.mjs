@@ -2,8 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   
-  // ⚠️ REMOVED WEBPACK EXTERNALS - Let Next.js bundle Playwright normally
-  // Playwright MUST be installed on Vercel via npm install + postinstall script
+  // ⚠️ PLAYWRIGHT CONFIGURATION - Must NOT externalize since we use static import
+  // Webpack should bundle playwright normally for Vercel serverless
 };
 
 export default nextConfig;
