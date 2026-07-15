@@ -72,12 +72,11 @@ export default async function RootLayout({
               </span>
             </div>
 
-            {/* RIGHT SIDE - Management, Bewerbungen, Massmessage, Plan, Buchhaltung (ADMIN ONLY!) */}
+            {/* RIGHT SIDE - Management, Massmessage, Plan, Buchhaltung (ADMIN ONLY!) */}
             <nav className="flex items-center gap-0.5 flex-nowrap z-10 flex-1 justify-end min-w-0">
               {role === "admin" && (
                 <>
                   <a href="/management" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Management</a>
-                  <a href="/bewerbungen" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Bewerbungen</a>
                   <a href="/massmessage" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">Massmessage</a>
                   <a href="/content-plan" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md whitespace-nowrap">📅 Plan</a>
                   <a href="/buchhaltung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-1.5 py-1.5 text-[9px] font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Buchhaltung</a>
