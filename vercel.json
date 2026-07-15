@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "functions": {
-    "app/api/crm/browser-login/route.ts": {
-      "maxDuration": 300,
-      "memory": 1024
-    }
-  }
-}
