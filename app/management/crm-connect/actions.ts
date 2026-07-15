@@ -32,7 +32,7 @@ export async function connectCreatorSession(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { data: user } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user?.id) {
     throw new Error("Unauthorized: User not authenticated");
@@ -93,7 +93,7 @@ export async function connectCreatorSession(formData: FormData) {
  */
 export async function disconnectCreatorSession(modelId: string) {
   const supabase = await createClient();
-  const { data: user } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user?.id) {
     throw new Error("Unauthorized: User not authenticated");
@@ -137,7 +137,7 @@ export async function updateChatterEmojis(
   emojiList: string[]
 ) {
   const supabase = await createClient();
-  const { data: user } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user?.id) {
     throw new Error("Unauthorized: User not authenticated");
@@ -189,7 +189,7 @@ export interface ScriptLibraryItem {
  */
 export async function addScriptToLibrary(scriptData: ScriptLibraryItem) {
   const supabase = await createClient();
-  const { data: user } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user?.id) {
     throw new Error("Unauthorized: User not authenticated");
@@ -230,7 +230,7 @@ export async function addScriptToLibrary(scriptData: ScriptLibraryItem) {
  */
 export async function deleteScriptFromLibrary(scriptId: string) {
   const supabase = await createClient();
-  const { data: user } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user?.id) {
     throw new Error("Unauthorized: User not authenticated");
@@ -270,7 +270,7 @@ export async function updateScript(
   scriptData: Partial<ScriptLibraryItem>
 ) {
   const supabase = await createClient();
-  const { data: user } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user?.id) {
     throw new Error("Unauthorized: User not authenticated");
