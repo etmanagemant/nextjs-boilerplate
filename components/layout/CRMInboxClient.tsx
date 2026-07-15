@@ -141,70 +141,69 @@ export default function CRMInboxClient({
 
   return (
     <main className="h-screen flex bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
-      {/* Hero Banner (Full Width at Top) - Always rendered, hidden via CSS */}
-      <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black ${
-        selectedFanId ? "hidden" : "z-0"
-      }`}>
-        <div className="text-center">
-          <h1 className="text-4xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent mb-3 uppercase tracking-wider">
-            💬 CRM Live Inbox
-          </h1>
-          <p className="text-slate-400">
-            Select a fan to start chatting and injecting sales scripts
-          </p>
+      {/* SINGLE CONTAINER - Always same structure */}
+      {!selectedFanId ? (
+        // HERO BANNER MODE
+        <div className="w-full h-screen flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent mb-3 uppercase tracking-wider">
+              💬 CRM Live Inbox
+            </h1>
+            <p className="text-slate-400">
+              Select a fan to start chatting and injecting sales scripts
+            </p>
+          </div>
+          
+          {/* Chat List on Hero Screen */}
+          <div className="w-1/4 border-r border-[#D4AF37]/20 h-full overflow-hidden">
+            <ChatListColumn
+              fans={fans}
+              selectedFanId={selectedFanId}
+              onSelectFan={handleSelectFan}
+              isLoading={isLoadingFans}
+            />
+          </div>
         </div>
-      </div>
+      ) : (
+        // THREE COLUMN MODE
+        <div className="flex w-full h-screen">
+          {/* Column 1: Chat List (25%) */}
+          <div className="w-1/4 border-r border-[#D4AF37]/20">
+            <ChatListColumn
+              fans={fans}
+              selectedFanId={selectedFanId}
+              onSelectFan={handleSelectFan}
+              isLoading={isLoadingFans}
+            />
+          </div>
 
-      {/* Three Column Layout */}
-      <div className={`flex w-full h-screen ${selectedFanId ? "visible" : "hidden"}`}>
-        {/* Column 1: Chat List (25%) */}
-        <div className="w-1/4 border-r border-[#D4AF37]/20">
-          <ChatListColumn
-            fans={fans}
-            selectedFanId={selectedFanId}
-            onSelectFan={handleSelectFan}
-            isLoading={isLoadingFans}
-          />
+          {/* Column 2: Chat Thread (50%) */}
+          <div className="w-1/2">
+            <ChatThreadColumn
+              messages={messages}
+              currentMessage={currentMessage}
+              onMessageChange={setCurrentMessage}
+              onSendMessage={handleSendMessage}
+              emojis={emojis}
+              selectedEmoji={selectedScript ? "✓" : undefined}
+              isLoading={isLoadingMessages}
+              isSending={isSending}
+            />
+          </div>
+
+          {/* Column 3: Sales Cockpit (25%) */}
+          <div className="w-1/4 border-l border-[#D4AF37]/20">
+            <SalesCockpitColumn
+              fanMetadata={fanMetadata}
+              scripts={scripts}
+              selectedScript={selectedScript}
+              onSelectScript={setSelectedScript}
+              onNotesChange={handleUpdateNotes}
+              isSavingNotes={isSavingNotes}
+            />
+          </div>
         </div>
-
-        {/* Column 2: Chat Thread (50%) */}
-        <div className="w-1/2">
-          <ChatThreadColumn
-            messages={messages}
-            currentMessage={currentMessage}
-            onMessageChange={setCurrentMessage}
-            onSendMessage={handleSendMessage}
-            emojis={emojis}
-            selectedEmoji={selectedScript ? "✓" : undefined}
-            isLoading={isLoadingMessages}
-            isSending={isSending}
-          />
-        </div>
-
-        {/* Column 3: Sales Cockpit (25%) */}
-        <div className="w-1/4 border-l border-[#D4AF37]/20">
-          <SalesCockpitColumn
-            fanMetadata={fanMetadata}
-            scripts={scripts}
-            selectedScript={selectedScript}
-            onSelectScript={setSelectedScript}
-            onNotesChange={handleUpdateNotes}
-            isSavingNotes={isSavingNotes}
-          />
-        </div>
-      </div>
-
-      {/* Fallback: Show chat list even when no fan selected - Always rendered, hidden via CSS */}
-      <div className={`w-1/4 border-r border-[#D4AF37]/20 relative ${
-        selectedFanId ? "hidden" : "z-10"
-      }`}>
-        <ChatListColumn
-          fans={fans}
-          selectedFanId={selectedFanId}
-          onSelectFan={handleSelectFan}
-          isLoading={isLoadingFans}
-        />
-      </div>
+      )}
     </main>
   );
 }
