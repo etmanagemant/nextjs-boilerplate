@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic"; // Required for server auth
+export const maxDuration = 30; // Env check should be fast
 
 export async function GET(req: NextRequest) {
   try {
     // Check if user is admin
-    const { createClient } = await import("@/utils/supabase/server");
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
