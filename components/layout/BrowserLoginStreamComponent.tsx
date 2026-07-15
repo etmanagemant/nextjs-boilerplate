@@ -34,16 +34,32 @@ export default function BrowserLoginStreamComponent({
     setStatusMessage("Starte Playwright Browser-Sitzung...");
 
     try {
+      console.log("📤 Sending request to /api/crm/browser-login");
+      
       const response = await fetch("/api/crm/browser-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modelId }),
       });
 
+      console.log(`📥 Response status: ${response.status}`);
+      console.log(`Content-Type: ${response.headers.get("content-type")}`);
+
+      // Check if response is JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const responseText = await response.text();
+        console.error("❌ Response is not JSON:", responseText.substring(0, 200));
+        throw new Error(
+          `Server returned non-JSON response (status ${response.status}). Check browser console for details.`
+        );
+      }
+
       const data = await response.json();
+      console.log("✅ Response JSON parsed:", data);
 
       if (!response.ok) {
-        throw new Error(data.error || "Browser session failed");
+        throw new Error(data.error || `Server error (${response.status})`);
       }
 
       setIsBrowserRunning(true);
@@ -70,6 +86,7 @@ export default function BrowserLoginStreamComponent({
 
       setPollingInterval(interval);
     } catch (err: any) {
+      console.error("❌ Browser login error:", err);
       setAuthStatus("error");
       setErrorMessage(err.message || "Failed to start browser session");
       setIsBrowserRunning(false);

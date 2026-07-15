@@ -35,20 +35,36 @@ async function validateAdmin(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    console.log("🔐 Validating admin access...");
+    
     // 🔐 SECURITY: Validate admin
     const isAdmin = await validateAdmin(req);
     if (!isAdmin) {
+      console.warn("❌ Admin validation failed");
       return NextResponse.json(
         { error: "Unauthorized - Admin access required" },
         { status: 403 }
       );
     }
 
+    console.log("✅ Admin validation passed");
+
     // Extract model_id from request body
-    const body = await req.json().catch(() => ({}));
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch (parseErr) {
+      console.error("Request body parse error:", parseErr);
+      return NextResponse.json(
+        { error: "Invalid JSON in request body" },
+        { status: 400 }
+      );
+    }
+    
     const { modelId } = body;
 
     if (!modelId || typeof modelId !== "string") {
+      console.error("Invalid modelId:", modelId);
       return NextResponse.json(
         { error: "Missing or invalid modelId parameter" },
         { status: 400 }
@@ -63,6 +79,8 @@ export async function POST(req: NextRequest) {
     let page: Page | null = null;
 
     try {
+      console.log("📦 Attempting to launch Chromium...");
+      
       browser = await chromium.launch({
         headless: true,
         args: [
@@ -70,26 +88,58 @@ export async function POST(req: NextRequest) {
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
         ],
+      }).catch((err: any) => {
+        throw new Error(`Chromium launch failed: ${err?.message || "Unknown error"}`);
       });
 
+      if (!browser) {
+        throw new Error("Failed to create browser instance (null)");
+      }
+
+      console.log("✅ Chromium launched successfully");
+
       // 📱 Create browser context with realistic user agent
+      console.log("🔧 Creating browser context...");
+      
       context = await browser.newContext({
         userAgent:
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
         viewport: { width: 1280, height: 720 },
+      }).catch((err: any) => {
+        throw new Error(`Context creation failed: ${err?.message || "Unknown error"}`);
       });
 
-      page = await context.newPage();
+      if (!context) {
+        throw new Error("Failed to create browser context (null)");
+      }
+
+      console.log("✅ Browser context created");
+
+      console.log("📄 Creating page...");
+      page = await context.newPage().catch((err: any) => {
+        throw new Error(`Page creation failed: ${err?.message || "Unknown error"}`);
+      });
+
+      if (!page) {
+        throw new Error("Failed to create page (null)");
+      }
+
+      console.log("✅ Page created successfully");
 
       // 🎯 Navigate to OnlyFans
       console.log("🌐 Navigating to OnlyFans...");
-      await page.goto("https://onlyfans.com", {
-        waitUntil: "networkidle",
-        timeout: 60000,
-      });
+      
+      try {
+        await page.goto("https://onlyfans.com", {
+          waitUntil: "networkidle",
+          timeout: 60000,
+        });
+        console.log("✅ Successfully navigated to OnlyFans");
+      } catch (navErr: any) {
+        throw new Error(`Navigation to OnlyFans failed: ${navErr?.message || "Timeout or network error"}`);
+      }
 
       // ⏳ MONITOR PAGE STATE: Wait for successful authentication
-      // This typically happens when user logs in and gets redirected to dashboard
       console.log("👀 Monitoring authentication state...");
 
       let authSuccessful = false;
@@ -145,7 +195,12 @@ export async function POST(req: NextRequest) {
         throw new Error("Browser context is not available");
       }
 
-      const cookies = await context.cookies();
+      let cookies = [];
+      try {
+        cookies = await context.cookies();
+      } catch (cookieErr: any) {
+        throw new Error(`Failed to extract cookies: ${cookieErr?.message || "Unknown error"}`);
+      }
 
       if (!cookies || cookies.length === 0) {
         throw new Error("No cookies found after authentication");
@@ -154,7 +209,14 @@ export async function POST(req: NextRequest) {
       console.log(`✅ Found ${cookies.length} cookies`);
 
       // 💾 SAVE TO SUPABASE
-      const supabase = await createClient();
+      console.log("🔗 Connecting to Supabase...");
+      
+      let supabase;
+      try {
+        supabase = await createClient();
+      } catch (sbErr: any) {
+        throw new Error(`Failed to create Supabase client: ${sbErr?.message || "Unknown error"}`);
+      }
 
       // Prepare cookie data as JSONB
       const cookieData = {
@@ -192,7 +254,11 @@ export async function POST(req: NextRequest) {
 
       if (sessionError) {
         console.error("Supabase error:", sessionError);
-        throw new Error(`Failed to save session: ${sessionError.message}`);
+        throw new Error(`Failed to save session: ${(sessionError as any)?.message || "Unknown database error"}`);
+      }
+
+      if (!sessionData) {
+        console.warn("⚠️ Session data is null but no error occurred");
       }
 
       console.log("✅ Session saved successfully!");
