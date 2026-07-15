@@ -225,7 +225,21 @@ async function handleBrowserLogin(req: NextRequest) {
       throw new Error(`Failed to save session: ${(upsertError as any)?.message}`);
     }
 
+    // ⚠️ CRITICAL: After upsert, fetch the actual saved row to get correct ID
+    const { data: actualSession, error: fetchError } = await supabase
+      .from("crm_model_sessions")
+      .select("id")
+      .eq("model_id", modelId)
+      .maybeSingle();
+
+    if (fetchError || !actualSession) {
+      throw new Error("Failed to fetch saved session ID");
+    }
+
+    const actualSessionId = actualSession.id;
+
     console.log("[handleBrowserLogin] ✅ Session saved to Supabase (pending verification)");
+    console.log("[handleBrowserLogin] Session ID:", actualSessionId);
     console.log("[handleBrowserLogin] ⏳ Waiting for user to authenticate on OnlyFans...");
 
     // SUCCESS - Browserless session is ready but NOT YET ACTIVE
@@ -236,7 +250,7 @@ async function handleBrowserLogin(req: NextRequest) {
         connected: false,  // ⚠️ Changed to false - session created but not verified
         verified: false,
         modelId,
-        sessionId: sessionData.id,
+        sessionId: actualSessionId,  // ✅ Use actual saved session ID
         wsEndpoint: wsEndpoint,
         source: "browserless-direct",
         message: "Session created. Waiting for OnlyFans authentication...",
