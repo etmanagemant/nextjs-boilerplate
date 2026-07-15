@@ -1,6 +1,8 @@
 # Vercel Deployment Optimization
 # Exclude files that are not needed in production
 
+# ⚠️ DO NOT EXCLUDE node_modules - Playwright MUST be installed!
+
 # Source Control
 .git
 .gitignore
@@ -28,13 +30,11 @@ SETUP_*.sql
 .env.local
 .vscode
 .sidecar
-node_modules/.cache
-.next/cache
 .eslintrc*
 
-# Temporary/Test Files  
-*.rtf
-jbsdjidfbsdvb*
+# Caches only (not actual node_modules!)
+node_modules/.cache
+.next/cache
 
 # Build outputs (Next.js builds this)
 .next
@@ -44,6 +44,3 @@ build
 # Large files that don't belong in serverless
 scripts/
 public/Images/
-
-# Node modules should be installed during build
-# node_modules is auto-installed by Vercel, but we need playwright installed
