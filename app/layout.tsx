@@ -42,7 +42,7 @@ export default async function RootLayout({
             <nav className="flex items-center gap-0.5 flex-nowrap z-10 flex-1 min-w-0">
               <a href="/" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Start</a>
               <a href="/dashboard" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Dashboard</a>
-              <a href="/management/crm-inbox" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">🔮 OnlyFans</a>
+              <a href="/crm-inbox" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">🔮 OnlyFans</a>
 
               {role === "admin" && (
                 <>
