@@ -126,8 +126,7 @@ async function handleBrowserLogin(req: NextRequest) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tti: 30000,
-          timeout: 60000,
+          ttl: 30,
         }),
       });
 
