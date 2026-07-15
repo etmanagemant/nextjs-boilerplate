@@ -72,31 +72,28 @@ export default function BrowserLoginStreamComponent({
       setSessionId(data.sessionId);
       setIsBrowserRunning(true);
       setAuthStatus("waiting");
-      setStatusMessage("⏳ Bitte logge dich im Browser ein und löse das Captcha...\n\nWir warten auf die Bestätigung deiner OnlyFans-Authentifizierung.");
+      setStatusMessage("🚀 Browser-Session erstellt!\n\n👉 Bitte loggen Sie sich in dem geöffneten Browser ein.\n\nKlicken Sie unten den Button wenn Sie fertig sind.");
 
-      // 📊 START POLLING for VERIFICATION - only mark connected when REAL auth is detected
+      // 📊 START POLLING - only for status, NOT for auto-verification
       let attempts = 0;
-      const maxAttempts = 300; // 5 minutes at 1 second intervals (300 seconds)
+      const maxAttempts = 600; // 10 minutes (600 seconds)
       
       const interval = setInterval(async () => {
         attempts++;
         setVerificationAttempts(attempts);
 
         try {
-          // ⚠️ Use new /verify endpoint that checks browser session status
           const verifyResponse = await fetch(
             "/api/crm/browser-login/verify",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                modelId,
-              }),
+              body: JSON.stringify({ modelId }),
             }
           );
 
           const verifyData = await verifyResponse.json();
-          console.log(`[Attempt ${attempts}] Verification response:`, verifyData.status, verifyData);
+          console.log(`[Poll ${attempts}] Status:`, verifyData.status);
 
           // Handle non-OK responses but don't crash
           if (!verifyResponse.ok) {
@@ -104,40 +101,28 @@ export default function BrowserLoginStreamComponent({
             return;
           }
 
-          // ✅ REAL VERIFICATION - only set to authenticated when backend confirms
-          if (verifyData.verified === true) {
-            setAuthStatus("authenticated");
-            setStatusMessage("✅ OnlyFans-Authentifizierung bestätigt und sicher gespeichert!");
-            clearInterval(interval);
-            setPollingInterval(null);
-            console.log("🎉 User authenticated after", attempts, "attempts");
-          } else if (verifyData.status === "waiting") {
-            // Still waiting - browser session active but no auth yet
+          // ⚠️ IMPORTANT: /verify does NOT auto-authenticate
+          // User must manually click "Ich bin eingeloggt" button
+          // Polling just updates timeout message every 60 seconds
+          if (attempts % 60 === 0) {
+            const minutes = Math.ceil(attempts / 60);
             setStatusMessage(
-              `⏳ Warte auf OnlyFans-Anmeldung... (Versuch ${attempts})`
+              `🚀 Browser-Session läuft...\n\n👉 Loggen Sie sich ein und klicken Sie dann den Button.\nZeit: ${minutes} min`
             );
-          } else if (verifyData.status === "error") {
-            // Error - session died or something went wrong
-            console.error("❌ Verification error:", verifyData.error);
-            clearInterval(interval);
-            setPollingInterval(null);
-            setAuthStatus("error");
-            setErrorMessage(verifyData.error || "Verification failed");
-            setIsBrowserRunning(false);
           }
 
         } catch (err) {
-          console.error("Verification polling error:", err);
+          console.error("Polling error:", err);
         }
 
-        // Timeout after 5 minutes
+        // Timeout after 10 minutes
         if (attempts >= maxAttempts) {
-          console.warn("⏱️ Verification timeout - 5 minutes elapsed");
+          console.warn("⏱️ Session timeout - 10 minutes elapsed");
           clearInterval(interval);
           setPollingInterval(null);
           setAuthStatus("error");
           setErrorMessage(
-            "Timeout: Keine OnlyFans-Authentifizierung erkannt. Der Browser wurde geschlossen."
+            "Timeout: Browser-Session abgelaufen. Der Browser wurde geschlossen."
           );
           setIsBrowserRunning(false);
         }
@@ -154,6 +139,42 @@ export default function BrowserLoginStreamComponent({
       setIsConnecting(false);
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  // ✅ CONFIRM LOGIN - User clicked "Ich bin eingeloggt!" button
+  const handleConfirmLogin = async () => {
+    try {
+      console.log("[CONFIRM] User confirmed login for:", modelId);
+      setStatusMessage("⏳ Bestätige Anmeldung...");
+
+      const confirmResponse = await fetch("/api/crm/browser-login/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId }),
+      });
+
+      if (!confirmResponse.ok) {
+        const errorData = await confirmResponse.json();
+        throw new Error(errorData.error || "Confirmation failed");
+      }
+
+      const confirmData = await confirmResponse.json();
+      console.log("[CONFIRM] ✅ Confirmation response:", confirmData);
+
+      // Transition to authenticated state
+      setAuthStatus("authenticated");
+      setStatusMessage("✅ Anmeldung bestätigt! Cookies wurden gespeichert.");
+
+      // Stop polling
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        setPollingInterval(null);
+      }
+    } catch (err: any) {
+      console.error("[CONFIRM] Error:", err?.message);
+      setAuthStatus("error");
+      setErrorMessage(err?.message || "Failed to confirm login");
     }
   };
 
@@ -339,7 +360,7 @@ export default function BrowserLoginStreamComponent({
                   {authStatus === "loading" &&
                     "⏳ Starte Browser-Session..."}
                   {authStatus === "waiting" &&
-                    "⏳ Bitte melden Sie sich auf OnlyFans an. Das System wartet auf die Bestätigung Ihrer Authentifizierung. Dies kann bis zu 5 Minuten dauern."}
+                    "🚀 Der Browser läuft. Melden Sie sich auf OnlyFans an und klicken Sie danach den Button unten."}
                   {authStatus === "authenticated" &&
                     "✅ Ihre OnlyFans-Authentifizierung wurde bestätigt und die Cookies wurden sicher gespeichert. Klicken Sie auf den goldenen Button unten, um die Verbindung zu finalisieren."}
                   {authStatus === "error" &&
@@ -373,6 +394,21 @@ export default function BrowserLoginStreamComponent({
               <p className="text-xs text-slate-500 text-center">
                 Dieser Prozess startet einen sicheren Browser und speichert
                 die OnlyFans-Authentifizierungscookies verschlüsselt in der Datenbank.
+              </p>
+            </div>
+          )}
+
+          {/* ICH BIN EINGELOGGT BUTTON - Shows when browser session running and waiting for confirmation */}
+          {authStatus === "waiting" && isBrowserRunning && (
+            <div className="pt-4 border-t border-[#AA7C11]/20">
+              <button
+                onClick={handleConfirmLogin}
+                className="w-full px-8 py-4 bg-gradient-to-b from-emerald-500 to-emerald-700 hover:from-emerald-400 hover:to-emerald-600 text-white font-bold uppercase tracking-wider rounded-lg shadow-lg shadow-emerald-500/40 hover:shadow-emerald-500/60 transition"
+              >
+                <span>✅</span> Ich bin eingeloggt!
+              </button>
+              <p className="text-xs text-slate-500 text-center mt-3">
+                Klicken Sie, nachdem Sie sich auf OnlyFans angemeldet haben.
               </p>
             </div>
           )}
