@@ -14,18 +14,71 @@ export async function fetchActiveFans(chatterId: string) {
   const supabase = await createClient();
 
   try {
-    // This would typically read from a messages table or fan sessions table
-    // For now, returning a placeholder that can be connected to your actual data
-    const { data, error } = await supabase
+    // Get distinct fans from chat messages, then join metadata
+    const { data: messages, error: msgError } = await supabase
       .from("crm_fan_messages")
-      .select(
-        "fan_id, username, avatar_url, total_revenue, is_vip, last_message_at, unread_count"
-      )
+      .select("fan_id, created_at")
       .eq("chatter_id", chatterId)
-      .order("last_message_at", { ascending: false });
+      .order("created_at", { ascending: false });
 
-    if (error) throw error;
-    return data || [];
+    if (msgError) throw msgError;
+
+    // Get unique fan_ids with latest message date
+    const fanMap = new Map();
+    messages?.forEach((msg) => {
+      if (!fanMap.has(msg.fan_id) || new Date(msg.created_at) > new Date(fanMap.get(msg.fan_id))) {
+        fanMap.set(msg.fan_id, msg.created_at);
+      }
+    });
+
+    const uniqueFanIds = Array.from(fanMap.keys());
+
+    if (uniqueFanIds.length === 0) {
+      return [];
+    }
+
+    // Get unread count per fan
+    const { data: unreadData, error: unreadError } = await supabase
+      .from("crm_fan_messages")
+      .select("fan_id")
+      .eq("chatter_id", chatterId)
+      .eq("is_read", false);
+
+    if (unreadError) throw unreadError;
+
+    const unreadMap = new Map();
+    unreadData?.forEach((msg) => {
+      unreadMap.set(msg.fan_id, (unreadMap.get(msg.fan_id) || 0) + 1);
+    });
+
+    // Get fan metadata
+    const { data: metadata, error: metaError } = await supabase
+      .from("crm_fan_metadata")
+      .select("fan_id, lifetime_value, vip_tier")
+      .in("fan_id", uniqueFanIds);
+
+    if (metaError) throw metaError;
+
+    const metadataMap = new Map();
+    metadata?.forEach((meta) => {
+      metadataMap.set(meta.fan_id, meta);
+    });
+
+    // Build fan objects
+    const fans = uniqueFanIds.map((fan_id) => {
+      const meta = metadataMap.get(fan_id) || {};
+      return {
+        id: fan_id,
+        username: `Fan-${fan_id.slice(0, 8)}`,
+        avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${fan_id}`,
+        total_revenue: meta.lifetime_value || 0,
+        is_vip: meta.vip_tier ? meta.vip_tier !== "standard" : false,
+        last_message_at: fanMap.get(fan_id) || new Date().toISOString(),
+        unread_count: unreadMap.get(fan_id) || 0,
+      };
+    });
+
+    return fans;
   } catch (err) {
     console.error("Error fetching active fans:", err);
     return [];
