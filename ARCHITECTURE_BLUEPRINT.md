@@ -198,12 +198,16 @@ Index: platform_type
 // Step 1: Create Browserless Session (HTTP REST API)
 POST https://chrome.browserless.io/session?token={apiKey}
 Headers: { "Content-Type": "application/json" }
-Body: {}
+Body: { "ttl": 30 }
 
 Response (200 OK):
 {
-  "webSocketDebuggerUrl": "wss://chrome.browserless.io/devtools/browser/...",
-  "sessionId": "..."
+  "id": "...",
+  "connect": "wss://chrome.browserless.io/devtools/browser/...",
+  "cloudEndpointId": "...",
+  "ttl": 30,
+  "stop": "https://...",
+  "browserQL": "https://..."
 }
 
 // Step 2: Connect Playwright to WebSocket Endpoint

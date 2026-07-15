@@ -161,22 +161,24 @@ async function handleBrowserLogin(req: NextRequest) {
 
       sessionData = await sessionResponse.json();
       console.log("[handleBrowserLogin] ✅ Browserless session data parsed successfully");
-      console.log("[handleBrowserLogin] webSocketDebuggerUrl present:", !!sessionData.webSocketDebuggerUrl);
+      console.log("[handleBrowserLogin] Response keys:", Object.keys(sessionData));
+      console.log("[handleBrowserLogin] connect present:", !!sessionData.connect);
+      console.log("[handleBrowserLogin] Session ID:", sessionData.id);
       
-      if (!sessionResponse.ok || !sessionData.webSocketDebuggerUrl) {
+      if (!sessionResponse.ok || !sessionData.connect) {
         console.error("[handleBrowserLogin] ❌ Browserless error response:", sessionData);
         return safeJsonResponse(
           { 
             status: "error",
             error: "Failed to create Browserless session",
-            details: sessionData.message || sessionData.error || "Unknown error",
+            details: sessionData.message || sessionData.error || "No connect URL in response",
             timestamp: new Date().toISOString()
           },
           500
         );
       }
       
-      wsEndpoint = sessionData.webSocketDebuggerUrl;
+      wsEndpoint = sessionData.connect;
     } catch (browserlessErr: any) {
       console.error("[handleBrowserLogin] ❌ Browserless fetch failed:", browserlessErr?.message);
       console.error("[handleBrowserLogin] Error type:", browserlessErr?.constructor?.name);
