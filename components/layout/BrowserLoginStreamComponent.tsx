@@ -83,7 +83,7 @@ export default function BrowserLoginStreamComponent({
         setVerificationAttempts(attempts);
 
         try {
-          // ⚠️ Use new /verify endpoint that checks REAL OnlyFans auth
+          // ⚠️ Use new /verify endpoint that checks browser session status
           const verifyResponse = await fetch(
             "/api/crm/browser-login/verify",
             {
@@ -91,18 +91,18 @@ export default function BrowserLoginStreamComponent({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 modelId,
-                sessionId: data.sessionId,
               }),
             }
           );
 
-          if (!verifyResponse.ok && verifyResponse.status !== 200) {
-            console.warn(`⚠️ Verification check failed: ${verifyResponse.status}`);
+          const verifyData = await verifyResponse.json();
+          console.log(`[Attempt ${attempts}] Verification response:`, verifyData.status, verifyData);
+
+          // Handle non-OK responses but don't crash
+          if (!verifyResponse.ok) {
+            console.warn(`⚠️ Verification check: ${verifyResponse.status}`, verifyData.error);
             return;
           }
-
-          const verifyData = await verifyResponse.json();
-          console.log(`[Attempt ${attempts}] Verification response:`, verifyData.status);
 
           // ✅ REAL VERIFICATION - only set to authenticated when backend confirms
           if (verifyData.verified === true) {
@@ -157,6 +157,23 @@ export default function BrowserLoginStreamComponent({
     }
   };
 
+  // 🧹 CLEANUP BROWSER SESSION
+  const handleCloseModal = () => {
+    // Stop polling if running
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
+    }
+    // Reset state
+    setIsBrowserRunning(false);
+    setAuthStatus("idle");
+    setStatusMessage("");
+    setErrorMessage("");
+    setVerificationAttempts(0);
+    // Close modal
+    onClose();
+  };
+
   // 👑 FINALIZE CONNECTION
   const handleFinalizeConnection = async () => {
     try {
@@ -176,10 +193,7 @@ export default function BrowserLoginStreamComponent({
 
       // Close panel after 2 seconds
       setTimeout(() => {
-        onClose();
-        setIsBrowserRunning(false);
-        setAuthStatus("idle");
-        setStatusMessage("");
+        handleCloseModal();
       }, 2000);
     } catch (err) {
       console.error("Finalization error:", err);
@@ -212,9 +226,9 @@ export default function BrowserLoginStreamComponent({
               </p>
             </div>
             <button
-              onClick={onClose}
-              disabled={isBrowserRunning}
-              className="text-slate-400 hover:text-[#D4AF37] font-bold text-2xl disabled:opacity-50"
+              onClick={handleCloseModal}
+              className="text-slate-400 hover:text-[#D4AF37] font-bold text-2xl hover:scale-110 transition"
+              title="Modal schließen"
             >
               ✕
             </button>
