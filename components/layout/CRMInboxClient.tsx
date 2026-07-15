@@ -25,14 +25,19 @@ interface CRMInboxClientProps {
   chatterId: string;
   initialFans: Fan[];
   initialScripts: ScriptLibrary[];
+  connectedModelIds: string[];
 }
 
 export default function CRMInboxClient({
   chatterId,
   initialFans,
   initialScripts,
+  connectedModelIds,
 }: CRMInboxClientProps) {
   // State Management
+  const [selectedModel, setSelectedModel] = useState<string | null>(
+    connectedModelIds.length > 0 ? connectedModelIds[0] : null
+  );
   const [fans, setFans] = useState<Fan[]>(initialFans);
   const [selectedFanId, setSelectedFanId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -140,70 +145,101 @@ export default function CRMInboxClient({
   };
 
   return (
-    <main className="h-screen flex bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
-      {/* SINGLE CONTAINER - Always same structure */}
-      {!selectedFanId ? (
-        // HERO BANNER MODE
-        <div className="w-full h-screen flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-black mb-3 uppercase tracking-wider">
-              <span>💬</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">CRM Live Inbox</span>
-            </h1>
-            <p className="text-slate-400">
-              Select a fan to start chatting and injecting sales scripts
-            </p>
-          </div>
-          
-          {/* Chat List on Hero Screen */}
-          <div className="w-1/4 border-r border-[#D4AF37]/20 h-full overflow-hidden">
-            <ChatListColumn
-              fans={fans}
-              selectedFanId={selectedFanId}
-              onSelectFan={handleSelectFan}
-              isLoading={isLoadingFans}
-            />
-          </div>
-        </div>
-      ) : (
-        // THREE COLUMN MODE
-        <div className="flex w-full h-screen">
-          {/* Column 1: Chat List (25%) */}
-          <div className="w-1/4 border-r border-[#D4AF37]/20">
-            <ChatListColumn
-              fans={fans}
-              selectedFanId={selectedFanId}
-              onSelectFan={handleSelectFan}
-              isLoading={isLoadingFans}
-            />
-          </div>
-
-          {/* Column 2: Chat Thread (50%) */}
-          <div className="w-1/2">
-            <ChatThreadColumn
-              messages={messages}
-              currentMessage={currentMessage}
-              onMessageChange={setCurrentMessage}
-              onSendMessage={handleSendMessage}
-              emojis={emojis}
-              selectedEmoji={selectedScript ? "✓" : undefined}
-              isLoading={isLoadingMessages}
-              isSending={isSending}
-            />
-          </div>
-
-          {/* Column 3: Sales Cockpit (25%) */}
-          <div className="w-1/4 border-l border-[#D4AF37]/20">
-            <SalesCockpitColumn
-              fanMetadata={fanMetadata}
-              scripts={scripts}
-              selectedScript={selectedScript}
-              onSelectScript={setSelectedScript}
-              onNotesChange={handleUpdateNotes}
-              isSavingNotes={isSavingNotes}
-            />
-          </div>
+    <main className="h-screen flex flex-col bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
+      {/* MODEL SELECTOR HEADER */}
+      {connectedModelIds.length > 0 && (
+        <div className="border-b border-[#D4AF37]/20 bg-[#050505]/50 px-6 py-3 flex items-center gap-2 overflow-x-auto">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+            Models:
+          </span>
+          {connectedModelIds.map((modelId) => (
+            <button
+              key={modelId}
+              onClick={() => {
+                setSelectedModel(modelId);
+                setSelectedFanId(null);
+              }}
+              className={`px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-xs whitespace-nowrap transition ${
+                selectedModel === modelId
+                  ? "bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/40"
+                  : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/30"
+              }`}
+            >
+              {modelId}
+            </button>
+          ))}
         </div>
       )}
+
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex overflow-hidden">
+        {!selectedFanId ? (
+          // HERO BANNER MODE
+          <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl font-black mb-3 uppercase tracking-wider">
+                <span>💬</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">CRM Live Inbox</span>
+              </h1>
+              <p className="text-slate-400">
+                {selectedModel
+                  ? `Select a fan/chat for ${selectedModel} to start messaging`
+                  : "Connect a model first to view chats"}
+              </p>
+            </div>
+            
+            {/* Chat List on Hero Screen */}
+            {selectedModel && (
+              <div className="w-1/4 border-r border-[#D4AF37]/20 h-full overflow-hidden">
+                <ChatListColumn
+                  fans={fans}
+                  selectedFanId={selectedFanId}
+                  onSelectFan={handleSelectFan}
+                  isLoading={isLoadingFans}
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          // THREE COLUMN MODE
+          <>
+            {/* Column 1: Chat List (25%) */}
+            <div className="w-1/4 border-r border-[#D4AF37]/20">
+              <ChatListColumn
+                fans={fans}
+                selectedFanId={selectedFanId}
+                onSelectFan={handleSelectFan}
+                isLoading={isLoadingFans}
+              />
+            </div>
+
+            {/* Column 2: Chat Thread (50%) */}
+            <div className="w-1/2">
+              <ChatThreadColumn
+                messages={messages}
+                currentMessage={currentMessage}
+                onMessageChange={setCurrentMessage}
+                onSendMessage={handleSendMessage}
+                emojis={emojis}
+                selectedEmoji={selectedScript ? "✓" : undefined}
+                isLoading={isLoadingMessages}
+                isSending={isSending}
+              />
+            </div>
+
+            {/* Column 3: Sales Cockpit (25%) */}
+            <div className="w-1/4 border-l border-[#D4AF37]/20">
+              <SalesCockpitColumn
+                fanMetadata={fanMetadata}
+                scripts={scripts}
+                selectedScript={selectedScript}
+                onSelectScript={setSelectedScript}
+                onNotesChange={handleUpdateNotes}
+                isSavingNotes={isSavingNotes}
+              />
+            </div>
+          </>
+        )}
+      </div>
     </main>
   );
 }
