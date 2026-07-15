@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface BrowserLoginStreamProps {
   modelId: string;
@@ -25,8 +25,10 @@ export default function BrowserLoginStreamComponent({
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
     null
   );
-  const [sessionId, setSessionId] = useState<string>("");
   const [verificationAttempts, setVerificationAttempts] = useState(0);
+
+  // 🎯 USE REF FOR SESSIONID - Synchronous, no state batching issues
+  const sessionIdRef = useRef<string>("");
 
   // 🚀 START HEADLESS BROWSER SESSION
   const handleStartBrowserLogin = async () => {
@@ -68,9 +70,9 @@ export default function BrowserLoginStreamComponent({
         );
       }
 
-      // Store session ID for verification - MUST use local variable for polling closure!
-      const sessionIdFromResponse = data.sessionId;
-      setSessionId(sessionIdFromResponse);  // Also set state for debugging
+      // Store session ID for verification - USE REF FOR SYNCHRONOUS ACCESS!
+      sessionIdRef.current = data.sessionId;
+      console.log("✅ Session ID stored in ref:", sessionIdRef.current);
       setIsBrowserRunning(true);
       setAuthStatus("waiting");
       setStatusMessage("🚀 Browser-Session erstellt!\n\n👉 OnlyFans öffnet sich jetzt in neuem Fenster...\n\nMelden Sie sich an und klicken Sie danach den grünen Button.");
@@ -97,14 +99,14 @@ export default function BrowserLoginStreamComponent({
         setVerificationAttempts(attempts);
 
         try {
-          // ⚠️ CRITICAL: Use sessionIdFromResponse (local var) not sessionId state!
-          // React state updates are batched, so sessionId state might still be ""
+          // ⚠️ CRITICAL: Use sessionIdRef.current (ref) not state!
+          // Refs are synchronous and always have latest value
           const verifyResponse = await fetch(
             "/api/crm/browser-login/verify",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ modelId, sessionId: sessionIdFromResponse }),
+              body: JSON.stringify({ modelId, sessionId: sessionIdRef.current }),
             }
           );
 
@@ -162,12 +164,13 @@ export default function BrowserLoginStreamComponent({
   const handleConfirmLogin = async () => {
     try {
       console.log("[CONFIRM] User confirmed login for:", modelId);
+      console.log("[CONFIRM] Using sessionId from ref:", sessionIdRef.current);
       setStatusMessage("⏳ Bestätige Anmeldung...");
 
       const confirmResponse = await fetch("/api/crm/browser-login/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId, sessionId }),
+        body: JSON.stringify({ modelId, sessionId: sessionIdRef.current }),
       });
 
       if (!confirmResponse.ok) {
@@ -201,6 +204,8 @@ export default function BrowserLoginStreamComponent({
       clearInterval(pollingInterval);
       setPollingInterval(null);
     }
+    // Clear ref
+    sessionIdRef.current = "";
     // Reset state
     setIsBrowserRunning(false);
     setAuthStatus("idle");
