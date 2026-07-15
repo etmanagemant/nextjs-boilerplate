@@ -299,6 +299,51 @@ export default function DashboardPage() {
         </section>
       )}
 
+      {/* 🖥️ CRM ADMIN PANEL - MODEL VERBINDUNG & SETTINGS */}
+      {isAdmin && (
+        <section className="mb-8">
+          <a href="/management/crm-connect" className="group block">
+            <div className="bg-gradient-to-br from-[#1a1a1a] to-black p-6 rounded-xl border-2 border-[#D4AF37]/40 shadow-2xl hover:border-[#D4AF37]/80 hover:shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all duration-300 transform hover:scale-102">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-black text-[#D4AF37] uppercase tracking-widest group-hover:text-[#F3E5AB] transition">🖥️ CRM Model-Verbindung & Settings</h2>
+                  <p className="text-xs text-slate-400 mt-2">Verwalte OnlyFans Session-Daten, Script-Bibliotheken und Chatter-Emoji-Konfiguration</p>
+                </div>
+                <div className="text-4xl group-hover:scale-110 transition">⚙️</div>
+              </div>
+              <div className="mt-4 inline-flex items-center gap-2 text-[#D4AF37] font-bold text-sm group-hover:translate-x-2 transition">
+                Zum Admin-Panel <span>→</span>
+              </div>
+            </div>
+          </a>
+        </section>
+      )}
+
+      {/* 💬 CRM LIVE INBOX - CHATTER & MODERATOR */}
+      {(currentUserRole === "chatter" || currentUserRole === "moderator" || isAdmin) && (
+        <section className="mb-8">
+          <a href="/management/crm-inbox" className="group block">
+            <div className="bg-gradient-to-br from-amber-900/30 to-black p-8 rounded-xl border-2 border-[#D4AF37]/60 shadow-2xl hover:border-[#F3E5AB]/80 hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-300 transform hover:scale-105">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-[#F3E5AB] uppercase tracking-widest group-hover:text-[#D4AF37] transition animate-pulse">💬 Live-Inbox & Chat-Zentrale (CRM)</h2>
+                  <p className="text-sm text-slate-300 mt-3 font-semibold">Verwalte Fan-Konversationen • Injiziere Sales-Scripts • Nutze personalisierte Emoji-Leiste</p>
+                  <div className="mt-3 flex gap-3 text-xs font-bold text-[#D4AF37]">
+                    <span className="bg-[#D4AF37]/20 px-3 py-1 rounded">📨 Live-Messaging</span>
+                    <span className="bg-[#D4AF37]/20 px-3 py-1 rounded">🔥 Script-Injector</span>
+                    <span className="bg-[#D4AF37]/20 px-3 py-1 rounded">😊 Emoji-Leiste</span>
+                  </div>
+                </div>
+                <div className="text-6xl group-hover:scale-125 transition animate-bounce">📱</div>
+              </div>
+              <div className="mt-6 inline-flex items-center gap-2 text-[#D4AF37] font-black text-base group-hover:translate-x-2 transition bg-[#D4AF37]/10 px-4 py-2 rounded-lg border border-[#D4AF37]/30 hover:bg-[#D4AF37]/20">
+                Zur Chat-Zentrale öffnen <span>→</span>
+              </div>
+            </div>
+          </a>
+        </section>
+      )}
+
       {/* Kacheln */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center">
