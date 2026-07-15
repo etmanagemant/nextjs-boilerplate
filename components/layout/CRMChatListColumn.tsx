@@ -1,6 +1,6 @@
 "use client";
 
-import { Fan } from "./types";
+import { Fan } from "@/app/management/crm-inbox/types";
 
 interface ChatListColumnProps {
   fans: Fan[];
