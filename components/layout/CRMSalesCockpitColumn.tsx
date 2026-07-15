@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ScriptLibrary, FanMetadata } from "@/app/management/crm-inbox/types";
+import { ScriptLibrary, FanMetadata } from "@/app/crm-inbox/types";
 
 interface SalesCockpitColumnProps {
   fanMetadata: FanMetadata | null;

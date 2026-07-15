@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { ChatMessage } from "@/app/management/crm-inbox/types";
+import { ChatMessage } from "@/app/crm-inbox/types";
 import SmileLeiste from "./CRMSmileLeiste";
 
 interface ChatThreadColumnProps {

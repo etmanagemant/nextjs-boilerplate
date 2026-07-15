@@ -10,13 +10,13 @@ import {
   sendMessage,
   updateFanNotes,
   markMessagesAsRead,
-} from "@/app/management/crm-inbox/actions";
+} from "@/app/crm-inbox/actions";
 import {
   Fan,
   ChatMessage,
   ScriptLibrary,
   FanMetadata,
-} from "@/app/management/crm-inbox/types";
+} from "@/app/crm-inbox/types";
 import ChatListColumn from "./CRMChatListColumn";
 import ChatThreadColumn from "./CRMChatThreadColumn";
 import SalesCockpitColumn from "./CRMSalesCockpitColumn";
