@@ -49,9 +49,9 @@ export default function BrowserLoginStreamComponent({
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         const responseText = await response.text();
-        console.error("❌ Response is not JSON:", responseText.substring(0, 200));
+        console.error("❌ Response is not JSON:", responseText.substring(0, 500));
         throw new Error(
-          `Server returned non-JSON response (status ${response.status}). Check browser console for details.`
+          `Server error (${response.status}). Check browser DevTools Network tab for detailed error.`
         );
       }
 
@@ -59,7 +59,10 @@ export default function BrowserLoginStreamComponent({
       console.log("✅ Response JSON parsed:", data);
 
       if (!response.ok) {
-        throw new Error(data.error || `Server error (${response.status})`);
+        console.error("❌ API Error Response:", data);
+        throw new Error(
+          data.error || `Server error: ${data.errorType || "Unknown"}`
+        );
       }
 
       setIsBrowserRunning(true);
@@ -88,7 +91,9 @@ export default function BrowserLoginStreamComponent({
     } catch (err: any) {
       console.error("❌ Browser login error:", err);
       setAuthStatus("error");
-      setErrorMessage(err.message || "Failed to start browser session");
+      setErrorMessage(
+        err.message || "Failed to start browser session. Check console for details."
+      );
       setIsBrowserRunning(false);
       setIsConnecting(false);
     } finally {

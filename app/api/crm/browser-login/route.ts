@@ -5,10 +5,15 @@ import { createClient } from "@/utils/supabase/server";
 // 🔐 SECURITY: Validate admin access on server
 async function validateAdmin(req: NextRequest) {
   try {
+    console.log("[validateAdmin] Starting validation...");
+    
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) return false;
+    if (!user) {
+      console.log("[validateAdmin] No user found");
+      return false;
+    }
 
     // Check hardcoded admins
     if (
@@ -16,6 +21,7 @@ async function validateAdmin(req: NextRequest) {
       user.email === "etmanagement@gmail.com" ||
       user.email === "etmanagemant@gmail.com"
     ) {
+      console.log("[validateAdmin] Hardcoded admin matched");
       return true;
     }
 
@@ -25,36 +31,40 @@ async function validateAdmin(req: NextRequest) {
       .select("role")
       .eq("user_id", user.id)
       .maybeSingle();
-
+    
+    console.log("[validateAdmin] Profile role:", profile?.role);
     return profile?.role === "admin";
   } catch (err) {
-    console.error("Admin validation error:", err);
+    console.error("[validateAdmin] Error:", err);
     return false;
   }
 }
 
-export async function POST(req: NextRequest) {
+// Main handler function
+async function handleBrowserLogin(req: NextRequest) {
+  console.log("[handleBrowserLogin] === START ===");
+  
   try {
-    console.log("🔐 Validating admin access...");
-    
-    // 🔐 SECURITY: Validate admin
+    // Step 1: Validate admin
+    console.log("[handleBrowserLogin] Step 1: Validating admin...");
     const isAdmin = await validateAdmin(req);
     if (!isAdmin) {
-      console.warn("❌ Admin validation failed");
+      console.warn("[handleBrowserLogin] Admin validation failed");
       return NextResponse.json(
         { error: "Unauthorized - Admin access required" },
         { status: 403 }
       );
     }
+    console.log("[handleBrowserLogin] ✅ Admin validated");
 
-    console.log("✅ Admin validation passed");
-
-    // Extract model_id from request body
+    // Step 2: Parse request body
+    console.log("[handleBrowserLogin] Step 2: Parsing request...");
     let body: any = {};
     try {
       body = await req.json();
+      console.log("[handleBrowserLogin] Body:", body);
     } catch (parseErr) {
-      console.error("Request body parse error:", parseErr);
+      console.error("[handleBrowserLogin] Parse error:", parseErr);
       return NextResponse.json(
         { error: "Invalid JSON in request body" },
         { status: 400 }
@@ -62,25 +72,22 @@ export async function POST(req: NextRequest) {
     }
     
     const { modelId } = body;
-
     if (!modelId || typeof modelId !== "string") {
-      console.error("Invalid modelId:", modelId);
+      console.error("[handleBrowserLogin] Invalid modelId:", modelId);
       return NextResponse.json(
         { error: "Missing or invalid modelId parameter" },
         { status: 400 }
       );
     }
+    console.log("[handleBrowserLogin] Model ID validated:", modelId);
 
-    console.log(`🚀 Starting browser session for model: ${modelId}`);
-
-    // 🌐 LAUNCH HEADLESS BROWSER
+    // Step 3: Launch browser
+    console.log("[handleBrowserLogin] Step 3: Launching Chromium...");
     let browser: Browser | null = null;
     let context: BrowserContext | null = null;
     let page: Page | null = null;
 
     try {
-      console.log("📦 Attempting to launch Chromium...");
-      
       browser = await chromium.launch({
         headless: true,
         args: [
@@ -88,156 +95,108 @@ export async function POST(req: NextRequest) {
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
         ],
-      }).catch((err: any) => {
-        throw new Error(`Chromium launch failed: ${err?.message || "Unknown error"}`);
       });
 
-      if (!browser) {
-        throw new Error("Failed to create browser instance (null)");
-      }
+      if (!browser) throw new Error("Browser launch returned null");
+      console.log("[handleBrowserLogin] ✅ Chromium launched");
 
-      console.log("✅ Chromium launched successfully");
-
-      // 📱 Create browser context with realistic user agent
-      console.log("🔧 Creating browser context...");
-      
+      // Step 4: Create context
+      console.log("[handleBrowserLogin] Step 4: Creating context...");
       context = await browser.newContext({
         userAgent:
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
         viewport: { width: 1280, height: 720 },
-      }).catch((err: any) => {
-        throw new Error(`Context creation failed: ${err?.message || "Unknown error"}`);
       });
 
-      if (!context) {
-        throw new Error("Failed to create browser context (null)");
-      }
+      if (!context) throw new Error("Context creation returned null");
+      console.log("[handleBrowserLogin] ✅ Context created");
 
-      console.log("✅ Browser context created");
+      // Step 5: Create page
+      console.log("[handleBrowserLogin] Step 5: Creating page...");
+      page = await context.newPage();
+      if (!page) throw new Error("Page creation returned null");
+      console.log("[handleBrowserLogin] ✅ Page created");
 
-      console.log("📄 Creating page...");
-      page = await context.newPage().catch((err: any) => {
-        throw new Error(`Page creation failed: ${err?.message || "Unknown error"}`);
+      // Step 6: Navigate to OnlyFans
+      console.log("[handleBrowserLogin] Step 6: Navigating to OnlyFans...");
+      await page.goto("https://onlyfans.com", {
+        waitUntil: "networkidle",
+        timeout: 60000,
       });
+      console.log("[handleBrowserLogin] ✅ Navigated to OnlyFans");
 
-      if (!page) {
-        throw new Error("Failed to create page (null)");
-      }
-
-      console.log("✅ Page created successfully");
-
-      // 🎯 Navigate to OnlyFans
-      console.log("🌐 Navigating to OnlyFans...");
-      
-      try {
-        await page.goto("https://onlyfans.com", {
-          waitUntil: "networkidle",
-          timeout: 60000,
-        });
-        console.log("✅ Successfully navigated to OnlyFans");
-      } catch (navErr: any) {
-        throw new Error(`Navigation to OnlyFans failed: ${navErr?.message || "Timeout or network error"}`);
-      }
-
-      // ⏳ MONITOR PAGE STATE: Wait for successful authentication
-      console.log("👀 Monitoring authentication state...");
-
+      // Step 7: Monitor authentication
+      console.log("[handleBrowserLogin] Step 7: Waiting for authentication...");
       let authSuccessful = false;
-      const maxWaitTime = 300000; // 5 minutes timeout
+      const maxWaitTime = 300000; // 5 minutes
       const startTime = Date.now();
 
-      // Listen for navigation/URL changes
       page.on("framenavigated", async () => {
         if (!page) return;
-        const currentUrl = page.url();
-        console.log(`📍 Page URL: ${currentUrl}`);
-
-        // Check if user has reached authenticated area (typically /my or /home)
+        const url = page.url();
+        console.log(`[handleBrowserLogin] Navigation: ${url}`);
+        
         if (
-          currentUrl.includes("onlyfans.com/my") ||
-          currentUrl.includes("onlyfans.com/home") ||
-          currentUrl.includes("onlyfans.com/account")
+          url.includes("onlyfans.com/my") ||
+          url.includes("onlyfans.com/home") ||
+          url.includes("onlyfans.com/account")
         ) {
           authSuccessful = true;
-          console.log("✅ Authentication detected!");
+          console.log("[handleBrowserLogin] ✅ Auth detected!");
         }
       });
 
-      // Wait for authentication OR timeout
       while (!authSuccessful && Date.now() - startTime < maxWaitTime) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
-
-        // Also check current URL
+        
         if (page) {
-          const currentUrl = page.url();
+          const url = page.url();
           if (
-            currentUrl.includes("onlyfans.com/my") ||
-            currentUrl.includes("onlyfans.com/home") ||
-            currentUrl.includes("onlyfans.com/account")
+            url.includes("onlyfans.com/my") ||
+            url.includes("onlyfans.com/home") ||
+            url.includes("onlyfans.com/account")
           ) {
             authSuccessful = true;
-            console.log("✅ Authentication confirmed!");
+            console.log("[handleBrowserLogin] ✅ Auth confirmed!");
             break;
           }
         }
       }
 
       if (!authSuccessful) {
-        throw new Error(
-          "Authentication timeout - User did not complete login within 5 minutes"
-        );
+        throw new Error("Authentication timeout");
       }
 
-      // 🍪 EXTRACT COOKIES FROM AUTHENTICATED SESSION
-      console.log("🍪 Extracting authentication cookies...");
+      // Step 8: Extract cookies
+      console.log("[handleBrowserLogin] Step 8: Extracting cookies...");
+      if (!context) throw new Error("Context not available");
       
-      if (!context) {
-        throw new Error("Browser context is not available");
-      }
-
-      let cookies = [];
-      try {
-        cookies = await context.cookies();
-      } catch (cookieErr: any) {
-        throw new Error(`Failed to extract cookies: ${cookieErr?.message || "Unknown error"}`);
-      }
-
+      const cookies = await context.cookies();
       if (!cookies || cookies.length === 0) {
-        throw new Error("No cookies found after authentication");
+        throw new Error("No cookies found");
       }
+      console.log(`[handleBrowserLogin] ✅ Found ${cookies.length} cookies`);
 
-      console.log(`✅ Found ${cookies.length} cookies`);
+      // Step 9: Save to Supabase
+      console.log("[handleBrowserLogin] Step 9: Saving to Supabase...");
+      const supabase = await createClient();
 
-      // 💾 SAVE TO SUPABASE
-      console.log("🔗 Connecting to Supabase...");
-      
-      let supabase;
-      try {
-        supabase = await createClient();
-      } catch (sbErr: any) {
-        throw new Error(`Failed to create Supabase client: ${sbErr?.message || "Unknown error"}`);
-      }
-
-      // Prepare cookie data as JSONB
       const cookieData = {
-        cookies: cookies.map((cookie) => ({
-          name: cookie.name,
-          value: cookie.value,
-          domain: cookie.domain,
-          path: cookie.path,
-          expires: cookie.expires,
-          httpOnly: cookie.httpOnly,
-          secure: cookie.secure,
-          sameSite: cookie.sameSite,
+        cookies: cookies.map((c) => ({
+          name: c.name,
+          value: c.value,
+          domain: c.domain,
+          path: c.path,
+          expires: c.expires,
+          httpOnly: c.httpOnly,
+          secure: c.secure,
+          sameSite: c.sameSite,
         })),
         extractedAt: new Date().toISOString(),
         userAgent:
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
       };
 
-      console.log("💾 Saving session to Supabase...");
-
-      // Upsert session record
       const { data: sessionData, error: sessionError } = await supabase
         .from("crm_model_sessions")
         .upsert(
@@ -253,20 +212,19 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (sessionError) {
-        console.error("Supabase error:", sessionError);
-        throw new Error(`Failed to save session: ${(sessionError as any)?.message || "Unknown database error"}`);
+        console.error("[handleBrowserLogin] Supabase error:", sessionError);
+        throw new Error(`DB save failed: ${(sessionError as any)?.message}`);
       }
 
-      if (!sessionData) {
-        console.warn("⚠️ Session data is null but no error occurred");
-      }
+      console.log("[handleBrowserLogin] ✅ Saved to Supabase");
 
-      console.log("✅ Session saved successfully!");
-
-      // 🧹 CLEANUP: Close browser
+      // Step 10: Cleanup
+      console.log("[handleBrowserLogin] Step 10: Closing browser...");
       await browser.close();
+      console.log("[handleBrowserLogin] ✅ Browser closed");
 
-      // ✅ SUCCESS RESPONSE
+      // Success response
+      console.log("[handleBrowserLogin] === SUCCESS ===");
       return NextResponse.json(
         {
           status: "success",
@@ -279,32 +237,46 @@ export async function POST(req: NextRequest) {
         { status: 200 }
       );
     } catch (playError: any) {
-      console.error("🔴 Browser automation error:", playError);
-      console.error("Error type:", playError?.constructor?.name);
-      console.error("Error message:", playError?.message);
-      console.error("Error stack:", playError?.stack);
-
-      // 🧹 Emergency cleanup
+      console.error("[handleBrowserLogin] Browser error:", playError?.message);
+      
+      // Emergency cleanup
       try {
         if (browser) await browser.close();
-      } catch (closeErr) {
-        console.error("Error closing browser:", closeErr);
+      } catch (e) {
+        console.error("[handleBrowserLogin] Cleanup error:", e);
       }
 
       throw playError;
     }
   } catch (err: any) {
-    console.error("🔴 CRITICAL API ERROR:", err);
-    console.error("Error type:", err?.constructor?.name);
-    console.error("Error message:", err?.message);
-    console.error("Error stack:", err?.stack);
-
+    console.error("[handleBrowserLogin] Fatal error:", err?.message);
+    
+    // Always return JSON
     return NextResponse.json(
       {
         status: "error",
         connected: false,
         error: err?.message || "Authentication failed",
         errorType: err?.constructor?.name || "Unknown",
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Export POST handler
+export async function POST(req: NextRequest) {
+  console.log("[POST] New request");
+  try {
+    return await handleBrowserLogin(req);
+  } catch (err: any) {
+    console.error("[POST] Uncaught error:", err?.message);
+    return NextResponse.json(
+      {
+        status: "error",
+        connected: false,
+        error: "Uncaught error - check logs",
         timestamp: new Date().toISOString(),
       },
       { status: 500 }
