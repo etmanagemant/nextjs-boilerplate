@@ -140,7 +140,7 @@ export default function CRMConnectClient({
         <div className="flex items-center justify-between mb-6 pb-6 border-b border-[#AA7C11]/20 flex-wrap gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">
-              🔗 Creator Connection Hub
+              <span>🔗</span> Creator Connection Hub
             </h1>
             <p className="text-sm text-slate-400 mt-2">
               Manage OnlyFans model sessions and configure communication

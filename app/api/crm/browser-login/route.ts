@@ -279,7 +279,10 @@ export async function POST(req: NextRequest) {
         { status: 200 }
       );
     } catch (playError: any) {
-      console.error("Browser automation error:", playError);
+      console.error("🔴 Browser automation error:", playError);
+      console.error("Error type:", playError?.constructor?.name);
+      console.error("Error message:", playError?.message);
+      console.error("Error stack:", playError?.stack);
 
       // 🧹 Emergency cleanup
       try {
@@ -288,18 +291,20 @@ export async function POST(req: NextRequest) {
         console.error("Error closing browser:", closeErr);
       }
 
-      throw new Error(
-        `Browser automation failed: ${playError?.message || "Unknown error"}`
-      );
+      throw playError;
     }
   } catch (err: any) {
-    console.error("🔴 API Error:", err);
+    console.error("🔴 CRITICAL API ERROR:", err);
+    console.error("Error type:", err?.constructor?.name);
+    console.error("Error message:", err?.message);
+    console.error("Error stack:", err?.stack);
 
     return NextResponse.json(
       {
         status: "error",
         connected: false,
         error: err?.message || "Authentication failed",
+        errorType: err?.constructor?.name || "Unknown",
         timestamp: new Date().toISOString(),
       },
       { status: 500 }
