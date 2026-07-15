@@ -125,7 +125,10 @@ async function handleBrowserLogin(req: NextRequest) {
       const sessionResponse = await fetch(`https://chrome.browserless.io/session?token=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          tti: 30000,
+          timeout: 60000,
+        }),
       });
 
       console.log("[handleBrowserLogin] Browserless response status:", sessionResponse.status);
