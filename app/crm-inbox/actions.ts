@@ -217,7 +217,7 @@ export async function sendMessage(
 
     if (error) throw error;
 
-    revalidatePath("/management/crm-inbox");
+    revalidatePath("/crm-inbox");
     return { success: true, message: "Message sent!" };
   } catch (err) {
     throw new Error(
@@ -273,7 +273,7 @@ export async function markMessagesAsRead(
       .eq("sender", "fan");
 
     if (error) throw error;
-    revalidatePath("/management/crm-inbox");
+    revalidatePath("/crm-inbox");
     return { success: true };
   } catch (err) {
     console.error("Error marking as read:", err);

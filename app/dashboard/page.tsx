@@ -322,7 +322,7 @@ export default function DashboardPage() {
       {/* 💬 CRM LIVE INBOX - CHATTER & MODERATOR */}
       {(currentUserRole === "chatter" || currentUserRole === "moderator" || isAdmin) && (
         <section className="mb-8">
-          <a href="/management/crm-inbox" className="group block">
+          <a href="/crm-inbox" className="group block">
             <div className="bg-gradient-to-br from-amber-900/30 to-black p-8 rounded-xl border-2 border-[#D4AF37]/60 shadow-2xl hover:border-[#F3E5AB]/80 hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-300 transform hover:scale-105">
               <div className="flex items-center justify-between">
                 <div>
