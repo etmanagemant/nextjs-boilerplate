@@ -49,8 +49,13 @@ export default function CRMInboxClient({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   // Fetch chatter's emojis on mount
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
   useEffect(() => {
     const loadEmojis = async () => {
       const emojiList = await fetchChatterEmojis(chatterId);
@@ -140,9 +145,9 @@ export default function CRMInboxClient({
   };
 
   return (
-    <main className="h-screen flex bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
+    <main className="h-screen flex bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden" suppressHydrationWarning>
       {/* Hero Banner (Full Width at Top) */}
-      {!selectedFanId && (
+      {isHydrated && !selectedFanId && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black z-0">
           <div className="text-center">
             <h1 className="text-4xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent mb-3 uppercase tracking-wider">
@@ -195,7 +200,7 @@ export default function CRMInboxClient({
       </div>
 
       {/* Fallback: Show chat list even when no fan selected */}
-      {!selectedFanId && (
+      {isHydrated && !selectedFanId && (
         <div className="w-1/4 border-r border-[#D4AF37]/20 relative z-10">
           <ChatListColumn
             fans={fans}
