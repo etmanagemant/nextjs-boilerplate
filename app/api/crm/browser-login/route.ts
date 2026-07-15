@@ -200,19 +200,20 @@ async function handleBrowserLogin(req: NextRequest) {
 
     console.log("[handleBrowserLogin] ✅ Session created, WebSocket ready");
 
-    // Save session info to Supabase
+    // Save session info to Supabase - IMPORTANT: is_active = false until verified!
     const supabase = await createClient();
     const { data: upsertData, error: upsertError } = await supabase
       .from("crm_model_sessions")
       .upsert(
         {
           model_id: modelId,
-          is_active: true,
+          is_active: false,  // ⚠️ NOT VERIFIED YET - Only true after successful auth confirmation
           last_verified_at: new Date().toISOString(),
           auth_cookies: {
             browserless_session_id: sessionData.id,
             ws_endpoint: wsEndpoint,
             created_at: new Date().toISOString(),
+            verification_status: "pending",  // Track verification state
           },
         },
         { onConflict: "model_id" }
@@ -224,18 +225,21 @@ async function handleBrowserLogin(req: NextRequest) {
       throw new Error(`Failed to save session: ${(upsertError as any)?.message}`);
     }
 
-    console.log("[handleBrowserLogin] ✅ Session saved to Supabase");
+    console.log("[handleBrowserLogin] ✅ Session saved to Supabase (pending verification)");
+    console.log("[handleBrowserLogin] ⏳ Waiting for user to authenticate on OnlyFans...");
 
-    // SUCCESS - Browserless session is ready
-    console.log("[handleBrowserLogin] === SUCCESS ===");
+    // SUCCESS - Browserless session is ready but NOT YET ACTIVE
+    console.log("[handleBrowserLogin] === SUCCESS (PENDING VERIFICATION) ===");
     return safeJsonResponse(
       {
         status: "success",
-        connected: true,
+        connected: false,  // ⚠️ Changed to false - session created but not verified
+        verified: false,
         modelId,
         sessionId: sessionData.id,
         wsEndpoint: wsEndpoint,
         source: "browserless-direct",
+        message: "Session created. Waiting for OnlyFans authentication...",
         timestamp: new Date().toISOString(),
       },
       200

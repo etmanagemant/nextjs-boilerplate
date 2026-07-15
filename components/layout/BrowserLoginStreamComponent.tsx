@@ -18,20 +18,23 @@ export default function BrowserLoginStreamComponent({
   const [isBrowserRunning, setIsBrowserRunning] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [authStatus, setAuthStatus] = useState<
-    "idle" | "loading" | "authenticated" | "error"
+    "idle" | "loading" | "waiting" | "authenticated" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
     null
   );
+  const [sessionId, setSessionId] = useState<string>("");
+  const [verificationAttempts, setVerificationAttempts] = useState(0);
 
   // 🚀 START HEADLESS BROWSER SESSION
   const handleStartBrowserLogin = async () => {
     setIsConnecting(true);
     setAuthStatus("loading");
     setErrorMessage("");
-    setStatusMessage("Starte Playwright Browser-Sitzung...");
+    setStatusMessage("🚀 Starte Browserless Session...");
+    setVerificationAttempts(0);
 
     try {
       console.log("📤 Sending request to /api/crm/browser-login");
@@ -65,35 +68,80 @@ export default function BrowserLoginStreamComponent({
         );
       }
 
+      // Store session ID for verification
+      setSessionId(data.sessionId);
       setIsBrowserRunning(true);
-      setStatusMessage("⏳ Bitte logge dich im folgenden Fenster bei OnlyFans ein und löse das Captcha...");
+      setAuthStatus("waiting");
+      setStatusMessage("⏳ Bitte logge dich im Browser ein und löse das Captcha...\n\nWir warten auf die Bestätigung deiner OnlyFans-Authentifizierung.");
 
-      // 📊 START POLLING for authentication status
+      // 📊 START POLLING for VERIFICATION - only mark connected when REAL auth is detected
+      let attempts = 0;
+      const maxAttempts = 300; // 5 minutes at 1 second intervals (300 seconds)
+      
       const interval = setInterval(async () => {
-        try {
-          const encodedModelId = encodeURIComponent(modelId); // 🔒 URL-encode for safety
-          const statusResponse = await fetch(
-            `/api/crm/browser-login/status?modelId=${encodedModelId}`
-          );
-          
-          // ⚠️ Check response status before parsing
-          if (!statusResponse.ok) {
-            console.warn(`⚠️ Status check failed: ${statusResponse.status}`);
-            return; // Continue polling, don't crash
-          }
-          
-          const statusData = await statusResponse.json();
+        attempts++;
+        setVerificationAttempts(attempts);
 
-          if (statusData.authenticated) {
+        try {
+          // ⚠️ Use new /verify endpoint that checks REAL OnlyFans auth
+          const verifyResponse = await fetch(
+            "/api/crm/browser-login/verify",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                modelId,
+                sessionId: data.sessionId,
+              }),
+            }
+          );
+
+          if (!verifyResponse.ok && verifyResponse.status !== 200) {
+            console.warn(`⚠️ Verification check failed: ${verifyResponse.status}`);
+            return;
+          }
+
+          const verifyData = await verifyResponse.json();
+          console.log(`[Attempt ${attempts}] Verification response:`, verifyData.status);
+
+          // ✅ REAL VERIFICATION - only set to authenticated when backend confirms
+          if (verifyData.verified === true) {
             setAuthStatus("authenticated");
-            setStatusMessage("✅ Authentifizierung erfolgreich erkannt!");
+            setStatusMessage("✅ OnlyFans-Authentifizierung bestätigt und sicher gespeichert!");
             clearInterval(interval);
             setPollingInterval(null);
+            console.log("🎉 User authenticated after", attempts, "attempts");
+          } else if (verifyData.status === "waiting") {
+            // Still waiting - browser session active but no auth yet
+            setStatusMessage(
+              `⏳ Warte auf OnlyFans-Anmeldung... (Versuch ${attempts})`
+            );
+          } else if (verifyData.status === "error") {
+            // Error - session died or something went wrong
+            console.error("❌ Verification error:", verifyData.error);
+            clearInterval(interval);
+            setPollingInterval(null);
+            setAuthStatus("error");
+            setErrorMessage(verifyData.error || "Verification failed");
+            setIsBrowserRunning(false);
           }
+
         } catch (err) {
-          console.error("Status polling error:", err);
+          console.error("Verification polling error:", err);
         }
-      }, 3000); // Poll every 3 seconds
+
+        // Timeout after 5 minutes
+        if (attempts >= maxAttempts) {
+          console.warn("⏱️ Verification timeout - 5 minutes elapsed");
+          clearInterval(interval);
+          setPollingInterval(null);
+          setAuthStatus("error");
+          setErrorMessage(
+            "Timeout: Keine OnlyFans-Authentifizierung erkannt. Der Browser wurde geschlossen."
+          );
+          setIsBrowserRunning(false);
+        }
+      }, 1000); // Poll every 1 second
 
       setPollingInterval(interval);
     } catch (err: any) {
@@ -198,7 +246,7 @@ export default function BrowserLoginStreamComponent({
             <div className="space-y-4">
               {/* Viewport / Loading State */}
               <div className="relative w-full aspect-video bg-gradient-to-br from-[#050505] to-black border-2 border-[#AA7C11]/30 rounded-xl overflow-hidden">
-                {/* Skeleton Loader while connecting */}
+                {/* Loading State - Session starting */}
                 {authStatus === "loading" && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60">
                     <div className="space-y-4 w-3/4">
@@ -210,8 +258,26 @@ export default function BrowserLoginStreamComponent({
                   </div>
                 )}
 
-                {/* Browser Stream Placeholder (would be replaced with actual WebSocket stream) */}
-                {authStatus !== "authenticated" && (
+                {/* Waiting State - Waiting for user to authenticate */}
+                {authStatus === "waiting" && (
+                  <div className="absolute inset-0 flex items-center justify-center text-center bg-gradient-to-br from-blue-500/10 to-blue-900/10">
+                    <div className="space-y-4">
+                      <p className="text-6xl animate-spin">⏳</p>
+                      <p className="text-[#D4AF37] font-bold text-lg">
+                        Warte auf OnlyFans-Anmeldung
+                      </p>
+                      <p className="text-slate-400 text-sm">
+                        Bitte melden Sie sich im Browser an...
+                      </p>
+                      <p className="text-slate-500 text-xs">
+                        Versuche: {verificationAttempts}/300
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Placeholder - When not running */}
+                {!isBrowserRunning && authStatus === "idle" && (
                   <div className="absolute inset-0 flex items-center justify-center text-center">
                     <div>
                       <p className="text-4xl mb-4">🌐</p>
@@ -219,19 +285,34 @@ export default function BrowserLoginStreamComponent({
                         OnlyFans Browser
                       </p>
                       <p className="text-slate-500 text-xs mt-2">
-                        Stream wird hier angezeigt...
+                        Klicken Sie unten zum Starten...
                       </p>
                     </div>
                   </div>
                 )}
 
-                {/* Success State */}
+                {/* Success State - Authenticated! */}
                 {authStatus === "authenticated" && (
                   <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 to-emerald-900/20 flex items-center justify-center">
                     <div className="text-center">
                       <p className="text-6xl mb-4 animate-bounce">✅</p>
                       <p className="text-emerald-400 font-bold text-xl">
-                        Authentifizierung bestätigt!
+                        OnlyFans-Authentifizierung bestätigt!
+                      </p>
+                      <p className="text-emerald-300 text-sm mt-2">
+                        Cookies wurden sicher gespeichert
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error State */}
+                {authStatus === "error" && (
+                  <div className="absolute inset-0 bg-gradient-to-br from-red-500/20 to-red-900/20 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-6xl mb-4">❌</p>
+                      <p className="text-red-400 font-bold text-lg">
+                        Fehler bei der Authentifizierung
                       </p>
                     </div>
                   </div>
@@ -242,11 +323,13 @@ export default function BrowserLoginStreamComponent({
               <div className="bg-black/40 p-4 rounded-lg border border-[#AA7C11]/10">
                 <p className="text-xs text-slate-400 leading-relaxed">
                   {authStatus === "loading" &&
-                    "⏳ Bitte melden Sie sich auf der OnlyFans-Website an. Nachdem Sie Ihr Konto erfolgreich authentifiziert haben, wird unser System die Sitzung automatisch erkennen."}
+                    "⏳ Starte Browser-Session..."}
+                  {authStatus === "waiting" &&
+                    "⏳ Bitte melden Sie sich auf OnlyFans an. Das System wartet auf die Bestätigung Ihrer Authentifizierung. Dies kann bis zu 5 Minuten dauern."}
                   {authStatus === "authenticated" &&
-                    "✅ Ihr OnlyFans-Konto wurde erfolgreich authentifiziert. Klicken Sie auf den goldenen Button unten, um die Verbindung zu finalisieren."}
+                    "✅ Ihre OnlyFans-Authentifizierung wurde bestätigt und die Cookies wurden sicher gespeichert. Klicken Sie auf den goldenen Button unten, um die Verbindung zu finalisieren."}
                   {authStatus === "error" &&
-                    "❌ Es gab ein Problem mit dem Browser-Prozess. Bitte versuchen Sie es erneut."}
+                    "❌ Es gab ein Problem mit dem Browser-Prozess oder die Authentifizierung hat zu lange gedauert. Bitte versuchen Sie es erneut."}
                 </p>
               </div>
             </div>
@@ -254,9 +337,9 @@ export default function BrowserLoginStreamComponent({
             /* Initial State - Start Button */
             <div className="flex flex-col items-center justify-center py-12 space-y-6">
               <p className="text-center text-slate-400 max-w-lg">
-                Klicken Sie auf den Button unten, um den automatisierten OnlyFans
-                Login-Prozess zu starten. Ihr Webbrowser wird sich öffnen und Sie
-                werden aufgefordert, sich anzumelden.
+                Klicken Sie auf den Button, um den Browserless-Login-Prozess zu starten. 
+                Sie werden aufgefordert, sich bei OnlyFans anzumelden. Das System wartet dann 
+                auf die Authentifizierung und speichert die Cookies sicher.
               </p>
 
               <button
@@ -274,8 +357,8 @@ export default function BrowserLoginStreamComponent({
               </button>
 
               <p className="text-xs text-slate-500 text-center">
-                Dieser Prozess öffnet einen automatisierten Browser und speichert
-                die Authentifizierungscookies sicher.
+                Dieser Prozess startet einen sicheren Browser und speichert
+                die OnlyFans-Authentifizierungscookies verschlüsselt in der Datenbank.
               </p>
             </div>
           )}
