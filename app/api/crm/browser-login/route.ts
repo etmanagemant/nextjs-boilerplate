@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { chromium } from "playwright"; // ✅ STATIC IMPORT - Required for Vercel
-import { createClient } from "@/utils/supabase/server"; // ✅ STATIC IMPORT - NO dynamic imports on Vercel!
+import { chromium } from "playwright";
+import { createClient } from "@/utils/supabase/server";
 
 // ⚠️ VERCEL CONFIGURATION - Required for Playwright on Serverless
 export const dynamic = "force-dynamic"; // Forces Node.js runtime (not Edge)

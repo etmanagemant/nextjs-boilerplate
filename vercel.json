@@ -1,4 +1,2 @@
-{
-  "buildCommand": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=true npm run build",
-  "installCommand": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=true npm ci"
+{}
 }
