@@ -121,57 +121,24 @@ async function handleBrowserLogin(req: NextRequest) {
     }
     console.log("[handleBrowserLogin] ✅ API Key loaded");
 
-    // Step 4: Connect to Browserless
-    console.log("[handleBrowserLogin] Step 4: Connecting to Browserless...");
-    const browserlessUrl = `https://chrome.browserless.io?token=${apiKey}`;
-
-    // Step 5: Launch browser session via Browserless
-    console.log("[handleBrowserLogin] Step 5: Launching browser session...");
-    let wsEndpoint: string;
-    
-    try {
-      const response = await fetch(`https://chrome.browserless.io/session?token=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          timeout: 30000,
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok || !data.wsEndpoint) {
-        throw new Error(data.error || "Failed to create session");
-      }
-
-      wsEndpoint = data.wsEndpoint;
-      console.log("[handleBrowserLogin] ✅ Browser session created");
-    } catch (launchErr: any) {
-      console.error("[handleBrowserLogin] Session creation failed:", launchErr?.message);
-      return safeJsonResponse(
-        { 
-          status: "error",
-          error: "Failed to create browser session",
-          details: launchErr?.message,
-          timestamp: new Date().toISOString()
-        },
-        500
-      );
-    }
+    // Step 4: Generate WebSocket endpoint for Browserless
+    console.log("[handleBrowserLogin] Step 4: Generating WebSocket endpoint...");
+    const wsEndpoint = `wss://chrome.browserless.io?token=${apiKey}`;
+    console.log("[handleBrowserLogin] ✅ WebSocket endpoint ready");
 
     try {
-      // Step 6: Import Playwright to connect to Browserless
-      console.log("[handleBrowserLogin] Step 6: Importing Playwright...");
+      // Step 5: Import Playwright to connect to Browserless
+      console.log("[handleBrowserLogin] Step 5: Importing Playwright...");
       const { chromium } = await import("playwright");
 
-      // Step 7: Connect to Browserless instance
-      console.log("[handleBrowserLogin] Step 7: Connecting to remote browser...");
+      // Step 6: Connect to remote Browserless browser
+      console.log("[handleBrowserLogin] Step 6: Connecting to Browserless...");
       const browser = await chromium.connectOverCDP(wsEndpoint);
       console.log("[handleBrowserLogin] ✅ Connected to Browserless");
 
       try {
-        // Step 8: Create context and page
-        console.log("[handleBrowserLogin] Step 8: Creating browser context...");
+        // Step 7: Create context and page
+        console.log("[handleBrowserLogin] Step 7: Creating browser context...");
         const context = await browser.newContext({
           userAgent:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
@@ -179,16 +146,16 @@ async function handleBrowserLogin(req: NextRequest) {
         const page = await context.newPage();
         console.log("[handleBrowserLogin] ✅ Context and page created");
 
-        // Step 9: Navigate to OnlyFans
-        console.log("[handleBrowserLogin] Step 9: Navigating to OnlyFans...");
+        // Step 8: Navigate to OnlyFans
+        console.log("[handleBrowserLogin] Step 8: Navigating to OnlyFans...");
         await page.goto("https://onlyfans.com", {
           waitUntil: "networkidle",
           timeout: 60000,
         });
         console.log("[handleBrowserLogin] ✅ Navigated to OnlyFans");
 
-        // Step 10: Wait for authentication
-        console.log("[handleBrowserLogin] Step 10: Waiting for authentication...");
+        // Step 9: Wait for authentication
+        console.log("[handleBrowserLogin] Step 9: Waiting for authentication...");
         let authSuccessful = false;
         const maxWaitTime = 300000; // 5 minutes
         const startTime = Date.now();
@@ -226,16 +193,16 @@ async function handleBrowserLogin(req: NextRequest) {
           throw new Error("Authentication timeout - user did not complete login");
         }
 
-        // Step 11: Extract cookies
-        console.log("[handleBrowserLogin] Step 11: Extracting cookies...");
+        // Step 10: Extract cookies
+        console.log("[handleBrowserLogin] Step 10: Extracting cookies...");
         const cookies = await context.cookies();
         if (!cookies || cookies.length === 0) {
           throw new Error("No cookies found after authentication");
         }
         console.log(`[handleBrowserLogin] ✅ Found ${cookies.length} cookies`);
 
-        // Step 12: Save to Supabase
-        console.log("[handleBrowserLogin] Step 12: Saving to Supabase...");
+        // Step 11: Save to Supabase
+        console.log("[handleBrowserLogin] Step 11: Saving to Supabase...");
         const { createClient } = await import("@/utils/supabase/server");
         const supabase = await createClient();
 
@@ -275,8 +242,8 @@ async function handleBrowserLogin(req: NextRequest) {
 
         console.log("[handleBrowserLogin] ✅ Session saved to Supabase");
 
-        // Step 13: Cleanup
-        console.log("[handleBrowserLogin] Step 13: Closing browser...");
+        // Step 12: Cleanup
+        console.log("[handleBrowserLogin] Step 12: Closing browser...");
         await browser.close();
         console.log("[handleBrowserLogin] ✅ Browser closed");
 
