@@ -1,0 +1,49 @@
+# Vercel Deployment Optimization
+# Exclude files that are not needed in production
+
+# Source Control
+.git
+.gitignore
+.github
+
+# Documentation
+README.md
+*.md
+SETUP_*.md
+CONTENT_PLAN_*.md
+ADMIN_CHATTER_*.md
+ARCHITECTURE_BLUEPRINT.md
+AGENTS.md
+CLAUDE.md
+
+# Database Setup Files (not needed in production)
+*.sql
+SETUP_*.sql
+*_SETUP.sql
+*_MIGRATION.sql
+*_FIX.sql
+
+# Development
+.env.example
+.env.local
+.vscode
+.sidecar
+node_modules/.cache
+.next/cache
+.eslintrc*
+
+# Temporary/Test Files  
+*.rtf
+jbsdjidfbsdvb*
+
+# Build outputs (Next.js builds this)
+.next
+dist
+build
+
+# Large files that don't belong in serverless
+scripts/
+public/Images/
+
+# Node modules should be installed during build
+# node_modules is auto-installed by Vercel, but we need playwright installed

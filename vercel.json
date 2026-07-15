@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  
+  "functions": {
+    "app/api/crm/browser-login/route.ts": {
+      "runtime": "nodejs18.x",
+      "memory": 3008,
+      "maxDuration": 300
+    },
+    "app/api/crm/browser-login/status/route.ts": {
+      "runtime": "nodejs18.x",
+      "memory": 1024,
+      "maxDuration": 30
+    },
+    "app/api/crm/browser-login/check-env/route.ts": {
+      "runtime": "nodejs18.x",
+      "memory": 512,
+      "maxDuration": 30
+    },
+    "app/api/upload-content/route.ts": {
+      "runtime": "nodejs18.x",
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  },
+  
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next"
+}

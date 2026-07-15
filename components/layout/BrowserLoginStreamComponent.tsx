@@ -71,9 +71,17 @@ export default function BrowserLoginStreamComponent({
       // 📊 START POLLING for authentication status
       const interval = setInterval(async () => {
         try {
+          const encodedModelId = encodeURIComponent(modelId); // 🔒 URL-encode for safety
           const statusResponse = await fetch(
-            `/api/crm/browser-login/status?modelId=${modelId}`
+            `/api/crm/browser-login/status?modelId=${encodedModelId}`
           );
+          
+          // ⚠️ Check response status before parsing
+          if (!statusResponse.ok) {
+            console.warn(`⚠️ Status check failed: ${statusResponse.status}`);
+            return; // Continue polling, don't crash
+          }
+          
           const statusData = await statusResponse.json();
 
           if (statusData.authenticated) {

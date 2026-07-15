@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// ⚠️ VERCEL CONFIGURATION - Required for Playwright on Serverless
+export const dynamic = "force-dynamic"; // Forces Node.js runtime (not Edge)
+export const maxDuration = 300; // 5 minutes timeout (Playwright needs time)
+export const runtime = "nodejs"; // Explicitly use Node.js runtime for Playwright support
+
 function safeJsonResponse(data: any, status: number = 200) {
   try {
     return NextResponse.json(data, { status });

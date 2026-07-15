@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
+export const dynamic = "force-dynamic"; // Required for server auth
+export const maxDuration = 60; // File uploads may take time
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();

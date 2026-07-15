@@ -2,6 +2,8 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic"; // Required for auth signout
+
 export async function POST() {
   const supabase = await createClient();
   await supabase.auth.signOut();

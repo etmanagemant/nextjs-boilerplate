@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
+export const dynamic = "force-dynamic"; // Required for server auth
+
 // 🔐 SECURITY: Validate admin access on server
 async function validateAdmin(req: NextRequest) {
   try {

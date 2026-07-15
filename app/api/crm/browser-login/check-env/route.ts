@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic"; // Required for server auth
+
 export async function GET(req: NextRequest) {
   try {
     // Check if user is admin
