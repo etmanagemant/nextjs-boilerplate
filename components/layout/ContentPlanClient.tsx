@@ -376,7 +376,7 @@ export default function ContentPlanClient({
             id="file-upload"
           />
           <label htmlFor="file-upload" className="cursor-pointer block">
-            <div className="text-[#D4AF37] text-2xl mb-2">📤</div>
+            <div className="text-2xl mb-2"><span>📤</span></div>
             <p className="text-sm font-semibold text-white mb-1">
               {uploading ? "Hochladen..." : "Bild hierher ziehen oder klicken"}
             </p>

@@ -154,7 +154,7 @@ export default function ContentUploader({
 
         {isLoading && uploadProgress !== null ? (
           <div className="space-y-3">
-            <div className="text-[#D4AF37] font-semibold text-sm">⬆️ Lädt...</div>
+            <div className="text-[#D4AF37] font-semibold text-sm"><span>⬆️</span> Lädt...</div>
             <div className="w-full bg-[#050505] rounded-full h-2">
               <div
                 className="bg-gradient-to-r from-[#D4AF37] to-[#AA7C11] h-full transition-all"

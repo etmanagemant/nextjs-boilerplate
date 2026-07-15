@@ -219,7 +219,7 @@ export default function AbrechnungPage() {
               <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Crypto Wallet</label>
               <input type="text" value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value)} autoComplete="off" placeholder="Wallet Adresse..." className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
             </div>
-            <button onClick={handleSaveProfile} className="w-full bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black text-xs font-bold px-3 py-2 rounded uppercase cursor-pointer">💾 Daten speichern</button>
+            <button onClick={handleSaveProfile} className="w-full bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black text-xs font-bold px-3 py-2 rounded uppercase cursor-pointer"><span>💾</span> Daten speichern</button>
             {saveStatus && <div className="text-center text-xs font-mono text-emerald-400">{saveStatus}</div>}
           </div>
         </section>

@@ -68,8 +68,8 @@ export default async function BuchhaltungPage() {
                     <div>Live-Umsatz: <span className="text-emerald-400 font-bold">${rev.toFixed(2)}</span></div>
                   </div>
                   <div className="text-[11px] text-slate-400 border-t border-[#AA7C11]/5 pt-2 mt-2">
-                    <div>💳 <span className="text-[#D4AF37] font-semibold">Methode:</span> {chatter.zahlungs_methode || "Nicht hinterlegt"}</div>
-                    <div className="truncate">🔑 <span className="text-[#D4AF37] font-semibold">Details:</span> {chatter.zahlungs_details || "Keine Daten"}</div>
+                    <div><span>💳</span> <span className="text-[#D4AF37] font-semibold">Methode:</span> {chatter.zahlungs_methode || "Nicht hinterlegt"}</div>
+                    <div className="truncate"><span>🔑</span> <span className="text-[#D4AF37] font-semibold">Details:</span> {chatter.zahlungs_details || "Keine Daten"}</div>
                   </div>
                 </div>
                 <button className="w-full mt-4 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#AA7C11]/30 text-[#D4AF37] rounded py-1 text-xs font-bold transition cursor-pointer">Abrechnung PDF laden</button>
