@@ -2,8 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   
-  // ⚠️ PLAYWRIGHT CONFIGURATION - Must NOT externalize since we use static import
-  // Webpack should bundle playwright normally for Vercel serverless
+  // ⚠️ CRITICAL: Mark Playwright as external to prevent Turbopack from bundling it
+  // This is required because Playwright-core tries to load browsers.json during bundling
+  // Even though we don't use local browsers (Browserless.io), Turbopack still processes the import
+  serverComponentsExternalPackages: ["playwright", "playwright-core"],
 };
 
 export default nextConfig;
