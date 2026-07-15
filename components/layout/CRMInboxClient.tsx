@@ -64,6 +64,28 @@ export default function CRMInboxClient({
     loadEmojis();
   }, [chatterId]);
 
+  // When selectedModel changes: load fans for this model
+  useEffect(() => {
+    if (!selectedModel) {
+      setFans([]);
+      setSelectedFanId(null);
+      return;
+    }
+
+    const loadFansForModel = async () => {
+      setIsLoadingFans(true);
+      try {
+        const fanList = await fetchActiveFans(chatterId, selectedModel);
+        setFans(fanList);
+        setSelectedFanId(null); // Reset selected fan when model changes
+      } finally {
+        setIsLoadingFans(false);
+      }
+    };
+
+    loadFansForModel();
+  }, [selectedModel, chatterId]);
+
   // When fan is selected: load messages and metadata
   useEffect(() => {
     if (!selectedFanId) {

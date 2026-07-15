@@ -9,8 +9,9 @@ import { revalidatePath } from "next/cache";
 
 /**
  * Fetch all active fans for the chatter (read from messages/sessions)
+ * Optionally filter by modelId if provided
  */
-export async function fetchActiveFans(chatterId: string) {
+export async function fetchActiveFans(chatterId: string, modelId?: string) {
   const supabase = await createClient();
 
   try {
@@ -51,11 +52,18 @@ export async function fetchActiveFans(chatterId: string) {
       unreadMap.set(msg.fan_id, (unreadMap.get(msg.fan_id) || 0) + 1);
     });
 
-    // Get fan metadata
-    const { data: metadata, error: metaError } = await supabase
+    // Get fan metadata - optionally filtered by modelId
+    let metadataQuery = supabase
       .from("crm_fan_metadata")
-      .select("fan_id, lifetime_value, vip_tier")
+      .select("fan_id, lifetime_value, vip_tier, model_id")
       .in("fan_id", uniqueFanIds);
+
+    // Filter by model if modelId provided
+    if (modelId) {
+      metadataQuery = metadataQuery.eq("model_id", modelId);
+    }
+
+    const { data: metadata, error: metaError } = await metadataQuery;
 
     if (metaError) throw metaError;
 
@@ -64,19 +72,22 @@ export async function fetchActiveFans(chatterId: string) {
       metadataMap.set(meta.fan_id, meta);
     });
 
-    // Build fan objects
-    const fans = uniqueFanIds.map((fan_id) => {
-      const meta = metadataMap.get(fan_id) || {};
-      return {
-        id: fan_id,
-        username: `Fan-${fan_id.slice(0, 8)}`,
-        avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${fan_id}`,
-        total_revenue: meta.lifetime_value || 0,
-        is_vip: meta.vip_tier ? meta.vip_tier !== "standard" : false,
-        last_message_at: fanMap.get(fan_id) || new Date().toISOString(),
-        unread_count: unreadMap.get(fan_id) || 0,
-      };
-    });
+    // Build fan objects - only include fans that have metadata for this model (or if no modelId specified)
+    const fans = uniqueFanIds
+      .filter((fan_id) => !modelId || metadataMap.has(fan_id))
+      .map((fan_id) => {
+        const meta = metadataMap.get(fan_id) || {};
+        return {
+          id: fan_id,
+          username: `Fan-${fan_id.slice(0, 8)}`,
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${fan_id}`,
+          total_revenue: meta.lifetime_value || 0,
+          is_vip: meta.vip_tier ? meta.vip_tier !== "standard" : false,
+          last_message_at: fanMap.get(fan_id) || new Date().toISOString(),
+          unread_count: unreadMap.get(fan_id) || 0,
+          model_id: meta.model_id,
+        };
+      });
 
     return fans;
   } catch (err) {
