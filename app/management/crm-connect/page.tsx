@@ -124,18 +124,33 @@ export default async function CRMConnectPage() {
     console.log("crm_model_sessions empty, loading from models table as fallback...");
     const { data: fallbackModels } = await supabase
       .from("models")
-      .select("id, name, platform_type, profiles!id(full_name)")
+      .select("id, name, platform_type")
       .eq("platform_type", "onlyfans")
       .order("name", { ascending: true });
 
     if (fallbackModels && fallbackModels.length > 0) {
-      console.log(`Found ${fallbackModels.length} models in fallback:`, fallbackModels);
+      console.log(`Found ${fallbackModels.length} models in fallback`);
       typedModels = fallbackModels.map((m: any) => ({
         id: m.id,
-        name: m.profiles?.full_name || m.name || m.id,
+        name: m.name || m.id,
         platform_type: m.platform_type,
       }));
     }
+  } else {
+    // Lookup names from models table for crm_model_sessions entries
+    const modelIds = connectedModels.map((m: any) => m.model_id);
+    const { data: modelDetails } = await supabase
+      .from("models")
+      .select("id, name")
+      .in("id", modelIds);
+
+    const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
+
+    typedModels = connectedModels.map((m: any) => ({
+      id: m.model_id,
+      name: nameMap.get(m.model_id) || m.model_id,
+      platform_type: "onlyfans",
+    }));
   }
 
   const { data: chatters } = await supabase

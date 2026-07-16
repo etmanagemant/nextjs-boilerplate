@@ -47,9 +47,19 @@ export default async function CRMInboxPage() {
 
     // First: Use crm_model_sessions if it has data
     if (crm_models && crm_models.length > 0) {
+      // Get the model_ids and lookup their names from models table
+      const modelIds = crm_models.map((m: any) => m.model_id);
+      const { data: modelDetails } = await supabase
+        .from("models")
+        .select("id, name")
+        .in("id", modelIds);
+
+      // Create a map for quick lookup
+      const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
+
       connectedModels = crm_models.map((m: any) => ({
         id: m.model_id,
-        name: m.model_id, // Use model_id as name
+        name: nameMap.get(m.model_id) || m.model_id, // Use name if found, else use id
       }));
       console.log("✅ Loaded models from crm_model_sessions:", connectedModels);
     } else {
@@ -57,7 +67,7 @@ export default async function CRMInboxPage() {
       console.log("⚠️ crm_model_sessions empty, loading from old models table...");
       const { data: fallbackModels } = await supabase
         .from("models")
-        .select("id, name, platform_type, profiles!id(full_name)")
+        .select("id, name, platform_type")
         .eq("platform_type", "onlyfans")
         .order("name", { ascending: true });
 
@@ -65,7 +75,7 @@ export default async function CRMInboxPage() {
         console.log("✅ Loaded models from fallback:", fallbackModels);
         connectedModels = fallbackModels.map((m: any) => ({
           id: m.id,
-          name: m.profiles?.full_name || m.name || m.id,
+          name: m.name || m.id,
         }));
       }
     }
