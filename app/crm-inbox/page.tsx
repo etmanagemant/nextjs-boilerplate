@@ -37,13 +37,16 @@ export default async function CRMInboxPage() {
 
   // 📊 FETCH INITIAL DATA
   try {
-    // Fetch connected models
-    const { data: connectedModels } = await supabase
+    // Fetch connected models with names
+    const { data: connectedModelsData } = await supabase
       .from("crm_model_sessions")
-      .select("model_id")
+      .select("model_id, profiles(full_name)")
       .eq("is_active", true);
 
-    const modelIds = connectedModels?.map((m: any) => m.model_id) || [];
+    const connectedModels = (connectedModelsData || []).map((m: any) => ({
+      id: m.model_id,
+      name: m.profiles?.full_name || m.model_id,
+    }));
 
     const fans = await fetchActiveFans(user.id);
     const scripts = await fetchScriptLibrary(user.id);
@@ -53,7 +56,7 @@ export default async function CRMInboxPage() {
         chatterId={user.id}
         initialFans={fans || []}
         initialScripts={scripts || []}
-        connectedModelIds={modelIds}
+        connectedModels={connectedModels}
         userRole={userRole}
       />
     );

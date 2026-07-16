@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   fetchActiveFans,
   fetchChatMessages,
@@ -22,11 +23,16 @@ import ChatThreadColumn from "./CRMChatThreadColumn";
 import SalesCockpitColumn from "./CRMSalesCockpitColumn";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 
+interface ConnectedModel {
+  id: string;
+  name: string;
+}
+
 interface CRMInboxClientProps {
   chatterId: string;
   initialFans: Fan[];
   initialScripts: ScriptLibrary[];
-  connectedModelIds: string[];
+  connectedModels: ConnectedModel[];
   userRole?: string;
 }
 
@@ -34,12 +40,15 @@ export default function CRMInboxClient({
   chatterId,
   initialFans,
   initialScripts,
-  connectedModelIds,
+  connectedModels,
   userRole = "chatter",
 }: CRMInboxClientProps) {
+  const searchParams = useSearchParams();
+  const modelFromUrl = searchParams.get("model");
+
   // State Management
   const [selectedModel, setSelectedModel] = useState<string | null>(
-    connectedModelIds.length > 0 ? connectedModelIds[0] : null
+    modelFromUrl || (connectedModels.length > 0 ? connectedModels[0].id : null)
   );
   const [fans, setFans] = useState<Fan[]>(initialFans);
   const [selectedFanId, setSelectedFanId] = useState<string | null>(null);
@@ -173,7 +182,7 @@ export default function CRMInboxClient({
     <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
       {/* SIDEBAR */}
       <WorkspaceSidebar
-        connectedModelIds={connectedModelIds}
+        connectedModels={connectedModels}
         selectedModel={selectedModel}
         onSelectModel={(modelId) => {
           setSelectedModel(modelId);
@@ -186,25 +195,25 @@ export default function CRMInboxClient({
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-hidden">
       {/* MODEL SELECTOR HEADER */}
-      {connectedModelIds.length > 0 && (
+      {connectedModels.length > 0 && (
         <div className="border-b border-[#D4AF37]/20 bg-[#050505]/50 px-6 py-3 flex items-center gap-2 overflow-x-auto">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
             Models:
           </span>
-          {connectedModelIds.map((modelId) => (
+          {connectedModels.map((model) => (
             <button
-              key={modelId}
+              key={model.id}
               onClick={() => {
-                setSelectedModel(modelId);
+                setSelectedModel(model.id);
                 setSelectedFanId(null);
               }}
               className={`px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-xs whitespace-nowrap transition ${
-                selectedModel === modelId
+                selectedModel === model.id
                   ? "bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/40"
                   : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/30"
               }`}
             >
-              {modelId}
+              {model.name}
             </button>
           ))}
         </div>

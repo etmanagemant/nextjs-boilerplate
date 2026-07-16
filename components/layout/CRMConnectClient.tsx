@@ -162,7 +162,7 @@ export default function CRMConnectClient({
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB]">
       <WorkspaceSidebar
-        connectedModelIds={[]}
+        connectedModels={[]}
         selectedModel={null}
         onSelectModel={() => {}}
         currentHub="connection"

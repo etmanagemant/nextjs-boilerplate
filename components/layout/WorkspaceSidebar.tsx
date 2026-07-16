@@ -2,9 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+interface ConnectedModel {
+  id: string;
+  name: string;
+}
 
 interface WorkspaceSidebarProps {
-  connectedModelIds: string[];
+  connectedModels?: ConnectedModel[];
   selectedModel?: string | null;
   onSelectModel?: (modelId: string) => void;
   currentHub?: "connection" | "scripts" | "upload" | "crm";
@@ -12,25 +18,30 @@ interface WorkspaceSidebarProps {
 }
 
 export default function WorkspaceSidebar({
-  connectedModelIds,
+  connectedModels = [],
   selectedModel,
   onSelectModel,
   currentHub = "crm",
   userRole = "chatter",
 }: WorkspaceSidebarProps) {
+  const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const allHubs = [
+  const workspaceTools = [
     { id: "connection", name: "Connection Hub", icon: "🔗", href: "/management/crm-connect", adminOnly: true },
     { id: "scripts", name: "Script Vault", icon: "📜", href: "/script-vault" },
     { id: "upload", name: "Upload Vault", icon: "📤", href: "/upload-vault" },
-    { id: "crm", name: "CRM Inbox", icon: "💬", href: "/crm-inbox" },
   ];
 
-  // Filter hubs based on role
-  const hubs = allHubs.filter(
-    (hub) => !hub.adminOnly || ["admin"].includes(userRole)
+  // Filter workspace tools based on role
+  const tools = workspaceTools.filter(
+    (tool) => !tool.adminOnly || ["admin"].includes(userRole)
   );
+
+  const handleSelectModel = (modelId: string, modelName: string) => {
+    if (onSelectModel) onSelectModel(modelId);
+    router.push(`/crm-inbox?model=${modelId}`);
+  };
 
   return (
     <aside
@@ -41,7 +52,7 @@ export default function WorkspaceSidebar({
       {/* COLLAPSE BUTTON */}
       <div className="px-4 py-3 border-b border-[#D4AF37]/10 flex items-center justify-between">
         {!isCollapsed && (
-          <h2 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider">
+          <h2 className="text-xs font-bold text-[#D4AF37] uppercase tracking-widest">
             Workspace
           </h2>
         )}
@@ -54,26 +65,63 @@ export default function WorkspaceSidebar({
         </button>
       </div>
 
-      {/* HUBS NAVIGATION */}
-      <nav className="px-2 py-4 space-y-1 flex-1">
-        {hubs.map((hub) => {
-          const isActive = currentHub === hub.id;
-          return (
-            <Link
-              key={hub.id}
-              href={hub.href}
-              className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
-                isActive
-                  ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
-                  : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
-              }`}
-              title={isCollapsed ? hub.name : undefined}
-            >
-              <span className="text-lg flex-shrink-0">{hub.icon}</span>
-              {!isCollapsed && <span>{hub.name}</span>}
-            </Link>
-          );
-        })}
+      {/* WORKSPACE TOOLS */}
+      <nav className="px-2 py-4 space-y-1 flex-1 overflow-y-auto">
+        {/* Workspace Section */}
+        <div>
+          {!isCollapsed && (
+            <p className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
+              Tools
+            </p>
+          )}
+          {tools.map((tool) => {
+            const isActive = currentHub === tool.id;
+            return (
+              <Link
+                key={tool.id}
+                href={tool.href}
+                className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
+                  isActive
+                    ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
+                    : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
+                }`}
+                title={isCollapsed ? tool.name : undefined}
+              >
+                <span className="text-lg flex-shrink-0">{tool.icon}</span>
+                {!isCollapsed && <span>{tool.name}</span>}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Connected Models Section */}
+        {connectedModels.length > 0 && (
+          <div className="pt-4 border-t border-[#D4AF37]/10">
+            {!isCollapsed && (
+              <p className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                Models
+              </p>
+            )}
+            {connectedModels.map((model) => {
+              const isActive = selectedModel === model.id;
+              return (
+                <button
+                  key={model.id}
+                  onClick={() => handleSelectModel(model.id, model.name)}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
+                    isActive
+                      ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
+                      : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
+                  }`}
+                  title={isCollapsed ? model.name : undefined}
+                >
+                  <span className="text-lg flex-shrink-0">👤</span>
+                  {!isCollapsed && <span className="truncate">{model.name}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       {/* FOOTER */}
