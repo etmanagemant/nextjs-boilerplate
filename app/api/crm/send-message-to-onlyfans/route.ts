@@ -44,10 +44,9 @@ export async function POST(request: NextRequest) {
       .from("crm_fan_metadata")
       .select("model_id")
       .eq("fan_id", fanId)
-      .eq("chatter_id", chatterId)
       .maybeSingle();
 
-    if (fanMetaError || !fanMeta) {
+    if (fanMetaError || !fanMeta || !fanMeta.model_id) {
       console.error("Fan metadata not found:", fanMetaError);
       return NextResponse.json(
         { error: "Fan metadata not found for this conversation", sent: false },

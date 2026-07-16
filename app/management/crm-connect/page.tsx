@@ -49,10 +49,11 @@ export default async function CRMConnectPage() {
   }
 
   // 📊 FETCH DATA
-  const { data: models } = await supabase
-    .from("models")
-    .select("id, name, platform_type")
-    .order("name", { ascending: true });
+  const { data: connectedModels } = await supabase
+    .from("crm_model_sessions")
+    .select("model_id, profiles(full_name)")
+    .eq("is_active", true)
+    .order("model_id", { ascending: true });
 
   const { data: chatters } = await supabase
     .from("profiles")
@@ -61,7 +62,11 @@ export default async function CRMConnectPage() {
     .order("full_name", { ascending: true });
 
   // Type safety
-  const typedModels: Model[] = models || [];
+  const typedModels: Model[] = (connectedModels || []).map((m: any) => ({
+    id: m.model_id,
+    name: m.profiles?.full_name || m.model_id,
+    platform_type: "onlyfans",
+  }));
   const typedChatters: Chatter[] = chatters || [];
 
   return (

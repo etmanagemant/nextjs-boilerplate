@@ -137,14 +137,14 @@ export async function POST(request: NextRequest) {
         .upsert(
           {
             fan_id: userId.toString(),
-            chatter_id: modelId, // Using modelId as chatter for now
+            chatter_id: modelId, // Model ID for grouping
             model_id: modelId,
             username: username || `User-${userId}`,
             lifetime_value: 0, // TODO: fetch from OnlyFans
             vip_tier: "standard",
-            last_verified_at: new Date().toISOString(),
+            last_interaction: new Date().toISOString(),
           },
-          { onConflict: "fan_id" }
+          { onConflict: "model_fan_key" }
         )
         .select();
 
@@ -166,16 +166,13 @@ export async function POST(request: NextRequest) {
 
         await supabase.from("crm_fan_messages").insert({
           fan_id: userId.toString(),
-          chatter_id: modelId,
+          chatter_id: null, // NULL for imported messages - will be set when chatter responds
           external_message_id: msg.id?.toString(),
-          content: msg.text || "",
-          is_from_fan: isFromFan,
+          message_text: msg.text || "",
+          sender: isFromFan ? "fan" : "chatter",
           is_read: msg.isRead !== false,
           created_at: new Date(msg.createdAt).toISOString(),
-          metadata: {
-            mediaType: msg.mediaType,
-            price: msg.price,
-          },
+          attached_media_id: null,
         });
 
         messageCount++;
