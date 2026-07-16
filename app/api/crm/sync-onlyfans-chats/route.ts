@@ -46,6 +46,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Extract OnlyFans cookies from auth_cookies
+    const onlyFansCookies = session.auth_cookies.onlyfans_cookies || [];
+    
+    if (!Array.isArray(onlyFansCookies) || onlyFansCookies.length === 0) {
+      return NextResponse.json(
+        { error: "No OnlyFans cookies found. User may not have logged in successfully." },
+        { status: 400 }
+      );
+    }
+
+    console.log("[SYNC] ✅ Found", onlyFansCookies.length, "OnlyFans cookies");
+
     // Use Browserless to fetch OnlyFans data with stored cookies
     const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
     if (!browserlessApiKey) {
@@ -55,25 +67,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Construct cookie header from stored auth_cookies
-    const cookieHeader = Object.entries(session.auth_cookies as Record<string, string>)
-      .map(([key, value]) => `${key}=${value}`)
-      .join("; ");
-
     // Fetch from OnlyFans API endpoint using Browserless
     const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}`;
 
     const functionCode = `
       async (page) => {
-        // Set cookies
-        const cookies = ${JSON.stringify(session.auth_cookies)};
-        for (const [name, value] of Object.entries(cookies)) {
-          await page.setCookie({
-            name,
-            value,
-            domain: '.onlyfans.com',
-            path: '/'
-          });
+        // Set cookies from auth
+        const cookies = ${JSON.stringify(onlyFansCookies)};
+        if (Array.isArray(cookies)) {
+          for (const cookie of cookies) {
+            try {
+              await page.setCookie(cookie);
+            } catch (e) {
+              console.warn('Failed to set cookie:', cookie.name, e.message);
+            }
+          }
         }
 
         // Navigate to inbox

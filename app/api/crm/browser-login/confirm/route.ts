@@ -50,6 +50,36 @@ export async function POST(req: NextRequest) {
     // ✅ CONFIRM: Set is_active = true (user clicked button = user confirmed login)
     console.log("[CONFIRM-LOGIN] ✅ Confirming login for:", modelId);
 
+    // 🔐 EXTRACT COOKIES from Browserless session
+    let browserlessCookies = [];
+    try {
+      if (session.auth_cookies?.browserless_session_id) {
+        const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
+        const sessionId = session.auth_cookies.browserless_session_id;
+        
+        console.log("[CONFIRM-LOGIN] 🍪 Fetching cookies from Browserless session:", sessionId);
+        
+        const cookieResponse = await fetch(
+          `https://chrome.browserless.io/cookies?token=${browserlessApiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId }),
+          }
+        );
+
+        if (cookieResponse.ok) {
+          const cookieData = await cookieResponse.json();
+          browserlessCookies = cookieData.cookies || [];
+          console.log("[CONFIRM-LOGIN] ✅ Cookies extracted:", browserlessCookies.length, "cookies");
+        } else {
+          console.warn("[CONFIRM-LOGIN] ⚠️ Failed to fetch cookies from Browserless:", cookieResponse.status);
+        }
+      }
+    } catch (cookieError: any) {
+      console.error("[CONFIRM-LOGIN] ⚠️ Cookie extraction error:", cookieError?.message);
+    }
+
     const { error: updateError } = await supabase
       .from("crm_model_sessions")
       .update({
@@ -59,6 +89,7 @@ export async function POST(req: NextRequest) {
           ...(session.auth_cookies || {}),
           verification_status: "confirmed_by_user",
           confirmed_at: new Date().toISOString(),
+          onlyfans_cookies: browserlessCookies, // Store actual OnlyFans cookies
         },
       })
       .eq("model_id", modelId)
