@@ -69,50 +69,6 @@ export default function WorkspaceSidebar({
         })}
       </nav>
 
-      {/* DIVIDER */}
-      <div className="px-4 my-2 border-t border-[#D4AF37]/10" />
-
-      {/* MODELS LIST */}
-      <div className="px-2 pb-4">
-        {!isCollapsed && (
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest px-3 mb-2">
-            Models
-          </h3>
-        )}
-
-        <div className="space-y-1 max-h-64 overflow-y-auto">
-          {connectedModelIds.length === 0 ? (
-            <div className="text-xs text-slate-500 text-center py-4 px-3">
-              {isCollapsed ? "—" : "No connected models"}
-            </div>
-          ) : (
-            connectedModelIds.map((modelId) => (
-              <button
-                key={modelId}
-                onClick={() => onSelectModel?.(modelId)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition ${
-                  selectedModel === modelId
-                    ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
-                    : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
-                }`}
-                title={isCollapsed ? modelId : undefined}
-              >
-                {/* Model Avatar Placeholder */}
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#D4AF37] to-[#F3E5AB] flex items-center justify-center flex-shrink-0 text-black text-xs font-bold">
-                  {modelId.charAt(0).toUpperCase()}
-                </div>
-
-                {!isCollapsed && (
-                  <div className="flex-1 text-left truncate">
-                    <div className="truncate">{modelId}</div>
-                  </div>
-                )}
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-
       {/* FOOTER */}
       <div className="px-3 py-3 border-t border-[#D4AF37]/10 text-xs text-slate-500">
         {!isCollapsed && (
