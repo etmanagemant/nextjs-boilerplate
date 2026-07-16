@@ -86,8 +86,19 @@ export async function POST(req: NextRequest) {
     // 🔄 TRIGGER: Auto-sync OnlyFans chats in background (don't wait for response)
     // Get the proper base URL
     const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-    const host = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_APP_URL || 'localhost:3000';
+    const vercelUrl = process.env.VERCEL_URL;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const host = vercelUrl || appUrl || 'localhost:3000';
     const syncUrl = `${protocol}://${host}/api/crm/sync-onlyfans-chats`;
+    
+    console.log("[CONFIRM-LOGIN] 🔄 Environment Debug:", {
+      NODE_ENV: process.env.NODE_ENV,
+      VERCEL_URL: vercelUrl,
+      NEXT_PUBLIC_APP_URL: appUrl,
+      final_host: host,
+      protocol: protocol,
+      syncUrl: syncUrl,
+    });
     
     console.log("[CONFIRM-LOGIN] 🔄 Triggering OnlyFans sync via:", syncUrl);
     
@@ -95,7 +106,17 @@ export async function POST(req: NextRequest) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ modelId, sessionId }),
-    }).catch((err) => console.error("[CONFIRM-LOGIN] Sync fetch error:", err));
+    })
+      .then((response) => {
+        console.log("[CONFIRM-LOGIN] ✅ Sync fetch response:", response.status);
+        return response.json();
+      })
+      .then((data) => {
+        console.log("[CONFIRM-LOGIN] ✅ Sync response data:", data);
+      })
+      .catch((err) => {
+        console.error("[CONFIRM-LOGIN] ❌ Sync fetch error:", err.message);
+      });
 
     return NextResponse.json(
       {
