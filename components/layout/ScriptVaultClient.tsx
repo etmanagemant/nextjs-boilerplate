@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import WorkspaceSidebar from "./WorkspaceSidebar";
 
 interface Script {
   id: string;
@@ -150,8 +151,10 @@ export default function ScriptVaultClient({
   });
 
   return (
-    <main className="min-h-screen bg-[#0A0A0A] text-[#F3E5AB]">
-      <div className="max-w-6xl mx-auto p-6">
+    <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB]">
+      <WorkspaceSidebar connectedModelIds={[]} selectedModel={null} onSelectModel={() => {}} />
+      <main className="flex-1 overflow-auto">
+        <div className="max-w-6xl mx-auto p-6">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-black uppercase tracking-wider mb-2">
@@ -375,5 +378,6 @@ export default function ScriptVaultClient({
         </div>
       </div>
     </main>
+    </div>
   );
 }
