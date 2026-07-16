@@ -49,15 +49,24 @@ export async function POST(req: NextRequest) {
 
     // ✅ CONFIRM: Set is_active = true (user clicked button = user confirmed login)
     console.log("[CONFIRM-LOGIN] ✅ Confirming login for:", modelId);
+    console.log("[CONFIRM-LOGIN] Session data:", {
+      model_id: session.model_id,
+      has_auth_cookies: !!session.auth_cookies,
+      auth_cookies_keys: Object.keys(session.auth_cookies || {}),
+    });
 
     // 🔐 EXTRACT COOKIES from Browserless session
     let browserlessCookies = [];
+    let cookieExtractionError = null;
+    
     try {
       if (session.auth_cookies?.browserless_session_id) {
         const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
         const sessionId = session.auth_cookies.browserless_session_id;
         
-        console.log("[CONFIRM-LOGIN] 🍪 Fetching cookies from Browserless session:", sessionId);
+        console.log("[CONFIRM-LOGIN] 🍪 Attempting to fetch cookies from Browserless...");
+        console.log("[CONFIRM-LOGIN] Session ID:", sessionId);
+        console.log("[CONFIRM-LOGIN] API Key exists:", !!browserlessApiKey);
         
         const cookieResponse = await fetch(
           `https://chrome.browserless.io/cookies?token=${browserlessApiKey}`,
@@ -68,16 +77,32 @@ export async function POST(req: NextRequest) {
           }
         );
 
+        console.log("[CONFIRM-LOGIN] Cookie response status:", cookieResponse.status);
+
         if (cookieResponse.ok) {
           const cookieData = await cookieResponse.json();
           browserlessCookies = cookieData.cookies || [];
-          console.log("[CONFIRM-LOGIN] ✅ Cookies extracted:", browserlessCookies.length, "cookies");
+          console.log("[CONFIRM-LOGIN] ✅ Cookies extracted successfully:", browserlessCookies.length, "cookies");
+          
+          // Log first few cookies for debugging
+          if (browserlessCookies.length > 0) {
+            console.log("[CONFIRM-LOGIN] First cookie sample:", {
+              name: browserlessCookies[0]?.name,
+              domain: browserlessCookies[0]?.domain,
+            });
+          }
         } else {
-          console.warn("[CONFIRM-LOGIN] ⚠️ Failed to fetch cookies from Browserless:", cookieResponse.status);
+          const errorText = await cookieResponse.text();
+          cookieExtractionError = `Cookie API failed with status ${cookieResponse.status}: ${errorText}`;
+          console.warn("[CONFIRM-LOGIN] ⚠️", cookieExtractionError);
         }
+      } else {
+        cookieExtractionError = "No browserless_session_id in auth_cookies";
+        console.warn("[CONFIRM-LOGIN] ⚠️", cookieExtractionError);
       }
     } catch (cookieError: any) {
-      console.error("[CONFIRM-LOGIN] ⚠️ Cookie extraction error:", cookieError?.message);
+      cookieExtractionError = cookieError?.message || "Unknown error";
+      console.error("[CONFIRM-LOGIN] ❌ Cookie extraction error:", cookieExtractionError);
     }
 
     const { error: updateError } = await supabase
@@ -90,6 +115,8 @@ export async function POST(req: NextRequest) {
           verification_status: "confirmed_by_user",
           confirmed_at: new Date().toISOString(),
           onlyfans_cookies: browserlessCookies, // Store actual OnlyFans cookies
+          cookie_extraction_status: cookieExtractionError ? "failed" : "success",
+          cookie_extraction_error: cookieExtractionError,
         },
       })
       .eq("model_id", modelId)
@@ -103,7 +130,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("[CONFIRM-LOGIN] ✅ Login confirmed, is_active = true");
+    console.log("[CONFIRM-LOGIN] ✅ Login confirmed, is_active = true, cookies saved");
 
     // 🔄 TRIGGER: Auto-sync OnlyFans chats in background (don't wait for response)
     console.log("[CONFIRM-LOGIN] 🔄 Triggering OnlyFans sync...");
