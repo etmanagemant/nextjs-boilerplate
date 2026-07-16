@@ -91,32 +91,27 @@ export async function POST(req: NextRequest) {
     const host = vercelUrl || appUrl || 'localhost:3000';
     const syncUrl = `${protocol}://${host}/api/crm/sync-onlyfans-chats`;
     
-    console.log("[CONFIRM-LOGIN] 🔄 Environment Debug:", {
-      NODE_ENV: process.env.NODE_ENV,
-      VERCEL_URL: vercelUrl,
-      NEXT_PUBLIC_APP_URL: appUrl,
-      final_host: host,
-      protocol: protocol,
-      syncUrl: syncUrl,
-    });
+    console.log("[CONFIRM-LOGIN] 🔄 Sync trigger attempt");
+    console.log("[CONFIRM-LOGIN] URL:", syncUrl);
     
-    console.log("[CONFIRM-LOGIN] 🔄 Triggering OnlyFans sync via:", syncUrl);
-    
-    fetch(syncUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modelId, sessionId }),
-    })
-      .then((response) => {
-        console.log("[CONFIRM-LOGIN] ✅ Sync fetch response:", response.status);
-        return response.json();
-      })
-      .then((data) => {
-        console.log("[CONFIRM-LOGIN] ✅ Sync response data:", data);
-      })
-      .catch((err) => {
-        console.error("[CONFIRM-LOGIN] ❌ Sync fetch error:", err.message);
+    // Try to trigger sync - with aggressive error logging
+    try {
+      const syncResponse = await fetch(syncUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, sessionId }),
       });
+      
+      console.log("[CONFIRM-LOGIN] 🔄 Fetch returned, status:", syncResponse.status);
+      
+      if (!syncResponse.ok) {
+        console.error("[CONFIRM-LOGIN] ❌ Sync API error:", syncResponse.status, syncResponse.statusText);
+      } else {
+        console.log("[CONFIRM-LOGIN] ✅ Sync API called successfully");
+      }
+    } catch (fetchErr: any) {
+      console.error("[CONFIRM-LOGIN] ❌ FETCH FAILED:", fetchErr?.message || String(fetchErr));
+    }
 
     return NextResponse.json(
       {

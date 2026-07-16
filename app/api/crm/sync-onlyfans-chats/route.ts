@@ -11,11 +11,15 @@ export const maxDuration = 300;
  */
 export async function POST(request: NextRequest) {
   console.log("[SYNC] ===== STARTED =====");
+  console.log("[SYNC] Request URL:", request.url);
+  console.log("[SYNC] Request method:", request.method);
   
   try {
     console.log("[SYNC] Parsing request body...");
-    const { modelId, sessionId } = await request.json();
+    const body = await request.json();
+    console.log("[SYNC] Body parsed:", typeof body);
     
+    const { modelId, sessionId } = body;
     console.log("[SYNC] Request data:", { modelId, sessionId });
 
     // Validate inputs
