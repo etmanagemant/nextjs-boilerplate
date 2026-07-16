@@ -49,10 +49,40 @@ export default async function CRMConnectPage() {
   }
 
   // 📊 FETCH DATA
+  // First: Migrate old models to crm_model_sessions if not already there
+  const { data: oldModels } = await supabase
+    .from("models")
+    .select("id, name, platform_type")
+    .eq("platform_type", "onlyfans");
+
+  if (oldModels && oldModels.length > 0) {
+    for (const oldModel of oldModels) {
+      // Check if already in crm_model_sessions
+      const { data: existing } = await supabase
+        .from("crm_model_sessions")
+        .select("model_id")
+        .eq("model_id", oldModel.id)
+        .maybeSingle();
+
+      // If not exists, create it
+      if (!existing) {
+        await supabase.from("crm_model_sessions").insert({
+          model_id: oldModel.id,
+          is_active: false, // Not yet connected
+          auth_cookies: null,
+          last_verified_at: new Date().toISOString(),
+          last_synced_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      }
+    }
+  }
+
+  // Now fetch from crm_model_sessions (both active and inactive)
   const { data: connectedModels } = await supabase
     .from("crm_model_sessions")
     .select("model_id, profiles(full_name)")
-    .eq("is_active", true)
     .order("model_id", { ascending: true });
 
   const { data: chatters } = await supabase
