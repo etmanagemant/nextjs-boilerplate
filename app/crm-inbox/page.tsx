@@ -37,16 +37,40 @@ export default async function CRMInboxPage() {
 
   // 📊 FETCH INITIAL DATA
   try {
-    // Fetch connected models with names
-    const { data: connectedModelsData } = await supabase
+    // Fetch ALL connected models (both active and inactive)
+    const { data: crm_models } = await supabase
       .from("crm_model_sessions")
-      .select("model_id, profiles(full_name)")
-      .eq("is_active", true);
+      .select("model_id")
+      .order("model_id", { ascending: true });
 
-    const connectedModels = (connectedModelsData || []).map((m: any) => ({
-      id: m.model_id,
-      name: m.profiles?.full_name || m.model_id,
-    }));
+    let connectedModels: any[] = [];
+
+    // First: Use crm_model_sessions if it has data
+    if (crm_models && crm_models.length > 0) {
+      connectedModels = crm_models.map((m: any) => ({
+        id: m.model_id,
+        name: m.model_id, // Use model_id as name
+      }));
+      console.log("✅ Loaded models from crm_model_sessions:", connectedModels);
+    } else {
+      // FALLBACK: Load from old models table if crm_model_sessions is empty
+      console.log("⚠️ crm_model_sessions empty, loading from old models table...");
+      const { data: fallbackModels } = await supabase
+        .from("models")
+        .select("id, name, platform_type, profiles!id(full_name)")
+        .eq("platform_type", "onlyfans")
+        .order("name", { ascending: true });
+
+      if (fallbackModels && fallbackModels.length > 0) {
+        console.log("✅ Loaded models from fallback:", fallbackModels);
+        connectedModels = fallbackModels.map((m: any) => ({
+          id: m.id,
+          name: m.profiles?.full_name || m.name || m.id,
+        }));
+      }
+    }
+
+    console.log("📋 Final connectedModels passed to client:", connectedModels);
 
     const fans = await fetchActiveFans(user.id);
     const scripts = await fetchScriptLibrary(user.id);
