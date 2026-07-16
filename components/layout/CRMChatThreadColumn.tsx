@@ -98,12 +98,19 @@ export default function ChatThreadColumn({
                   }`}
                 >
                   <p className="text-sm break-words">{msg.message_text}</p>
-                  <p className="text-xs opacity-70 mt-1" suppressHydrationWarning>
-                    {new Date(msg.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <p className="text-xs opacity-70" suppressHydrationWarning>
+                      {new Date(msg.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                    {msg.sender === "chatter" && (
+                      <div className="text-xs" title={msg.sent_to_platform ? "Sent to OnlyFans" : "Saving locally..."}>
+                        {msg.sent_to_platform ? "✓✓" : "✓"}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

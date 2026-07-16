@@ -13,11 +13,15 @@ export interface Fan {
 export interface ChatMessage {
   id: string;
   fan_id: string;
+  chatter_id: string;
   sender: 'chatter' | 'fan';
   message_text: string;
   attached_media_id?: string;
   created_at: string;
+  updated_at?: string;
   is_read: boolean;
+  sent_to_platform?: boolean;
+  external_message_id?: string;
 }
 
 export interface ChatterEmoji {

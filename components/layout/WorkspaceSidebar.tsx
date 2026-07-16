@@ -21,7 +21,7 @@ export default function WorkspaceSidebar({
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const allHubs = [
-    { id: "connection", name: "Connection Hub", icon: "🔗", href: "/crm-connect", adminOnly: true },
+    { id: "connection", name: "Connection Hub", icon: "🔗", href: "/management/crm-connect", adminOnly: true },
     { id: "scripts", name: "Script Vault", icon: "📜", href: "/script-vault" },
     { id: "upload", name: "Upload Vault", icon: "📤", href: "/upload-vault" },
     { id: "crm", name: "CRM Inbox", icon: "💬", href: "/crm-inbox" },

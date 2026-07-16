@@ -206,6 +206,8 @@ export async function fetchFanMetadata(chatterId: string, fanId: string) {
 
 /**
  * Send a message to a fan
+ * 1. Saves locally to crm_fan_messages
+ * 2. Attempts to send via OnlyFans API (async, non-blocking)
  */
 export async function sendMessage(
   chatterId: string,
@@ -216,20 +218,62 @@ export async function sendMessage(
   const supabase = await createClient();
 
   try {
-    const { error } = await supabase.from("crm_fan_messages").insert({
-      chatter_id: chatterId,
-      fan_id: fanId,
-      sender: "chatter",
-      message_text: messageText,
-      attached_media_id: attachedMediaId || null,
-      is_read: true,
-      created_at: new Date().toISOString(),
-    });
+    // 1. Insert local message first
+    const { data: insertedMsg, error: insertError } = await supabase
+      .from("crm_fan_messages")
+      .insert({
+        chatter_id: chatterId,
+        fan_id: fanId,
+        sender: "chatter",
+        message_text: messageText,
+        attached_media_id: attachedMediaId || null,
+        is_read: true,
+        sent_to_platform: false,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-    if (error) throw error;
+    if (insertError) throw insertError;
+
+    // 2. Try to send to OnlyFans via API (non-blocking)
+    // This happens in the background - don't wait for it
+    (async () => {
+      try {
+        const apiResponse = await fetch("/api/crm/send-message-to-onlyfans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fanId,
+            chatterId,
+            messageText,
+            localMessageId: insertedMsg.id,
+            attachedMediaId: attachedMediaId || null,
+          }),
+        });
+
+        const result = await apiResponse.json();
+
+        if (result.success && result.sent) {
+          // Message was successfully sent to OnlyFans
+          console.log("Message sent to OnlyFans:", result.externalMessageId);
+        } else {
+          // Message saved locally but failed to send - it will retry later
+          console.warn("Message saved locally but failed to send to OnlyFans", result);
+        }
+      } catch (err) {
+        console.error("Background send error:", err);
+        // Silently fail - message is already saved locally
+      }
+    })();
 
     revalidatePath("/crm-inbox");
-    return { success: true, message: "Message sent!" };
+    return { 
+      success: true, 
+      message: "Message saved! Sending to OnlyFans...",
+      localMessageId: insertedMsg.id,
+      sending: true
+    };
   } catch (err) {
     throw new Error(
       err instanceof Error ? err.message : "Failed to send message"

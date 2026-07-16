@@ -1,8 +1,12 @@
 -- ============================================================================
--- CRM Model Sessions & Chatter Configuration Tables
+-- CRM SESSIONS SETUP - MINIMAL VERSION (NO DROPS - für nach CRM_INBOX_SETUP)
 -- ============================================================================
+-- Diese Version hat KEINE DROP Statements weil:
+-- - CRM_INBOX_SETUP.sql war schon erfolgreich
+-- - Die Tables sind schon frisch erstellt
+-- - Nur neue Tables für Sessions brauchen wir
 
--- 1. CRM Model Sessions Table (Session Persistence Layer)
+-- CREATE crm_model_sessions
 CREATE TABLE IF NOT EXISTS crm_model_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   model_id UUID NOT NULL,
@@ -11,6 +15,7 @@ CREATE TABLE IF NOT EXISTS crm_model_sessions (
   last_verified_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_by UUID NOT NULL,
   
   UNIQUE(model_id),
   CONSTRAINT auth_cookies_not_empty CHECK (LENGTH(TRIM(auth_cookies)) > 0)
@@ -18,8 +23,9 @@ CREATE TABLE IF NOT EXISTS crm_model_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_crm_model_sessions_model_id ON crm_model_sessions(model_id);
 CREATE INDEX IF NOT EXISTS idx_crm_model_sessions_is_active ON crm_model_sessions(is_active);
+CREATE INDEX IF NOT EXISTS idx_crm_model_sessions_created_by ON crm_model_sessions(created_by);
 
--- 2. CRM Chatter Emojis Configuration (Smiley Leiste)
+-- CREATE crm_chatter_emojis
 CREATE TABLE IF NOT EXISTS crm_chatter_emojis (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   chatter_id UUID NOT NULL,
@@ -33,7 +39,7 @@ CREATE TABLE IF NOT EXISTS crm_chatter_emojis (
 
 CREATE INDEX IF NOT EXISTS idx_crm_chatter_emojis_chatter_id ON crm_chatter_emojis(chatter_id);
 
--- 3. CRM Script Library (Global & Team Member)
+-- CREATE crm_script_library
 CREATE TABLE IF NOT EXISTS crm_script_library (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title VARCHAR(255) NOT NULL,
@@ -41,6 +47,7 @@ CREATE TABLE IF NOT EXISTS crm_script_library (
   category VARCHAR(100),
   is_global BOOLEAN DEFAULT true,
   assigned_to_user UUID,
+  created_by UUID NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
@@ -52,7 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_crm_script_library_is_global ON crm_script_librar
 CREATE INDEX IF NOT EXISTS idx_crm_script_library_assigned_to_user ON crm_script_library(assigned_to_user);
 CREATE INDEX IF NOT EXISTS idx_crm_script_library_category ON crm_script_library(category);
 
--- 4. Audit Log for CRM Sessions (Security & Compliance)
+-- CREATE crm_session_audit_log
 CREATE TABLE IF NOT EXISTS crm_session_audit_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID NOT NULL,
@@ -68,65 +75,5 @@ CREATE INDEX IF NOT EXISTS idx_crm_session_audit_log_session_id ON crm_session_a
 CREATE INDEX IF NOT EXISTS idx_crm_session_audit_log_performed_by ON crm_session_audit_log(performed_by);
 
 -- ============================================================================
--- Row Level Security Policies (OPTIONAL - Add after tables are created)
--- ============================================================================
--- ⚠️ THESE ARE SEPARATED - RUN AFTER TABLE CREATION IF NEEDED
--- Comment out or run separately if you encounter permission errors
-
--- -- Enable RLS
--- ALTER TABLE crm_model_sessions ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE crm_chatter_emojis ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE crm_script_library ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE crm_session_audit_log ENABLE ROW LEVEL SECURITY;
-
--- -- Admins can view all CRM sessions
--- CREATE POLICY "Admins can view all CRM sessions" 
--- ON crm_model_sessions FOR SELECT 
--- TO authenticated 
--- USING (true);
-
--- -- Admins can manage CRM sessions
--- CREATE POLICY "Admins can manage CRM sessions" 
--- ON crm_model_sessions FOR ALL 
--- TO authenticated 
--- USING (true)
--- WITH CHECK (true);
-
--- -- Users can view their own chatter emojis
--- CREATE POLICY "Users can view their own chatter emojis" 
--- ON crm_chatter_emojis FOR SELECT 
--- TO authenticated 
--- USING (true);
-
--- -- Admins can manage all chatter emojis
--- CREATE POLICY "Admins can manage chatter emojis" 
--- ON crm_chatter_emojis FOR ALL 
--- TO authenticated 
--- USING (true)
--- WITH CHECK (true);
-
--- -- Global scripts visible to all authenticated users
--- CREATE POLICY "View CRM script library" 
--- ON crm_script_library FOR SELECT 
--- TO authenticated 
--- USING (true);
-
--- -- Only admins can manage script library
--- CREATE POLICY "Admins manage script library" 
--- ON crm_script_library FOR ALL 
--- TO authenticated 
--- USING (true)
--- WITH CHECK (true);
-
--- -- Audit log is view-only for admins
--- CREATE POLICY "Admins view session audit log" 
--- ON crm_session_audit_log FOR SELECT 
--- TO authenticated 
--- USING (true);
-
--- ============================================================================
--- NEXT STEPS:
--- 1. Run this SQL migration in Supabase
--- 2. Deploy the CRM Connect page component
--- 3. Test session creation and encryption
+-- DONE - All CRM Session tables created!
 -- ============================================================================
