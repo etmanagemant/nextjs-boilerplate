@@ -41,7 +41,7 @@ export default function ScriptVaultClient({
   const [formData, setFormData] = useState({
     title: "",
     content: "",
-    category: "custom" as const,
+    category: "custom" as "greeting" | "offer" | "follow_up" | "custom",
     isGlobal: false,
     assignTo: "",
   });
