@@ -54,6 +54,7 @@ export default async function CRMInboxPage() {
         initialFans={fans || []}
         initialScripts={scripts || []}
         connectedModelIds={modelIds}
+        userRole={userRole}
       />
     );
   } catch (err) {

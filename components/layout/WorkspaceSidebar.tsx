@@ -8,6 +8,7 @@ interface WorkspaceSidebarProps {
   selectedModel?: string | null;
   onSelectModel?: (modelId: string) => void;
   currentHub?: "connection" | "scripts" | "upload" | "crm";
+  userRole?: string;
 }
 
 export default function WorkspaceSidebar({
@@ -15,15 +16,21 @@ export default function WorkspaceSidebar({
   selectedModel,
   onSelectModel,
   currentHub = "crm",
+  userRole = "chatter",
 }: WorkspaceSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const hubs = [
-    { id: "connection", name: "Connection Hub", icon: "🔗", href: "/crm-connect" },
+  const allHubs = [
+    { id: "connection", name: "Connection Hub", icon: "🔗", href: "/crm-connect", adminOnly: true },
     { id: "scripts", name: "Script Vault", icon: "📜", href: "/script-vault" },
     { id: "upload", name: "Upload Vault", icon: "📤", href: "/upload-vault" },
     { id: "crm", name: "CRM Inbox", icon: "💬", href: "/crm-inbox" },
   ];
+
+  // Filter hubs based on role
+  const hubs = allHubs.filter(
+    (hub) => !hub.adminOnly || ["admin"].includes(userRole)
+  );
 
   return (
     <aside

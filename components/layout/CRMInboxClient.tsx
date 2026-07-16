@@ -27,6 +27,7 @@ interface CRMInboxClientProps {
   initialFans: Fan[];
   initialScripts: ScriptLibrary[];
   connectedModelIds: string[];
+  userRole?: string;
 }
 
 export default function CRMInboxClient({
@@ -34,6 +35,7 @@ export default function CRMInboxClient({
   initialFans,
   initialScripts,
   connectedModelIds,
+  userRole = "chatter",
 }: CRMInboxClientProps) {
   // State Management
   const [selectedModel, setSelectedModel] = useState<string | null>(
@@ -178,6 +180,7 @@ export default function CRMInboxClient({
           setSelectedFanId(null);
         }}
         currentHub="crm"
+        userRole={userRole}
       />
 
       {/* MAIN CONTENT */}

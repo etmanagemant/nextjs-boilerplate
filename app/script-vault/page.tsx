@@ -11,7 +11,14 @@ export default async function ScriptVaultPage() {
   if (!user) {
     redirect("/login");
   }
+  // Get user role
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
 
+  const userRole = profile?.role || "guest";
   // Get connected models
   const { data: connectedModels } = await supabase
     .from("crm_model_sessions")
@@ -25,6 +32,7 @@ export default async function ScriptVaultPage() {
       <WorkspaceSidebar
         connectedModelIds={modelIds}
         currentHub="scripts"
+        userRole={userRole}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden">

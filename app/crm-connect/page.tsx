@@ -24,7 +24,14 @@ export default async function CRMConnectPage() {
   if (!user) {
     redirect("/login");
   }
+  // Get user role
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
 
+  const userRole = profile?.role || "guest";
   // Get connected models
   const { data: connectedModels } = await supabase
     .from("crm_model_sessions")
@@ -54,6 +61,7 @@ export default async function CRMConnectPage() {
       <WorkspaceSidebar
         connectedModelIds={modelIds}
         currentHub="connection"
+        userRole={userRole}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden">
