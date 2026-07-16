@@ -46,19 +46,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extract OnlyFans cookies from auth_cookies
-    const onlyFansCookies = session.auth_cookies.onlyfans_cookies || [];
+    // ✅ USE PERSISTENT SESSION: Browserless session is still open with cookies intact
+    const browserlessSessionId = session.auth_cookies.browserless_session_id;
+    const wsEndpoint = session.auth_cookies.ws_endpoint;
     
-    if (!Array.isArray(onlyFansCookies) || onlyFansCookies.length === 0) {
+    if (!browserlessSessionId || !wsEndpoint) {
       return NextResponse.json(
-        { error: "No OnlyFans cookies found. User may not have logged in successfully." },
+        { error: "Browserless session not properly initialized" },
         { status: 400 }
       );
     }
 
-    console.log("[SYNC] ✅ Found", onlyFansCookies.length, "OnlyFans cookies");
+    console.log("[SYNC] 🔗 Using persistent Browserless session:", browserlessSessionId);
 
-    // Use Browserless to fetch OnlyFans data with stored cookies
+    // Use Browserless to fetch OnlyFans data with the active session
     const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
     if (!browserlessApiKey) {
       return NextResponse.json(
@@ -71,20 +72,8 @@ export async function POST(request: NextRequest) {
     const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}`;
 
     const functionCode = `
-      async (page) => {
-        // Set cookies from auth
-        const cookies = ${JSON.stringify(onlyFansCookies)};
-        if (Array.isArray(cookies)) {
-          for (const cookie of cookies) {
-            try {
-              await page.setCookie(cookie);
-            } catch (e) {
-              console.warn('Failed to set cookie:', cookie.name, e.message);
-            }
-          }
-        }
-
-        // Navigate to inbox
+      async () => {
+        // Navigate to OnlyFans inbox API
         await page.goto('https://onlyfans.com/api2/v2/inbox', {
           waitUntil: 'networkidle2',
           timeout: 30000
@@ -109,6 +98,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         code: functionCode,
+        sessionId: browserlessSessionId,
         timeout: 30000,
       }),
     });
@@ -145,7 +135,7 @@ export async function POST(request: NextRequest) {
         .upsert(
           {
             fan_id: userId.toString(),
-            chatter_id: modelId, // Model ID for grouping
+            chatter_id: null, // NULL for imported fans - assigned when chatter responds
             model_id: modelId,
             username: username || `User-${userId}`,
             lifetime_value: 0, // TODO: fetch from OnlyFans
