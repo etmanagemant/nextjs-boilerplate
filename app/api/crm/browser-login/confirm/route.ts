@@ -74,11 +74,19 @@ export async function POST(req: NextRequest) {
 
     console.log("[CONFIRM-LOGIN] ✅ Login confirmed, is_active = true");
 
+    // 🔄 TRIGGER: Auto-sync OnlyFans chats in background (don't wait for response)
+    console.log("[CONFIRM-LOGIN] 🔄 Triggering OnlyFans sync...");
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL || "https://localhost:3000"}/api/crm/sync-onlyfans-chats`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modelId, sessionId }),
+    }).catch((err) => console.error("[CONFIRM-LOGIN] Sync error:", err));
+
     return NextResponse.json(
       {
         status: "success",
         confirmed: true,
-        message: "Login confirmed. Session is now active.",
+        message: "Login confirmed. Session is now active. Syncing OnlyFans chats...",
         modelId,
       },
       { status: 200 }
