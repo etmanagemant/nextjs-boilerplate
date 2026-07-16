@@ -20,6 +20,7 @@ import {
 import ChatListColumn from "./CRMChatListColumn";
 import ChatThreadColumn from "./CRMChatThreadColumn";
 import SalesCockpitColumn from "./CRMSalesCockpitColumn";
+import WorkspaceSidebar from "./WorkspaceSidebar";
 
 interface CRMInboxClientProps {
   chatterId: string;
@@ -170,7 +171,20 @@ export default function CRMInboxClient({
   };
 
   return (
-    <main className="h-screen flex flex-col bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
+    <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
+      {/* SIDEBAR */}
+      <WorkspaceSidebar
+        connectedModelIds={connectedModelIds}
+        selectedModel={selectedModel}
+        onSelectModel={(modelId) => {
+          setSelectedModel(modelId);
+          setSelectedFanId(null);
+        }}
+        currentHub="crm"
+      />
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 flex flex-col overflow-hidden">
       {/* MODEL SELECTOR HEADER */}
       {connectedModelIds.length > 0 && (
         <div className="border-b border-[#D4AF37]/20 bg-[#050505]/50 px-6 py-3 flex items-center gap-2 overflow-x-auto">
@@ -387,5 +401,6 @@ export default function CRMInboxClient({
         )}
       </div>
     </main>
+    </div>
   );
 }
