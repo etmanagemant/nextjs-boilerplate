@@ -152,7 +152,13 @@ export default function ScriptVaultClient({
 
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB]">
-      <WorkspaceSidebar connectedModelIds={[]} selectedModel={null} onSelectModel={() => {}} />
+      <WorkspaceSidebar
+        connectedModelIds={[]}
+        selectedModel={null}
+        onSelectModel={() => {}}
+        currentHub="scripts"
+        userRole={userRole}
+      />
       <main className="flex-1 overflow-auto">
         <div className="max-w-6xl mx-auto p-6">
         {/* Header */}

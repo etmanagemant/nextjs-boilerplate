@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import WorkspaceSidebar from "./WorkspaceSidebar";
 import { ModelCardSkeleton, ScriptLibrarySkeleton } from "./CRMSkeletonLoaders";
 import ConnectCreatorPanel from "./ConnectCreatorPanel";
 import ScriptLibraryManager from "./ScriptLibraryManager";
@@ -159,7 +160,16 @@ export default function CRMConnectClient({
   };
 
   return (
-    <main className="p-6 max-w-7xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB]">
+    <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB]">
+      <WorkspaceSidebar
+        connectedModelIds={[]}
+        selectedModel={null}
+        onSelectModel={() => {}}
+        currentHub="connection"
+        userRole="admin"
+      />
+      <main className="flex-1 overflow-auto p-6">
+        <div className="max-w-7xl mx-auto min-h-screen">
       {/* Hero Section */}
       <div className="mb-12">
         <div className="flex items-center justify-between mb-6 pb-6 border-b border-[#AA7C11]/20 flex-wrap gap-4">
@@ -381,6 +391,8 @@ export default function CRMConnectClient({
           onClose={handleCloseBrowserLogin}
         />
       )}
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }
