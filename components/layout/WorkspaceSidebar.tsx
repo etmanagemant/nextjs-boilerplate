@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 
 interface ConnectedModel {
   id: string;
@@ -26,6 +27,53 @@ export default function WorkspaceSidebar({
 }: WorkspaceSidebarProps) {
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [autoFetchedModels, setAutoFetchedModels] = useState<ConnectedModel[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+
+  // Auto-fetch connected models (only is_active = true)
+  useEffect(() => {
+    const fetchConnectedModels = async () => {
+      setIsLoadingModels(true);
+      try {
+        const supabase = createClient();
+
+        // Fetch only CONNECTED models (is_active = true)
+        const { data: sessions } = await supabase
+          .from("crm_model_sessions")
+          .select("model_id")
+          .eq("is_active", true)
+          .order("model_id", { ascending: true });
+
+        if (sessions && sessions.length > 0) {
+          const modelIds = sessions.map((s: any) => s.model_id);
+
+          // Lookup names from models table
+          const { data: modelDetails } = await supabase
+            .from("models")
+            .select("id, name")
+            .in("id", modelIds);
+
+          const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
+
+          const models = sessions.map((s: any) => ({
+            id: s.model_id,
+            name: nameMap.get(s.model_id) || s.model_id,
+          }));
+
+          setAutoFetchedModels(models);
+        }
+      } catch (err) {
+        console.error("Error fetching connected models:", err);
+      } finally {
+        setIsLoadingModels(false);
+      }
+    };
+
+    fetchConnectedModels();
+  }, []);
+
+  // Use auto-fetched models as fallback if not provided
+  const modelsToDisplay = connectedModels.length > 0 ? connectedModels : autoFetchedModels;
 
   const workspaceTools = [
     { id: "connection", name: "Connection Hub", icon: "🔗", href: "/management/crm-connect", adminOnly: true },
@@ -95,14 +143,14 @@ export default function WorkspaceSidebar({
         </div>
 
         {/* Connected Models Section */}
-        {connectedModels.length > 0 && (
+        {modelsToDisplay.length > 0 && (
           <div className="pt-4 border-t border-[#D4AF37]/10">
             {!isCollapsed && (
               <p className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
-                Models
+                🟢 Models ({modelsToDisplay.length})
               </p>
             )}
-            {connectedModels.map((model) => {
+            {modelsToDisplay.map((model) => {
               const isActive = selectedModel === model.id;
               return (
                 <button
@@ -120,6 +168,11 @@ export default function WorkspaceSidebar({
                 </button>
               );
             })}
+          </div>
+        )}
+        {isLoadingModels && (
+          <div className="pt-4 border-t border-[#D4AF37]/10 px-3 py-2">
+            {!isCollapsed && <p className="text-xs text-slate-500">Lade Models...</p>}
           </div>
         )}
       </nav>
