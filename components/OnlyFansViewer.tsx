@@ -19,7 +19,7 @@ export function OnlyFansViewer({
   modelName = "OnlyFans", 
   onClose, 
   isModal = false,
-  isEmbedded = false
+  isEmbedded = true
 }: OnlyFansViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoading, setIsLoading] = useState(true);

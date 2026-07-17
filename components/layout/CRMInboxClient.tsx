@@ -63,7 +63,7 @@ export default function CRMInboxClient({
   const [isSending, setIsSending] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
-  // OnlyFans Viewer State - which model to display in modal
+  // OnlyFans Viewer - integrated as 4th column
   const [selectedOnlyFansModel, setSelectedOnlyFansModel] = useState<string | null>(null);
 
   useEffect(() => {
@@ -178,63 +178,14 @@ export default function CRMInboxClient({
         }}
         currentHub="crm"
         userRole={userRole}
+        onOpenOnlyFans={(modelId) => {
+          setSelectedOnlyFansModel(modelId);
+        }}
       />
 
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* MODEL SELECTOR HEADER */}
-        {connectedModels.length > 0 && (
-          <div className="border-b border-[#D4AF37]/20 bg-[#050505]/50 px-6 py-3 flex items-center gap-3 overflow-x-auto">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
-              Models:
-            </span>
-            {connectedModels.map((model) => (
-              <div key={model.id} className="relative group">
-                {/* Left Click = Select Model for CRM */}
-                <button
-                  onClick={() => {
-                    setSelectedModel(model.id);
-                    setSelectedFanId(null);
-                  }}
-                  onContextMenu={(e) => {
-                    // Right Click = Open in new browser tab
-                    e.preventDefault();
-                    window.open(`https://onlyfans.com/${model.id}`, "_blank");
-                  }}
-                  className={`px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-xs whitespace-nowrap transition ${
-                    selectedModel === model.id
-                      ? "bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/40"
-                      : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/30"
-                  }`}
-                >
-                  {model.name}
-                </button>
-
-                {/* 3-Dots Menu - shows on hover */}
-                <div className="absolute right-0 top-full mt-1 hidden group-hover:block bg-gray-800 border border-purple-600 rounded shadow-lg z-50 whitespace-nowrap">
-                  <button
-                    onClick={() => {
-                      setSelectedOnlyFansModel(model.id);
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-white hover:bg-purple-600 rounded-t transition"
-                  >
-                    📺 View in Canvas
-                  </button>
-                  <button
-                    onClick={() => {
-                      window.open(`https://onlyfans.com/${model.id}`, "_blank");
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-white hover:bg-blue-600 rounded-b transition"
-                  >
-                    ↗️ Open in New Tab
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* MAIN CONTENT AREA */}
+        {/* MAIN CONTENT AREA - Flex Layout */}
         <div className="flex-1 flex overflow-hidden">
           {!selectedFanId ? (
             // HERO BANNER MODE (no chat selected)
@@ -251,10 +202,10 @@ export default function CRMInboxClient({
               </div>
             </div>
           ) : (
-            // 3-COLUMN MODE (fan selected)
+            // CHAT MODE - Dynamic columns based on OnlyFans visibility
             <>
-              {/* Column 1: Chat List (25%) */}
-              <div className="w-1/4 border-r border-[#D4AF37]/20">
+              {/* Column 1: Chat List */}
+              <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-r border-[#D4AF37]/20 transition-all duration-200`}>
                 <ChatListColumn
                   fans={fans}
                   selectedFanId={selectedFanId}
@@ -263,8 +214,8 @@ export default function CRMInboxClient({
                 />
               </div>
 
-              {/* Column 2: Chat Thread (50%) */}
-              <div className="w-1/2">
+              {/* Column 2: Chat Thread */}
+              <div className={`${selectedOnlyFansModel ? 'w-2/5' : 'w-1/2'} transition-all duration-200`}>
                 <ChatThreadColumn
                   messages={messages}
                   currentMessage={currentMessage}
@@ -277,8 +228,8 @@ export default function CRMInboxClient({
                 />
               </div>
 
-              {/* Column 3: Sales Cockpit (25%) */}
-              <div className="w-1/4 border-l border-[#D4AF37]/20">
+              {/* Column 3: Sales Cockpit */}
+              <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-l border-[#D4AF37]/20 transition-all duration-200`}>
                 <SalesCockpitColumn
                   fanMetadata={fanMetadata}
                   scripts={scripts}
@@ -288,20 +239,23 @@ export default function CRMInboxClient({
                   isSavingNotes={isSavingNotes}
                 />
               </div>
+
+              {/* Column 4: OnlyFans (only when selected) */}
+              {selectedOnlyFansModel && (
+                <div className="w-1/5 border-l border-[#D4AF37]/20 overflow-hidden bg-black transition-all duration-200">
+                  <OnlyFansViewer
+                    modelId={selectedOnlyFansModel}
+                    modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}
+                    isEmbedded={true}
+                    isModal={false}
+                    onClose={() => setSelectedOnlyFansModel(null)}
+                  />
+                </div>
+              )}
             </>
           )}
         </div>
       </main>
-
-      {/* OnlyFans Viewer Modal - floating over everything */}
-      {selectedOnlyFansModel && (
-        <OnlyFansViewer
-          modelId={selectedOnlyFansModel}
-          modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}
-          isModal={true}
-          onClose={() => setSelectedOnlyFansModel(null)}
-        />
-      )}
     </div>
   );
 }

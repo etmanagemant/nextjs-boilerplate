@@ -14,6 +14,7 @@ interface WorkspaceSidebarProps {
   connectedModels?: ConnectedModel[];
   selectedModel?: string | null;
   onSelectModel?: (modelId: string) => void;
+  onOpenOnlyFans?: (modelId: string) => void;
   currentHub?: "connection" | "scripts" | "upload" | "crm";
   userRole?: string;
 }
@@ -22,6 +23,7 @@ export default function WorkspaceSidebar({
   connectedModels = [],
   selectedModel,
   onSelectModel,
+  onOpenOnlyFans,
   currentHub = "crm",
   userRole = "chatter",
 }: WorkspaceSidebarProps) {
@@ -156,12 +158,18 @@ export default function WorkspaceSidebar({
                 <button
                   key={model.id}
                   onClick={() => handleSelectModel(model.id, model.name)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    if (onOpenOnlyFans) {
+                      onOpenOnlyFans(model.id);
+                    }
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
                     isActive
                       ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
                       : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
                   }`}
-                  title={isCollapsed ? model.name : undefined}
+                  title={isCollapsed ? `${model.name} (right-click for OnlyFans)` : undefined}
                 >
                   <span className="text-lg flex-shrink-0">👤</span>
                   {!isCollapsed && <span className="truncate">{model.name}</span>}
