@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
@@ -31,6 +31,8 @@ export default function WorkspaceSidebar({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [autoFetchedModels, setAutoFetchedModels] = useState<ConnectedModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ modelId: string; x: number; y: number } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Auto-fetch connected models (only is_active = true)
   useEffect(() => {
@@ -74,6 +76,19 @@ export default function WorkspaceSidebar({
     fetchConnectedModels();
   }, []);
 
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    if (contextMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [contextMenu]);
+
   // Use auto-fetched models as fallback if not provided
   const modelsToDisplay = connectedModels.length > 0 ? connectedModels : autoFetchedModels;
 
@@ -91,6 +106,42 @@ export default function WorkspaceSidebar({
   const handleSelectModel = (modelId: string, modelName: string) => {
     if (onSelectModel) onSelectModel(modelId);
     router.push(`/crm-inbox?model=${modelId}`);
+  };
+
+  const handleOpenContextMenu = (modelId: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ modelId, x: event.clientX, y: event.clientY });
+  };
+
+  const handleOpenNewTab = async (modelId: string) => {
+    // Navigate Browserless session to OnlyFans and open in main area
+    if (onOpenOnlyFans) {
+      onOpenOnlyFans(modelId);
+    }
+    setContextMenu(null);
+  };
+
+  const handleRefreshSession = async (modelId: string) => {
+    // Reload onlyfans.com in the Browserless session
+    try {
+      const response = await fetch("/api/crm/interact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelId,
+          action: "reload",
+          target: "https://onlyfans.com",
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Failed to refresh session");
+      }
+    } catch (err) {
+      console.error("Error refreshing session:", err);
+    }
+    setContextMenu(null);
   };
 
   return (
@@ -155,30 +206,26 @@ export default function WorkspaceSidebar({
             {modelsToDisplay.map((model) => {
               const isActive = selectedModel === model.id;
               return (
-                <button
-                  key={model.id}
-                  onClick={() => handleSelectModel(model.id, model.name)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    if (onOpenOnlyFans) {
-                      onOpenOnlyFans(model.id);
-                    }
-                  }}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition group ${
-                    isActive
-                      ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
-                      : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
-                  }`}
-                  title={`${model.name} - Right-click to open OnlyFans`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-lg flex-shrink-0">👤</span>
-                    {!isCollapsed && <span className="truncate">{model.name}</span>}
-                  </div>
-                  {!isCollapsed && (
-                    <span className="text-xs opacity-0 group-hover:opacity-100 transition flex-shrink-0">⋮</span>
-                  )}
-                </button>
+                <div key={model.id} className="relative">
+                  <button
+                    onClick={(e) => handleOpenContextMenu(model.id, e)}
+                    onContextMenu={(e) => handleOpenContextMenu(model.id, e)}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition group ${
+                      isActive
+                        ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
+                        : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
+                    }`}
+                    title={`${model.name} - Click or right-click for options`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-lg flex-shrink-0">👤</span>
+                      {!isCollapsed && <span className="truncate">{model.name}</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-xs opacity-100 opacity-100 transition flex-shrink-0 cursor-pointer hover:text-[#F3E5AB]">⋮</span>
+                    )}
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -198,6 +245,32 @@ export default function WorkspaceSidebar({
           </div>
         )}
       </div>
+
+      {/* CONTEXT MENU */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed bg-[#1A1A1A] border border-[#D4AF37]/30 rounded-lg shadow-2xl z-50 py-1"
+          style={{
+            left: `${Math.max(16, contextMenu.x - 120)}px`,
+            top: `${Math.max(16, contextMenu.y)}px`,
+            minWidth: "200px",
+          }}
+        >
+          <button
+            onClick={() => handleOpenNewTab(contextMenu.modelId)}
+            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-[#D4AF37]/20 hover:text-[#F3E5AB] transition"
+          >
+            🌐 Open new tab
+          </button>
+          <button
+            onClick={() => handleRefreshSession(contextMenu.modelId)}
+            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-[#D4AF37]/20 hover:text-[#F3E5AB] transition"
+          >
+            🔄 Refresh session
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

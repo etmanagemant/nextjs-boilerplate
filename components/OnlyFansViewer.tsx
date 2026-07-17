@@ -66,14 +66,48 @@ export function OnlyFansViewer({
   // Start polling screenshots
   useEffect(() => {
     console.log("[VIEWER] Starting for model:", modelId);
+    setIsLoading(true);
+    setError(null);
 
-    // Initial fetch
-    fetchScreenshot();
+    const initializeAndPoll = async () => {
+      try {
+        // Step 1: Navigate to OnlyFans first
+        console.log("[VIEWER] Navigating to OnlyFans...");
+        const navigateResponse = await fetch("/api/crm/interact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            modelId,
+            action: "navigate",
+            data: { url: "https://onlyfans.com", delay: 1000 },
+          }),
+        });
 
-    // Poll every 200ms
-    screenshotIntervalRef.current = setInterval(() => {
-      fetchScreenshot();
-    }, 200);
+        if (!navigateResponse.ok) {
+          const errorData = await navigateResponse.json();
+          throw new Error(`Navigation failed: ${errorData.error}`);
+        }
+
+        console.log("[VIEWER] ✅ Navigated to OnlyFans, starting screenshot polling...");
+
+        // Step 2: Fetch initial screenshot
+        await fetchScreenshot();
+
+        // Step 3: Start polling every 200ms
+        if (screenshotIntervalRef.current) {
+          clearInterval(screenshotIntervalRef.current);
+        }
+        screenshotIntervalRef.current = setInterval(() => {
+          fetchScreenshot();
+        }, 200);
+      } catch (err: any) {
+        console.error("[VIEWER] Initialization error:", err);
+        setError(err.message || "Failed to initialize OnlyFans viewer");
+        setIsLoading(false);
+      }
+    };
+
+    initializeAndPoll();
 
     return () => {
       if (screenshotIntervalRef.current) {

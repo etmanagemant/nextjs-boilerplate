@@ -67,6 +67,14 @@ export async function POST(request: NextRequest) {
     let functionCode = "";
 
     switch (action) {
+      case "navigate":
+        functionCode = `function() {
+  await page.goto('${data.url || "https://onlyfans.com"}', { waitUntil: 'networkIdle' });
+  await page.waitForTimeout(${data.delay || 500});
+  return { navigated: true };
+}`;
+        break;
+
       case "click":
         functionCode = `function() {
   await page.mouse.click(${data.x}, ${data.y});
@@ -88,6 +96,14 @@ export async function POST(request: NextRequest) {
   await page.evaluate(y => window.scrollBy(0, y), ${data.scrollY || 100});
   await page.waitForTimeout(${data.delay || 200});
   return { scrolled: true };
+}`;
+        break;
+
+      case "reload":
+        functionCode = `function() {
+  await page.goto('${data.target || "https://onlyfans.com"}', { waitUntil: 'networkIdle' });
+  await page.waitForTimeout(${data.delay || 500});
+  return { reloaded: true };
 }`;
         break;
 
