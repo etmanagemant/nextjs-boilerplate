@@ -99,11 +99,7 @@ export default function NextShiftsWidget({
     return zukuenftige.sort((a, b) => `${a.datum}T${a.von}`.localeCompare(`${b.datum}T${b.von}`)).slice(0, 2);
   }, [allShifts, userEmail, userId, userFullName, jetztZeit]);
 
-  // If no next shifts, show empty state
-  if (naechsteZweiSchichten.length === 0) {
-    return null; // Don't show widget if no upcoming shifts
-  }
-
+  // Show widget even if no upcoming shifts (just with different message)
   return (
     <div className="mb-6 p-6 bg-gradient-to-r from-[#D4AF37]/5 to-[#8B7500]/5 border border-[#D4AF37]/20 rounded-xl shadow-lg">
       <div className="flex items-center justify-between mb-4">
@@ -113,7 +109,18 @@ export default function NextShiftsWidget({
         <p className="text-xs text-slate-400">Vergiss nicht dich einzustechen!</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {naechsteZweiSchichten.length === 0 ? (
+        <div className="text-center py-4 text-slate-400">
+          <p className="text-sm mb-2">✨ Keine Schichten geplant</p>
+          <Link
+            href="/content-plan"
+            className="text-xs text-[#D4AF37] hover:text-[#F3E5AB] underline"
+          >
+            Im Kalender neue Schicht hinzufügen
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {naechsteZweiSchichten.map((shift, idx) => (
           <div key={shift.id} className="bg-black/40 border border-[#AA7C11]/20 rounded-lg p-4 hover:border-[#D4AF37]/40 transition">
             <div className="flex items-start justify-between mb-3">
@@ -151,7 +158,8 @@ export default function NextShiftsWidget({
             </Link>
           </div>
         ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
