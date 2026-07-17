@@ -164,15 +164,20 @@ export default function WorkspaceSidebar({
                       onOpenOnlyFans(model.id);
                     }
                   }}
-                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition group ${
                     isActive
                       ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
                       : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
                   }`}
-                  title={isCollapsed ? `${model.name} (right-click for OnlyFans)` : undefined}
+                  title={`${model.name} - Right-click to open OnlyFans`}
                 >
-                  <span className="text-lg flex-shrink-0">👤</span>
-                  {!isCollapsed && <span className="truncate">{model.name}</span>}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg flex-shrink-0">👤</span>
+                    {!isCollapsed && <span className="truncate">{model.name}</span>}
+                  </div>
+                  {!isCollapsed && (
+                    <span className="text-xs opacity-0 group-hover:opacity-100 transition flex-shrink-0">⋮</span>
+                  )}
                 </button>
               );
             })}

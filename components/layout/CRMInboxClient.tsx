@@ -187,8 +187,8 @@ export default function CRMInboxClient({
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* MAIN CONTENT AREA - Flex Layout */}
         <div className="flex-1 flex overflow-hidden">
-          {!selectedFanId ? (
-            // HERO BANNER MODE (no chat selected)
+          {!selectedFanId && !selectedOnlyFansModel ? (
+            // HERO BANNER MODE (no chat selected AND no OnlyFans selected)
             <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
               <div className="text-center mb-8">
                 <h1 className="text-4xl font-black mb-3 uppercase tracking-wider">
@@ -200,6 +200,17 @@ export default function CRMInboxClient({
                     : "Connect a model first to view chats"}
                 </p>
               </div>
+            </div>
+          ) : selectedOnlyFansModel && !selectedFanId ? (
+            // ONLYFANS ONLY MODE (OnlyFans open but no chat selected)
+            <div className="w-full bg-black">
+              <OnlyFansViewer
+                modelId={selectedOnlyFansModel}
+                modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}
+                isEmbedded={true}
+                isModal={false}
+                onClose={() => setSelectedOnlyFansModel(null)}
+              />
             </div>
           ) : (
             // CHAT MODE - Dynamic columns based on OnlyFans visibility

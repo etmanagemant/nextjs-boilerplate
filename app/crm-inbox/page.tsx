@@ -37,10 +37,11 @@ export default async function CRMInboxPage() {
 
   // 📊 FETCH INITIAL DATA
   try {
-    // Fetch ALL connected models (both active and inactive)
+    // Fetch ONLY ACTIVE connected models
     const { data: crm_models } = await supabase
       .from("crm_model_sessions")
       .select("model_id")
+      .eq("is_active", true)
       .order("model_id", { ascending: true });
 
     let connectedModels: any[] = [];
