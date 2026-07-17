@@ -1,5 +1,5 @@
+import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    const supabase = createSupabaseAdminClient();
 
     // Get current session and verify sessionId matches
     const { data: session, error: sessionError } = await supabase

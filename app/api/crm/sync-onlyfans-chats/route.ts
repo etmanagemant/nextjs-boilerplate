@@ -1,4 +1,4 @@
-import { createClient } from "@/utils/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("[SYNC] ✅ Inputs valid, fetching session from DB...");
-    const supabase = await createClient();
+    const supabase = createSupabaseAdminClient();
 
     // Get session with auth_cookies
     const { data: session, error: sessionError } = await supabase
