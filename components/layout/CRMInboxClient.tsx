@@ -205,6 +205,7 @@ export default function CRMInboxClient({
               allShifts={allShifts}
               userEmail={userEmail}
               userId={userId}
+              userFullName={undefined}
             />
           </div>
         )}
