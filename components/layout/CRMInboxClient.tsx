@@ -23,10 +23,17 @@ import ChatThreadColumn from "./CRMChatThreadColumn";
 import SalesCockpitColumn from "./CRMSalesCockpitColumn";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 import { OnlyFansViewer } from "@/components/OnlyFansViewer";
+import NextShiftsWidget from "./NextShiftsWidget";
 
 interface ConnectedModel {
   id: string;
   name: string;
+}
+
+interface Shift {
+  id: number;
+  shift_date: string;
+  notes: string;
 }
 
 interface CRMInboxClientProps {
@@ -35,6 +42,9 @@ interface CRMInboxClientProps {
   initialScripts: ScriptLibrary[];
   connectedModels: ConnectedModel[];
   userRole?: string;
+  allShifts?: Shift[];
+  userEmail?: string;
+  userId?: string;
 }
 
 export default function CRMInboxClient({
@@ -43,6 +53,9 @@ export default function CRMInboxClient({
   initialScripts,
   connectedModels,
   userRole = "chatter",
+  allShifts = [],
+  userEmail = "",
+  userId = "",
 }: CRMInboxClientProps) {
   const searchParams = useSearchParams();
   const modelFromUrl = searchParams.get("model");
@@ -198,24 +211,14 @@ export default function CRMInboxClient({
               </div>
             </div>
           ) : !selectedFanId && !selectedOnlyFansModel ? (
-            // DEFAULT LANDING - Show message
-            <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
-              <div className="text-center mb-8">
-                <h2 className="text-2xl font-black mb-4 uppercase tracking-wider text-[#D4AF37]">
-                  📝 {connectedModels.find((m) => m.id === selectedModel)?.name}
-                </h2>
-                <p className="text-slate-400 mb-6 max-w-md">
-                  Wähle einen Fan aus der Chat-Liste aus oder öffne OnlyFans mit Rechtsklick auf das Model in der Sidebar
-                </p>
-                <div className="flex gap-3 justify-center">
-                  <div className="bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-lg p-3">
-                    <p className="text-xs text-slate-300 font-mono">💬 Left-Click / 3-Dots: Open/Refresh</p>
-                  </div>
-                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
-                    <p className="text-xs text-emerald-300 font-mono">🌐 Right-Click: Direct OnlyFans</p>
-                  </div>
-                </div>
-              </div>
+            // DEFAULT LANDING - Show NextShiftsWidget with reminder + instructions
+            <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black p-8">
+              <NextShiftsWidget 
+                allShifts={allShifts}
+                userEmail={userEmail}
+                userId={userId}
+                userFullName={undefined}
+              />
             </div>
           ) : selectedOnlyFansModel && !selectedFanId ? (
             // ONLYFANS ONLY MODE (OnlyFans open but no chat selected)
