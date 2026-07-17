@@ -20,12 +20,18 @@ interface Chatter {
   role: string;
 }
 
+interface ConnectedModel {
+  id: string;
+  name: string;
+}
+
 interface ScriptVaultClientProps {
   initialScripts: Script[];
   chatters: Chatter[];
   userId: string;
   userRole: string;
   userName: string;
+  connectedModels?: ConnectedModel[];
 }
 
 export default function ScriptVaultClient({
@@ -34,6 +40,7 @@ export default function ScriptVaultClient({
   userId,
   userRole,
   userName,
+  connectedModels = [],
 }: ScriptVaultClientProps) {
   const [scripts, setScripts] = useState<Script[]>(initialScripts);
   const [isLoading, setIsLoading] = useState(false);
@@ -153,7 +160,7 @@ export default function ScriptVaultClient({
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB]">
       <WorkspaceSidebar
-        connectedModels={[]}
+        connectedModels={connectedModels}
         selectedModel={null}
         onSelectModel={() => {}}
         currentHub="scripts"

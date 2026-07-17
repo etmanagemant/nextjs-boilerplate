@@ -37,14 +37,21 @@ interface Chatter {
   role: string;
 }
 
+interface ConnectedModel {
+  id: string;
+  name: string;
+}
+
 interface CRMConnectClientProps {
   initialModels: Model[];
   initialChatters: Chatter[];
+  connectedModels?: ConnectedModel[];
 }
 
 export default function CRMConnectClient({
   initialModels,
   initialChatters,
+  connectedModels = [],
 }: CRMConnectClientProps) {
   const [models, setModels] = useState<Model[]>(initialModels);
   const [sessions, setSessions] = useState<Map<string, CreatorSession>>(
@@ -162,7 +169,7 @@ export default function CRMConnectClient({
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB]">
       <WorkspaceSidebar
-        connectedModels={[]}
+        connectedModels={connectedModels}
         selectedModel={null}
         onSelectModel={() => {}}
         currentHub="connection"

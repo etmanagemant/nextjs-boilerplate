@@ -174,9 +174,18 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[INTERACT] ❌ Error:", errorText);
+      console.error("[INTERACT] ❌ Browserless HTTP Error:", response.status, errorText);
+      
+      let detailedError = "Browserless action failed";
+      try {
+        const errorJson = JSON.parse(errorText);
+        detailedError = errorJson.error || errorJson.message || errorText;
+      } catch (e) {
+        detailedError = errorText || `HTTP ${response.status}`;
+      }
+      
       return NextResponse.json(
-        { error: "Browserless action failed" },
+        { error: detailedError, status: response.status },
         { status: 500 }
       );
     }

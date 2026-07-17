@@ -161,10 +161,32 @@ export default async function CRMConnectPage() {
 
   const typedChatters: Chatter[] = chatters || [];
 
+  // 📊 Fetch ACTIVE models for sidebar (only is_active = true)
+  const { data: activeModels } = await supabase
+    .from("crm_model_sessions")
+    .select("model_id")
+    .eq("is_active", true)
+    .order("model_id", { ascending: true });
+
+  let sidebarModels: any[] = [];
+  if (activeModels && activeModels.length > 0) {
+    const activeModelIds = activeModels.map((m: any) => m.model_id);
+    const { data: modelDetails } = await supabase
+      .from("models")
+      .select("id, name")
+      .in("id", activeModelIds);
+    const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
+    sidebarModels = activeModels.map((m: any) => ({
+      id: m.model_id,
+      name: nameMap.get(m.model_id) || m.model_id,
+    }));
+  }
+
   return (
     <CRMConnectClient
       initialModels={typedModels}
       initialChatters={typedChatters}
+      connectedModels={sidebarModels}
     />
   );
 }

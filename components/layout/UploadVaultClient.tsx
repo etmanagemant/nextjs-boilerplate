@@ -15,11 +15,17 @@ interface MediaItem {
   storage_path: string | null;
 }
 
+interface ConnectedModel {
+  id: string;
+  name: string;
+}
+
 interface UploadVaultClientProps {
   initialMedia: MediaItem[];
   userId: string;
   userRole: string;
   userName: string;
+  connectedModels?: ConnectedModel[];
 }
 
 export default function UploadVaultClient({
@@ -27,6 +33,7 @@ export default function UploadVaultClient({
   userId,
   userRole,
   userName,
+  connectedModels = [],
 }: UploadVaultClientProps) {
   const [media, setMedia] = useState<MediaItem[]>(initialMedia);
   const [isUploading, setIsUploading] = useState(false);
@@ -168,7 +175,7 @@ export default function UploadVaultClient({
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB]">
       <WorkspaceSidebar
-        connectedModels={[]}
+        connectedModels={connectedModels}
         selectedModel={null}
         onSelectModel={() => {}}
         currentHub="upload"
