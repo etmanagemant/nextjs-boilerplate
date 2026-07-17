@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
  * Get live screenshot from Browserless OnlyFans session
  * GET /api/crm/screenshot?modelId=xxx
  * 
- * Uses Browserless /page/screenshot endpoint with sessionId
+ * Uses WebSocket + Chrome DevTools Protocol to capture screenshot
  * Returns: Base64 encoded PNG screenshot
  */
 export async function GET(request: NextRequest) {
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     console.log("[SCREENSHOT] Fetching for model:", modelId);
     const supabase = createSupabaseAdminClient();
 
-    // Get active session with sessionId
+    // Get active session with ws_endpoint
     const { data: session, error: sessionError } = await supabase
       .from("crm_model_sessions")
       .select("auth_cookies")
@@ -40,48 +40,30 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const browserlessSessionId = session.auth_cookies?.browserless_session_id;
-    const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
+    const wsEndpoint = session.auth_cookies?.ws_endpoint;
 
-    if (!browserlessSessionId || !browserlessApiKey) {
+    if (!wsEndpoint) {
+      console.error("[SCREENSHOT] ❌ WebSocket endpoint not found");
       return NextResponse.json(
-        { error: "Session configuration missing" },
+        { error: "Session configuration missing - no ws_endpoint" },
         { status: 400 }
       );
     }
 
-    console.log("[SCREENSHOT] Getting screenshot from Browserless...");
-    
-    // Use /page/screenshot endpoint for persistent sessions
-    const screenshotUrl = `https://production-sfo.browserless.io/page/screenshot?token=${browserlessApiKey}&sessionId=${encodeURIComponent(browserlessSessionId)}`;
+    console.log("[SCREENSHOT] Connecting to Browserless via WebSocket...");
 
-    const response = await fetch(screenshotUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({}),
+    // Send screenshot command via Chrome DevTools Protocol
+    const screenshotBase64 = await sendCDPCommand(wsEndpoint, {
+      method: "Page.captureScreenshot",
+      params: {},
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[SCREENSHOT] ❌ Browserless error:", response.status, errorText.substring(0, 200));
-      return NextResponse.json(
-        { error: "Failed to get screenshot from Browserless", details: errorText.substring(0, 100) },
-        { status: 500 }
-      );
-    }
-
-    // Response should be PNG image
-    const imageBuffer = await response.arrayBuffer();
-    const base64 = Buffer.from(imageBuffer).toString("base64");
-
-    console.log("[SCREENSHOT] ✅ Screenshot captured:", imageBuffer.byteLength, "bytes");
+    console.log("[SCREENSHOT] ✅ Screenshot captured");
 
     return NextResponse.json(
       {
         status: "success",
-        screenshot: `data:image/png;base64,${base64}`,
+        screenshot: `data:image/png;base64,${screenshotBase64}`,
         modelId: modelId,
         timestamp: new Date().toISOString(),
       },
@@ -94,4 +76,67 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Send CDP command via WebSocket (compatible with Vercel Edge Runtime)
+ */
+async function sendCDPCommand(
+  wsEndpoint: string,
+  command: any
+): Promise<string> {
+  const WebSocket = require("ws");
+
+  return new Promise((resolve, reject) => {
+    let messageId = 1;
+    const ws = new WebSocket(wsEndpoint);
+
+    const timeout = setTimeout(() => {
+      ws.close();
+      reject(new Error("WebSocket timeout"));
+    }, 30000);
+
+    ws.on("open", () => {
+      console.log("[WS] Connected");
+      const msg = {
+        id: messageId++,
+        ...command,
+      };
+      ws.send(JSON.stringify(msg));
+    });
+
+    ws.on("message", (data: string) => {
+      try {
+        const response = JSON.parse(data);
+        console.log("[WS] Got response for id:", response.id);
+
+        // Check if this is the screenshot response
+        if (response.result?.data) {
+          clearTimeout(timeout);
+          ws.close();
+          resolve(response.result.data);
+          return;
+        }
+
+        // Check for errors
+        if (response.error) {
+          clearTimeout(timeout);
+          ws.close();
+          reject(new Error(`CDP Error: ${response.error.message}`));
+        }
+      } catch (e) {
+        console.error("[WS] Parse error:", e);
+      }
+    });
+
+    ws.on("error", (err: any) => {
+      clearTimeout(timeout);
+      console.error("[WS] Error:", err);
+      reject(err);
+    });
+
+    ws.on("close", () => {
+      clearTimeout(timeout);
+    });
+  });
 }

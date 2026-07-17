@@ -1,7 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import WeeklyCalendar from "@/components/layout/WeeklyCalender";
-import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -38,15 +37,6 @@ export default async function CalendarPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 p-4">
-      <NextShiftsWidget 
-        allShifts={shifts || []}
-        userEmail={user.email || ""}
-        userId={user.id}
-        userFullName={(() => {
-          const profile = (profiles || []).find(p => p.user_id === user.id);
-          return profile ? profile.full_name : undefined;
-        })()}
-      />
       <WeeklyCalendar 
         sichereShifts={shifts || []} 
         modelsListe={models || []} 

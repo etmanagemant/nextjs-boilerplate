@@ -7,19 +7,7 @@ export const dynamic = "force-dynamic";
  * Send interaction to Browserless (click, type, scroll, navigate)
  * POST /api/crm/interact
  * 
- * Body: {
- *   modelId: string,
- *   action: "click" | "type" | "scroll" | "navigate",
- *   data: {
- *     x?: number,
- *     y?: number,
- *     text?: string,
- *     url?: string,
- *     delay?: number,
- *     scrollY?: number
- *   }
- * }
- * 
+ * Uses Chrome DevTools Protocol over WebSocket
  * Returns: New screenshot after action
  */
 export async function POST(request: NextRequest) {
@@ -38,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createSupabaseAdminClient();
 
-    // Get active session with sessionId
+    // Get active session with ws_endpoint
     const { data: session, error: sessionError } = await supabase
       .from("crm_model_sessions")
       .select("auth_cookies")
@@ -54,65 +42,120 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const browserlessSessionId = session.auth_cookies?.browserless_session_id;
-    const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
+    const wsEndpoint = session.auth_cookies?.ws_endpoint;
 
-    if (!browserlessSessionId || !browserlessApiKey) {
+    if (!wsEndpoint) {
+      console.error("[INTERACT] ❌ WebSocket endpoint not found");
       return NextResponse.json(
-        { error: "Session configuration missing" },
+        { error: "Session configuration missing - no ws_endpoint" },
         { status: 400 }
       );
     }
 
-    // Build function code based on action
-    let functionCode = "";
+    console.log("[INTERACT] Executing CDP commands via WebSocket...");
 
+    let actionResult: any = null;
+
+    // Execute action via CDP
     switch (action) {
       case "navigate":
-        functionCode = `async function() {
-  const result = await page.goto('${data.url || "https://onlyfans.com"}', {
-    waitUntil: 'domcontentloaded',
-    timeout: 30000
-  });
-  await page.waitForTimeout(${data.delay || 2500});
-  return { navigated: true, url: page.url(), status: result?.status() };
-}`;
+        const url = data.url || "https://onlyfans.com";
+        console.log("[INTERACT] Navigating to:", url);
+        
+        // Page.navigate
+        actionResult = await sendCDPCommand(wsEndpoint, {
+          method: "Page.navigate",
+          params: { url },
+        });
+
+        // Wait for navigation
+        await new Promise(resolve => setTimeout(resolve, data.delay || 2500));
         break;
 
       case "click":
-        functionCode = `async function() {
-  await page.mouse.click(${data.x}, ${data.y});
-  await page.waitForTimeout(${data.delay || 250});
-  return { clicked: true, x: ${data.x}, y: ${data.y} };
-}`;
+        const { x, y } = data;
+        console.log(`[INTERACT] Clicking at (${x}, ${y})`);
+        
+        // Input.dispatchMouseEvent
+        actionResult = await sendCDPCommand(wsEndpoint, {
+          method: "Input.dispatchMouseEvent",
+          params: {
+            type: "mousePressed",
+            x,
+            y,
+            button: "left",
+            clickCount: 1,
+          },
+        });
+
+        await sendCDPCommand(wsEndpoint, {
+          method: "Input.dispatchMouseEvent",
+          params: {
+            type: "mouseReleased",
+            x,
+            y,
+            button: "left",
+          },
+        });
+
+        await new Promise(resolve => setTimeout(resolve, data.delay || 250));
+        actionResult = { clicked: true, x, y };
         break;
 
       case "type":
-        const escapeText = (data.text || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n");
-        functionCode = `async function() {
-  await page.keyboard.type('${escapeText}');
-  await page.waitForTimeout(${data.delay || 150});
-  return { typed: true, length: ${data.text?.length || 0} };
-}`;
+        const text = data.text || "";
+        console.log("[INTERACT] Typing:", text.substring(0, 50) + "...");
+        
+        // Input.dispatchKeyEvent for each character
+        for (const char of text) {
+          await sendCDPCommand(wsEndpoint, {
+            method: "Input.dispatchKeyEvent",
+            params: {
+              type: "keyDown",
+              text: char,
+            },
+          });
+
+          await sendCDPCommand(wsEndpoint, {
+            method: "Input.dispatchKeyEvent",
+            params: {
+              type: "keyUp",
+              text: char,
+            },
+          });
+        }
+
+        await new Promise(resolve => setTimeout(resolve, data.delay || 150));
+        actionResult = { typed: true, length: text.length };
         break;
 
       case "scroll":
-        functionCode = `async function() {
-  await page.evaluate(y => window.scrollBy(0, y), ${data.scrollY || 100});
-  await page.waitForTimeout(${data.delay || 200});
-  return { scrolled: true, amount: ${data.scrollY || 100} };
-}`;
+        const amount = data.scrollY || 100;
+        console.log("[INTERACT] Scrolling by:", amount);
+        
+        // Runtime.evaluate to scroll
+        actionResult = await sendCDPCommand(wsEndpoint, {
+          method: "Runtime.evaluate",
+          params: {
+            expression: `window.scrollBy(0, ${amount}); true`,
+          },
+        });
+
+        await new Promise(resolve => setTimeout(resolve, data.delay || 200));
+        actionResult = { scrolled: true, amount };
         break;
 
       case "reload":
-        functionCode = `async function() {
-  const result = await page.goto('${data.target || "https://onlyfans.com"}', {
-    waitUntil: 'domcontentloaded',
-    timeout: 30000
-  });
-  await page.waitForTimeout(${data.delay || 2500});
-  return { reloaded: true, url: page.url() };
-}`;
+        const reloadUrl = data.target || "https://onlyfans.com";
+        console.log("[INTERACT] Reloading:", reloadUrl);
+        
+        actionResult = await sendCDPCommand(wsEndpoint, {
+          method: "Page.navigate",
+          params: { url: reloadUrl },
+        });
+
+        await new Promise(resolve => setTimeout(resolve, data.delay || 2500));
+        actionResult = { reloaded: true, url: reloadUrl };
         break;
 
       default:
@@ -122,62 +165,21 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    console.log("[INTERACT] Sending function to Browserless...");
-
-    // Use /function endpoint for persistent sessions
-    const functionUrl = `https://production-sfo.browserless.io/function?token=${browserlessApiKey}&sessionId=${encodeURIComponent(browserlessSessionId)}`;
-
-    const functionResponse = await fetch(functionUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: functionCode }),
-    });
-
-    if (!functionResponse.ok) {
-      const errorText = await functionResponse.text();
-      console.error("[INTERACT] ❌ Function error:", functionResponse.status, errorText.substring(0, 200));
-      return NextResponse.json(
-        { error: "Action failed", details: errorText.substring(0, 100) },
-        { status: 500 }
-      );
-    }
-
-    const actionResult = await functionResponse.json();
     console.log("[INTERACT] ✅ Action completed:", actionResult);
 
-    // Get new screenshot
+    // Get screenshot
     console.log("[INTERACT] Capturing screenshot...");
-    const screenshotUrl = `https://production-sfo.browserless.io/page/screenshot?token=${browserlessApiKey}&sessionId=${encodeURIComponent(browserlessSessionId)}`;
-
-    const screenshotResponse = await fetch(screenshotUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+    const screenshotBase64 = await sendCDPCommand(wsEndpoint, {
+      method: "Page.captureScreenshot",
+      params: {},
     });
-
-    if (!screenshotResponse.ok) {
-      console.error("[INTERACT] ⚠️ Screenshot failed:", screenshotResponse.status);
-      return NextResponse.json(
-        {
-          status: "partial_success",
-          action: action,
-          actionResult: actionResult,
-          modelId: modelId,
-          timestamp: new Date().toISOString(),
-        },
-        { status: 200 }
-      );
-    }
-
-    const imageBuffer = await screenshotResponse.arrayBuffer();
-    const base64 = Buffer.from(imageBuffer).toString("base64");
 
     return NextResponse.json(
       {
         status: "success",
         action: action,
         actionResult: actionResult,
-        screenshot: `data:image/png;base64,${base64}`,
+        screenshot: `data:image/png;base64,${screenshotBase64}`,
         modelId: modelId,
         timestamp: new Date().toISOString(),
       },
@@ -190,4 +192,61 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Send CDP command via WebSocket
+ */
+async function sendCDPCommand(wsEndpoint: string, command: any): Promise<any> {
+  const WebSocket = require("ws");
+
+  return new Promise((resolve, reject) => {
+    let messageId = 1;
+    const ws = new WebSocket(wsEndpoint);
+
+    const timeout = setTimeout(() => {
+      ws.close();
+      reject(new Error("WebSocket timeout"));
+    }, 30000);
+
+    ws.on("open", () => {
+      const msg = {
+        id: messageId++,
+        ...command,
+      };
+      ws.send(JSON.stringify(msg));
+    });
+
+    ws.on("message", (data: string) => {
+      try {
+        const response = JSON.parse(data);
+
+        // Check for response to our command
+        if (response.result) {
+          clearTimeout(timeout);
+          ws.close();
+          resolve(response.result);
+          return;
+        }
+
+        if (response.error) {
+          clearTimeout(timeout);
+          ws.close();
+          reject(new Error(`CDP Error: ${response.error.message}`));
+          return;
+        }
+      } catch (e) {
+        console.error("[WS] Parse error:", e);
+      }
+    });
+
+    ws.on("error", (err: any) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+
+    ws.on("close", () => {
+      clearTimeout(timeout);
+    });
+  });
 }

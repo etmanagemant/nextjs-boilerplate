@@ -132,12 +132,12 @@ export default function NextShiftsWidget({
       {naechsteZweiSchichten.length === 0 ? (
         <div className="text-center py-8 px-6 bg-gradient-to-br from-[#0A0A0A] to-[#050505] border border-[#AA7C11]/20 rounded-lg">
           <p className="text-lg mb-3">✨ Keine Schichten geplant</p>
-          <p className="text-xs text-slate-400 mb-4">Erstelle eine neue Schicht im Content-Plan</p>
+          <p className="text-xs text-slate-400 mb-4">Erstelle eine neue Schicht im Management</p>
           <Link
-            href="/content-plan"
+            href="/management"
             className="inline-block px-6 py-2 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black font-bold rounded-lg text-xs uppercase tracking-wider transition-all hover:shadow-lg"
           >
-            📅 Zum Content-Plan
+            ⚙️ Zum Management
           </Link>
         </div>
       ) : (
