@@ -71,8 +71,8 @@ export function OnlyFansViewer({
 
     const initializeAndPoll = async () => {
       try {
-        // Step 1: Navigate to OnlyFans first
-        console.log("[VIEWER] Navigating to OnlyFans...");
+        // Step 1: Try to navigate to OnlyFans (may fail for existing sessions)
+        console.log("[VIEWER] Attempting to navigate to OnlyFans...");
         const navigateResponse = await fetch("/api/crm/interact", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -83,14 +83,18 @@ export function OnlyFansViewer({
           }),
         });
 
-        if (!navigateResponse.ok) {
+        if (navigateResponse.ok) {
+          console.log("[VIEWER] ✅ Navigation successful");
+        } else {
           const errorData = await navigateResponse.json();
-          throw new Error(`Navigation failed: ${errorData.error}`);
+          console.warn("[VIEWER] ⚠️ Navigation failed:", errorData.error);
+          console.log("[VIEWER] 🔄 Will try screenshot anyway (session may already be loaded)");
+          // Don't throw - continue to screenshot attempt
         }
 
-        console.log("[VIEWER] ✅ Navigated to OnlyFans, starting screenshot polling...");
+        console.log("[VIEWER] Starting screenshot polling...");
 
-        // Step 2: Fetch initial screenshot
+        // Step 2: Fetch initial screenshot (works even if navigate failed)
         await fetchScreenshot();
 
         // Step 3: Start polling every 200ms
@@ -128,8 +132,8 @@ export function OnlyFansViewer({
 
     const initializeAndPoll = async () => {
       try {
-        // Step 1: Navigate to OnlyFans first
-        console.log("[VIEWER] Retrying navigation to OnlyFans...");
+        // Step 1: Try to navigate to OnlyFans (may fail for existing sessions)
+        console.log("[VIEWER] Retrying... attempting to navigate to OnlyFans...");
         const navigateResponse = await fetch("/api/crm/interact", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -140,15 +144,17 @@ export function OnlyFansViewer({
           }),
         });
 
-        if (!navigateResponse.ok) {
+        if (navigateResponse.ok) {
+          console.log("[VIEWER] ✅ Navigation successful on retry");
+        } else {
           const errorData = await navigateResponse.json();
-          console.error("[VIEWER] Navigate error response:", errorData);
-          throw new Error(`Navigation failed: ${errorData.error}`);
+          console.warn("[VIEWER] ⚠️ Navigation failed on retry:", errorData.error);
+          console.log("[VIEWER] 🔄 Will try screenshot anyway (session may already be loaded)");
         }
 
-        console.log("[VIEWER] ✅ Navigated to OnlyFans, starting screenshot polling...");
+        console.log("[VIEWER] Starting screenshot polling on retry...");
 
-        // Step 2: Fetch initial screenshot
+        // Step 2: Fetch initial screenshot (works even if navigate failed)
         await fetchScreenshot();
 
         // Step 3: Start polling every 200ms
@@ -330,23 +336,44 @@ export function OnlyFansViewer({
                   <>
                     <li>Model ID: <span className="font-mono">{modelId}</span></li>
                     <li>⚠️ No active Browserless session found for this model</li>
-                    <li>Try: Setup model in /management/crm-connect first</li>
+                    <li>👉 Try: Setup model in /management/crm-connect first</li>
                   </>
                 )}
                 {error.includes("Session configuration missing") && (
                   <>
                     <li>Session exists but configuration is incomplete</li>
-                    <li>Try: Refresh the model or re-authenticate</li>
+                    <li>👉 Try: Refresh the model or re-authenticate</li>
+                  </>
+                )}
+                {error.includes("Bad Request") && (
+                  <>
+                    <li>Browserless API rejected the request (HTTP 400)</li>
+                    <li>Session may be invalid, expired, or corrupted</li>
+                    <li>👉 Try: Click "Refresh Session" or reconnect model</li>
+                    <li>👉 If issue persists: Go to /management/crm-connect and re-setup</li>
+                  </>
+                )}
+                {error.includes("Authentication failed") && (
+                  <>
+                    <li>Browserless API authentication error (HTTP 401)</li>
+                    <li>Server configuration issue - Contact admin</li>
+                  </>
+                )}
+                {error.includes("Rate limited") && (
+                  <>
+                    <li>Too many requests to Browserless API</li>
+                    <li>👉 Wait a moment and then retry</li>
                   </>
                 )}
                 {error.includes("Navigation failed") && (
                   <>
                     <li>Failed to navigate to OnlyFans</li>
-                    <li>Try: Refresh session or check browser logs (F12)</li>
+                    <li>Session may not be properly authenticated</li>
+                    <li>👉 Try: Refresh session or check browser logs (F12)</li>
                   </>
                 )}
-                {!error.includes("No active session") && !error.includes("configuration") && !error.includes("Navigation") && (
-                  <li>Check browser console (F12) for full error trace</li>
+                {!error.includes("No active session") && !error.includes("configuration") && !error.includes("Bad Request") && !error.includes("Authentication") && !error.includes("Rate limited") && !error.includes("Navigation") && (
+                  <li>Unknown error - Check browser console (F12) for full trace</li>
                 )}
               </ul>
             </div>

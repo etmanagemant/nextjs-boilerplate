@@ -162,19 +162,27 @@ export async function POST(request: NextRequest) {
 
     // Send to Browserless
     const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}`;
+    const requestBody = {
+      code: functionCode,
+      sessionId: browserlessSessionId,
+    };
+
+    console.log("[INTERACT] 📤 Sending to Browserless:", {
+      url: browserlessUrl.replace(browserlessApiKey, "***"),
+      sessionId: browserlessSessionId.substring(0, 20) + "...",
+      action,
+    });
 
     const response = await fetch(browserlessUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code: functionCode,
-        sessionId: browserlessSessionId,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[INTERACT] ❌ Browserless HTTP Error:", response.status, errorText);
+      console.error("[INTERACT] ❌ Browserless HTTP Error:", response.status);
+      console.error("[INTERACT] ❌ Error Response:", errorText.substring(0, 500));
       
       let detailedError = "Browserless action failed";
       try {
@@ -184,8 +192,17 @@ export async function POST(request: NextRequest) {
         detailedError = errorText || `HTTP ${response.status}`;
       }
       
+      // Additional diagnostic for common Browserless errors
+      if (response.status === 400) {
+        detailedError = `Bad Request: ${detailedError} - Session may be invalid or expired`;
+      } else if (response.status === 401) {
+        detailedError = "Authentication failed - Check BROWSERLESS_API_KEY";
+      } else if (response.status === 429) {
+        detailedError = "Rate limited - Too many requests";
+      }
+      
       return NextResponse.json(
-        { error: detailedError, status: response.status },
+        { error: detailedError, status: response.status, action, modelId },
         { status: 500 }
       );
     }
