@@ -1,6 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { NextRequest, NextResponse } from "next/server";
-import puppeteer from "puppeteer-core";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createSupabaseAdminClient();
 
-    // Get active session with ws_endpoint
+    // Get active session with sessionId
     const { data: session, error: sessionError } = await supabase
       .from("crm_model_sessions")
       .select("auth_cookies")
@@ -55,107 +54,123 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const wsEndpoint = session.auth_cookies?.ws_endpoint;
+    const browserlessSessionId = session.auth_cookies?.browserless_session_id;
+    const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
 
-    if (!wsEndpoint) {
-      console.error("[INTERACT] ❌ WebSocket endpoint not found");
+    if (!browserlessSessionId || !browserlessApiKey) {
       return NextResponse.json(
-        { error: "Session configuration missing - no ws_endpoint" },
+        { error: "Session configuration missing" },
         { status: 400 }
       );
     }
 
-    console.log("[INTERACT] Connecting to Browserless via WebSocket...");
+    // Build function code based on action
+    let functionCode = "";
 
-    // Connect to existing session via WebSocket
-    const browser = await puppeteer.connect({
-      browserWSEndpoint: wsEndpoint,
-      defaultViewport: null,
-    });
-
-    console.log("[INTERACT] ✅ Connected to browser");
-
-    // Get first page (should be OnlyFans already loaded)
-    const pages = await browser.pages();
-    const page = pages[0] || (await browser.newPage());
-
-    console.log(`[INTERACT] Executing action: ${action}`);
-
-    let actionResult: any = null;
-
-    // Execute action based on type
     switch (action) {
       case "navigate":
-        const url = data.url || "https://onlyfans.com";
-        console.log("[INTERACT] Navigating to:", url);
-        const navigationResult = await page.goto(url, {
-          waitUntil: "domcontentloaded",
-          timeout: 30000,
-        });
-        await new Promise(resolve => setTimeout(resolve, data.delay || 2500));
-        actionResult = {
-          navigated: true,
-          url: page.url(),
-          status: navigationResult?.status(),
-        };
+        functionCode = `async function() {
+  const result = await page.goto('${data.url || "https://onlyfans.com"}', {
+    waitUntil: 'domcontentloaded',
+    timeout: 30000
+  });
+  await page.waitForTimeout(${data.delay || 2500});
+  return { navigated: true, url: page.url(), status: result?.status() };
+}`;
         break;
 
       case "click":
-        const { x, y } = data;
-        console.log(`[INTERACT] Clicking at (${x}, ${y})`);
-        await page.mouse.click(x, y);
-        await new Promise(resolve => setTimeout(resolve, data.delay || 250));
-        actionResult = { clicked: true, x, y };
+        functionCode = `async function() {
+  await page.mouse.click(${data.x}, ${data.y});
+  await page.waitForTimeout(${data.delay || 250});
+  return { clicked: true, x: ${data.x}, y: ${data.y} };
+}`;
         break;
 
       case "type":
-        const text = data.text;
-        console.log("[INTERACT] Typing:", text?.substring(0, 50) + "...");
-        await page.keyboard.type(text, { delay: 10 });
-        await new Promise(resolve => setTimeout(resolve, data.delay || 150));
-        actionResult = { typed: true, length: text.length };
+        const escapeText = (data.text || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n");
+        functionCode = `async function() {
+  await page.keyboard.type('${escapeText}');
+  await page.waitForTimeout(${data.delay || 150});
+  return { typed: true, length: ${data.text?.length || 0} };
+}`;
         break;
 
       case "scroll":
-        const amount = data.scrollY || 100;
-        console.log("[INTERACT] Scrolling by:", amount);
-        await page.evaluate((y: number) => window.scrollBy(0, y), amount);
-        await new Promise(resolve => setTimeout(resolve, data.delay || 200));
-        actionResult = { scrolled: true, amount };
+        functionCode = `async function() {
+  await page.evaluate(y => window.scrollBy(0, y), ${data.scrollY || 100});
+  await page.waitForTimeout(${data.delay || 200});
+  return { scrolled: true, amount: ${data.scrollY || 100} };
+}`;
         break;
 
       case "reload":
-        const reloadUrl = data.target || "https://onlyfans.com";
-        console.log("[INTERACT] Reloading:", reloadUrl);
-        const reloadResult = await page.goto(reloadUrl, {
-          waitUntil: "domcontentloaded",
-          timeout: 30000,
-        });
-        await new Promise(resolve => setTimeout(resolve, data.delay || 2500));
-        actionResult = { reloaded: true, url: page.url() };
+        functionCode = `async function() {
+  const result = await page.goto('${data.target || "https://onlyfans.com"}', {
+    waitUntil: 'domcontentloaded',
+    timeout: 30000
+  });
+  await page.waitForTimeout(${data.delay || 2500});
+  return { reloaded: true, url: page.url() };
+}`;
         break;
 
       default:
-        await browser.disconnect();
         return NextResponse.json(
           { error: "Unknown action" },
           { status: 400 }
         );
     }
 
-    console.log("[INTERACT] ✅ Action completed:", actionResult);
+    console.log("[INTERACT] Sending function to Browserless...");
 
-    // Get new screenshot after action
-    console.log("[INTERACT] Capturing new screenshot...");
-    const screenshotBuffer = await page.screenshot({
-      type: "png",
-      fullPage: false,
+    // Use /function endpoint for persistent sessions
+    const functionUrl = `https://production-sfo.browserless.io/function?token=${browserlessApiKey}&sessionId=${encodeURIComponent(browserlessSessionId)}`;
+
+    const functionResponse = await fetch(functionUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: functionCode }),
     });
 
-    const base64 = screenshotBuffer.toString("base64");
+    if (!functionResponse.ok) {
+      const errorText = await functionResponse.text();
+      console.error("[INTERACT] ❌ Function error:", functionResponse.status, errorText.substring(0, 200));
+      return NextResponse.json(
+        { error: "Action failed", details: errorText.substring(0, 100) },
+        { status: 500 }
+      );
+    }
 
-    // Disconnect (don't close - keeps session alive)
-    await browser.disconnect();
+    const actionResult = await functionResponse.json();
+    console.log("[INTERACT] ✅ Action completed:", actionResult);
+
+    // Get new screenshot
+    console.log("[INTERACT] Capturing screenshot...");
+    const screenshotUrl = `https://production-sfo.browserless.io/page/screenshot?token=${browserlessApiKey}&sessionId=${encodeURIComponent(browserlessSessionId)}`;
+
+    const screenshotResponse = await fetch(screenshotUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    if (!screenshotResponse.ok) {
+      console.error("[INTERACT] ⚠️ Screenshot failed:", screenshotResponse.status);
+      return NextResponse.json(
+        {
+          status: "partial_success",
+          action: action,
+          actionResult: actionResult,
+          modelId: modelId,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 200 }
+      );
+    }
+
+    const imageBuffer = await screenshotResponse.arrayBuffer();
+    const base64 = Buffer.from(imageBuffer).toString("base64");
 
     return NextResponse.json(
       {

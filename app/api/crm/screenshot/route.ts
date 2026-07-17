@@ -1,6 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { NextRequest, NextResponse } from "next/server";
-import puppeteer from "puppeteer-core";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +7,7 @@ export const dynamic = "force-dynamic";
  * Get live screenshot from Browserless OnlyFans session
  * GET /api/crm/screenshot?modelId=xxx
  * 
- * Uses Puppeteer WebSocket connection to existing persistent session
+ * Uses Browserless /page/screenshot endpoint with sessionId
  * Returns: Base64 encoded PNG screenshot
  */
 export async function GET(request: NextRequest) {
@@ -25,7 +24,7 @@ export async function GET(request: NextRequest) {
     console.log("[SCREENSHOT] Fetching for model:", modelId);
     const supabase = createSupabaseAdminClient();
 
-    // Get active session with ws_endpoint
+    // Get active session with sessionId
     const { data: session, error: sessionError } = await supabase
       .from("crm_model_sessions")
       .select("auth_cookies")
@@ -41,45 +40,43 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const wsEndpoint = session.auth_cookies?.ws_endpoint;
+    const browserlessSessionId = session.auth_cookies?.browserless_session_id;
+    const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
 
-    if (!wsEndpoint) {
-      console.error("[SCREENSHOT] ❌ WebSocket endpoint not found");
+    if (!browserlessSessionId || !browserlessApiKey) {
       return NextResponse.json(
-        { error: "Session configuration missing - no ws_endpoint" },
+        { error: "Session configuration missing" },
         { status: 400 }
       );
     }
 
-    console.log("[SCREENSHOT] Connecting to Browserless via WebSocket...");
-    console.log("[SCREENSHOT] ws_endpoint:", wsEndpoint.substring(0, 100) + "...");
+    console.log("[SCREENSHOT] Getting screenshot from Browserless...");
+    
+    // Use /page/screenshot endpoint for persistent sessions
+    const screenshotUrl = `https://production-sfo.browserless.io/page/screenshot?token=${browserlessApiKey}&sessionId=${encodeURIComponent(browserlessSessionId)}`;
 
-    // Connect to existing session via WebSocket
-    const browser = await puppeteer.connect({
-      browserWSEndpoint: wsEndpoint,
-      defaultViewport: null,
+    const response = await fetch(screenshotUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
     });
 
-    console.log("[SCREENSHOT] ✅ Connected to browser");
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[SCREENSHOT] ❌ Browserless error:", response.status, errorText.substring(0, 200));
+      return NextResponse.json(
+        { error: "Failed to get screenshot from Browserless", details: errorText.substring(0, 100) },
+        { status: 500 }
+      );
+    }
 
-    // Get first page (should be OnlyFans already loaded)
-    const pages = await browser.pages();
-    const page = pages[0] || (await browser.newPage());
+    // Response should be PNG image
+    const imageBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(imageBuffer).toString("base64");
 
-    console.log("[SCREENSHOT] Taking screenshot...");
-
-    // Take screenshot
-    const screenshotBuffer = await page.screenshot({
-      type: "png",
-      fullPage: false,
-    });
-
-    const base64 = screenshotBuffer.toString("base64");
-
-    console.log("[SCREENSHOT] ✅ Screenshot captured:", screenshotBuffer.length, "bytes");
-
-    // Disconnect (don't close - keeps session alive)
-    await browser.disconnect();
+    console.log("[SCREENSHOT] ✅ Screenshot captured:", imageBuffer.byteLength, "bytes");
 
     return NextResponse.json(
       {
@@ -93,7 +90,7 @@ export async function GET(request: NextRequest) {
   } catch (err: any) {
     console.error("[SCREENSHOT] ❌ Error:", err?.message);
     return NextResponse.json(
-      { error: err?.message },
+      { error: err?.message || "Failed to get screenshot" },
       { status: 500 }
     );
   }
