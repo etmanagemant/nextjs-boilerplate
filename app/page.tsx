@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import WeeklyCalendar from "@/components/layout/WeeklyCalender";
+import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +33,20 @@ export default async function CalendarPage() {
   const { data: models } = await supabase.from("models").select("id, name").order("name", { ascending: true });
 
   // 4. 🔑 NEUE ERGÄNZUNG: Profile laden für Rollen-Mapping
-  const { data: profiles } = await supabase.from("profiles").select("user_id, role");
+  const { data: profiles } = await supabase.from("profiles").select("user_id, role, full_name");
   const profileMap = new Map((profiles || []).map(p => [p.user_id, p.role || "chatter"]));
 
   return (
     <main className="min-h-screen bg-slate-950 p-4">
+      <NextShiftsWidget 
+        allShifts={shifts || []}
+        userEmail={user.email || ""}
+        userId={user.id}
+        userFullName={(() => {
+          const profile = (profiles || []).find(p => p.user_id === user.id);
+          return profile ? profile.full_name : undefined;
+        })()}
+      />
       <WeeklyCalendar 
         sichereShifts={shifts || []} 
         modelsListe={models || []} 
