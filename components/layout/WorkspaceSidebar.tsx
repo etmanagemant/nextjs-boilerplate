@@ -231,33 +231,48 @@ export default function WorkspaceSidebar({
             {modelsToDisplay.map((model) => {
               const isActive = selectedModel === model.id;
               return (
-                <div key={model.id} className="relative">
+                <div key={model.id} className="relative group">
                   <button
-                    onClick={(e) => handleOpenContextMenu(model.id, e)}
-                    onContextMenu={(e) => {
-                      // RIGHT-CLICK: Direct OnlyFans load (NO MENU)
+                    onClick={(e) => {
+                      // LEFT-CLICK: Direct OnlyFans load (NO MENU)
                       e.preventDefault();
                       e.stopPropagation();
                       if (onOpenOnlyFans) {
                         onOpenOnlyFans(model.id);
-                        console.log(`[SIDEBAR] Right-click: Opening OnlyFans for ${model.id}`);
+                        console.log(`[SIDEBAR] Left-click: Opening OnlyFans for ${model.id}`);
                       }
                     }}
-                    className={`w-full flex items-center justify-between gap-2 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition group ${
+                    onContextMenu={(e) => {
+                      // RIGHT-CLICK: Context Menu (Open new tab | Refresh session)
+                      handleOpenContextMenu(model.id, e);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
                       isActive
                         ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
                         : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
                     }`}
-                    title={`${model.name} - Click or right-click for options`}
+                    title={`${model.name} - Left-click: Open OnlyFans | Right-click: Menu`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-lg flex-shrink-0">👤</span>
                       {!isCollapsed && <span className="truncate">{model.name}</span>}
                     </div>
-                    {!isCollapsed && (
-                      <span className="text-xs opacity-100 opacity-100 transition flex-shrink-0 cursor-pointer hover:text-[#F3E5AB]">⋮</span>
-                    )}
                   </button>
+                  
+                  {/* 3-DOTS BUTTON - SEPARATE */}
+                  {!isCollapsed && (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleOpenContextMenu(model.id, e);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs opacity-0 group-hover:opacity-100 transition flex-shrink-0 cursor-pointer hover:text-[#F3E5AB] text-slate-400 p-1"
+                      title="Menu options"
+                    >
+                      ⋮
+                    </button>
+                  )}
                 </div>
               );
             })}
