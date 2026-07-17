@@ -23,10 +23,17 @@ import ChatThreadColumn from "./CRMChatThreadColumn";
 import SalesCockpitColumn from "./CRMSalesCockpitColumn";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 import { OnlyFansViewer } from "@/components/OnlyFansViewer";
+import NextShiftsWidget from "./NextShiftsWidget";
 
 interface ConnectedModel {
   id: string;
   name: string;
+}
+
+interface Shift {
+  id: number;
+  shift_date: string;
+  notes: string;
 }
 
 interface CRMInboxClientProps {
@@ -35,6 +42,9 @@ interface CRMInboxClientProps {
   initialScripts: ScriptLibrary[];
   connectedModels: ConnectedModel[];
   userRole?: string;
+  allShifts?: Shift[];
+  userEmail?: string;
+  userId?: string;
 }
 
 export default function CRMInboxClient({
@@ -43,6 +53,9 @@ export default function CRMInboxClient({
   initialScripts,
   connectedModels,
   userRole = "chatter",
+  allShifts = [],
+  userEmail = "",
+  userId = "",
 }: CRMInboxClientProps) {
   const searchParams = useSearchParams();
   const modelFromUrl = searchParams.get("model");
@@ -185,6 +198,17 @@ export default function CRMInboxClient({
 
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-hidden">
+        {/* NEXT SHIFTS WIDGET - Header */}
+        {allShifts.length > 0 && (
+          <div className="border-b border-[#D4AF37]/20 bg-[#050505] overflow-y-auto max-h-32">
+            <NextShiftsWidget 
+              allShifts={allShifts}
+              userEmail={userEmail}
+              userId={userId}
+            />
+          </div>
+        )}
+        
         {/* MAIN CONTENT AREA - Flex Layout */}
         <div className="flex-1 flex overflow-hidden">
           {!selectedModel ? (
