@@ -161,15 +161,13 @@ export async function POST(request: NextRequest) {
     console.log("[INTERACT] Executing function...");
 
     // Send to Browserless
-    const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}`;
+    const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}&sessionId=${browserlessSessionId}`;
     const requestBody = {
       code: functionCode,
-      sessionId: browserlessSessionId,
     };
 
     console.log("[INTERACT] 📤 Sending to Browserless:", {
-      url: browserlessUrl.replace(browserlessApiKey, "***"),
-      sessionId: browserlessSessionId.substring(0, 20) + "...",
+      url: browserlessUrl.replace(browserlessApiKey, "***").replace(browserlessSessionId, "***"),
       action,
     });
 
