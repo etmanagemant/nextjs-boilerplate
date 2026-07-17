@@ -22,6 +22,7 @@ import ChatListColumn from "./CRMChatListColumn";
 import ChatThreadColumn from "./CRMChatThreadColumn";
 import SalesCockpitColumn from "./CRMSalesCockpitColumn";
 import WorkspaceSidebar from "./WorkspaceSidebar";
+import { OnlyFansViewer } from "@/components/OnlyFansViewer";
 
 interface ConnectedModel {
   id: string;
@@ -66,6 +67,9 @@ export default function CRMInboxClient({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+
+  // OnlyFans Viewer State (Multi-Tab)
+  const [openModels, setOpenModels] = useState<Set<string>>(new Set());
 
   // Fetch chatter's emojis on mount
   useEffect(() => {
@@ -201,20 +205,37 @@ export default function CRMInboxClient({
             Models:
           </span>
           {connectedModels.map((model) => (
-            <button
-              key={model.id}
-              onClick={() => {
-                setSelectedModel(model.id);
-                setSelectedFanId(null);
-              }}
-              className={`px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-xs whitespace-nowrap transition ${
-                selectedModel === model.id
-                  ? "bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/40"
-                  : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/30"
-              }`}
-            >
-              {model.name}
-            </button>
+            <div key={model.id} className="relative group">
+              {/* Primary Button - Select Model */}
+              <button
+                onClick={() => {
+                  setSelectedModel(model.id);
+                  setSelectedFanId(null);
+                }}
+                className={`px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-xs whitespace-nowrap transition ${
+                  selectedModel === model.id
+                    ? "bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/40"
+                    : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/30"
+                }`}
+              >
+                {model.name}
+              </button>
+
+              {/* OnlyFans Button (visible on hover) */}
+              <button
+                onClick={() => {
+                  setOpenModels((prev) => new Set([...prev, model.id]));
+                }}
+                className={`absolute -right-10 top-0 px-2 py-2 rounded-lg font-bold text-xs transition opacity-0 group-hover:opacity-100 ${
+                  openModels.has(model.id)
+                    ? "bg-red-600 text-white"
+                    : "bg-purple-600 hover:bg-purple-700 text-white"
+                }`}
+                title="Open OnlyFans Stream"
+              >
+                🔴
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -289,6 +310,26 @@ export default function CRMInboxClient({
         )}
       </div>
     </main>
+
+    {/* OnlyFans Viewer Modals (Multi-Tab) */}
+    {Array.from(openModels).map((modelId) => {
+      const model = connectedModels.find((m) => m.id === modelId);
+      return model ? (
+        <OnlyFansViewer
+          key={modelId}
+          modelId={modelId}
+          modelName={model.name}
+          isModal={true}
+          onClose={() => {
+            setOpenModels((prev) => {
+              const next = new Set(prev);
+              next.delete(modelId);
+              return next;
+            });
+          }}
+        />
+      ) : null;
+    })}
     </div>
   );
 }

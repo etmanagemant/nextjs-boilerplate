@@ -77,7 +77,6 @@ export default function WorkspaceSidebar({
 
   const workspaceTools = [
     { id: "connection", name: "Connection Hub", icon: "🔗", href: "/management/crm-connect", adminOnly: true },
-    { id: "crm-live", name: "CRM Live", icon: "🔴", href: "/crm-live", adminOnly: false },
     { id: "scripts", name: "Script Vault", icon: "📜", href: "/script-vault" },
     { id: "upload", name: "Upload Vault", icon: "📤", href: "/upload-vault" },
   ];

@@ -4,10 +4,21 @@ import { useEffect, useRef, useState } from "react";
 
 interface OnlyFansViewerProps {
   modelId: string;
+  modelName?: string;
   onClose: () => void;
+  isModal?: boolean;
 }
 
-export function OnlyFansViewer({ modelId, onClose }: OnlyFansViewerProps) {
+/**
+ * OnlyFansViewer - Modal component for viewing OnlyFans streams
+ * Can be used as a modal overlay or embedded viewer
+ */
+export function OnlyFansViewer({ 
+  modelId, 
+  modelName = "OnlyFans", 
+  onClose, 
+  isModal = true 
+}: OnlyFansViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,26 +138,31 @@ export function OnlyFansViewer({ modelId, onClose }: OnlyFansViewerProps) {
     // We'll implement this for message input specifically
   };
 
-  if (error) {
-    return (
-      <div className="bg-red-900/20 border border-red-500 rounded p-4 text-red-300">
-        <p className="font-bold">Error loading OnlyFans</p>
-        <p className="text-sm">{error}</p>
-        <button
-          onClick={() => {
-            setError(null);
-            fetchScreenshot();
-          }}
-          className="mt-2 px-3 py-1 bg-red-600 rounded text-white text-sm hover:bg-red-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  return (
+  // Wrapper element (can be modal or embedded)
+  const viewerContent = (
     <div className="relative w-full h-full bg-black rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="absolute top-0 left-0 right-0 z-30 bg-gradient-to-b from-black/80 to-transparent p-3 flex items-center justify-between">
+        <h3 className="text-white font-bold text-lg">{modelName}</h3>
+        <div className="flex gap-2">
+          <button
+            onClick={fetchScreenshot}
+            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm"
+            title="Refresh screenshot"
+          >
+            🔄
+          </button>
+          <button
+            onClick={onClose}
+            className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm"
+            title="Close"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {/* Loading State */}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
           <div className="text-white text-center">
@@ -156,29 +172,46 @@ export function OnlyFansViewer({ modelId, onClose }: OnlyFansViewerProps) {
         </div>
       )}
 
+      {/* Error State */}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+          <div className="bg-red-900/30 border border-red-500 rounded p-6 text-red-300 max-w-md">
+            <p className="font-bold mb-2">Error loading OnlyFans</p>
+            <p className="text-sm mb-4">{error}</p>
+            <button
+              onClick={() => {
+                setError(null);
+                fetchScreenshot();
+              }}
+              className="px-4 py-2 bg-red-600 rounded text-white text-sm hover:bg-red-700 w-full"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Canvas - OnlyFans Stream */}
       <canvas
         ref={canvasRef}
         onClick={handleCanvasClick}
         className="w-full h-full object-contain cursor-pointer"
         style={{ maxHeight: "100%" }}
       />
-
-      <div className="absolute top-2 right-2 z-20 flex gap-2">
-        <button
-          onClick={fetchScreenshot}
-          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm"
-          title="Refresh screenshot"
-        >
-          🔄
-        </button>
-        <button
-          onClick={onClose}
-          className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm"
-          title="Close"
-        >
-          ✕
-        </button>
-      </div>
     </div>
   );
+
+  // If modal mode, wrap in backdrop
+  if (isModal) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+        <div className="w-full max-w-4xl h-[90vh] rounded-xl overflow-hidden shadow-2xl border border-purple-600/30">
+          {viewerContent}
+        </div>
+      </div>
+    );
+  }
+
+  // Otherwise return bare viewer
+  return viewerContent;
 }
