@@ -68,42 +68,86 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case "navigate":
+        // Enhanced navigation with better error handling
         functionCode = `function() {
-  await page.goto('${data.url || "https://onlyfans.com"}', { waitUntil: 'networkIdle' });
-  await page.waitForTimeout(${data.delay || 500});
-  return { navigated: true };
+  try {
+    const result = await page.goto('${data.url || "https://onlyfans.com"}', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
+    });
+    
+    if (!result) {
+      throw new Error('Navigation returned null');
+    }
+    
+    // Wait for page to stabilize
+    await page.waitForTimeout(${data.delay || 2500});
+    
+    // Return success with URL info
+    return {
+      navigated: true,
+      url: page.url(),
+      status: result.status()
+    };
+  } catch (e) {
+    throw new Error('Navigation failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
 }`;
         break;
 
       case "click":
         functionCode = `function() {
-  await page.mouse.click(${data.x}, ${data.y});
-  await page.waitForTimeout(${data.delay || 200});
-  return { clicked: true };
+  try {
+    const x = ${data.x};
+    const y = ${data.y};
+    await page.mouse.click(x, y);
+    await page.waitForTimeout(${data.delay || 250});
+    return { clicked: true, x, y };
+  } catch (e) {
+    throw new Error('Click failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
 }`;
         break;
 
       case "type":
         functionCode = `function() {
-  await page.keyboard.type('${data.text.replace(/'/g, "\\'")}');
-  await page.waitForTimeout(${data.delay || 100});
-  return { typed: true };
+  try {
+    const text = '${data.text.replace(/'/g, "\\'")}';
+    await page.keyboard.type(text);
+    await page.waitForTimeout(${data.delay || 150});
+    return { typed: true, length: text.length };
+  } catch (e) {
+    throw new Error('Type failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
 }`;
         break;
 
       case "scroll":
         functionCode = `function() {
-  await page.evaluate(y => window.scrollBy(0, y), ${data.scrollY || 100});
-  await page.waitForTimeout(${data.delay || 200});
-  return { scrolled: true };
+  try {
+    const amount = ${data.scrollY || 100};
+    await page.evaluate(y => window.scrollBy(0, y), amount);
+    await page.waitForTimeout(${data.delay || 200});
+    return { scrolled: true, amount };
+  } catch (e) {
+    throw new Error('Scroll failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
 }`;
         break;
 
       case "reload":
         functionCode = `function() {
-  await page.goto('${data.target || "https://onlyfans.com"}', { waitUntil: 'networkIdle' });
-  await page.waitForTimeout(${data.delay || 500});
-  return { reloaded: true };
+  try {
+    const url = '${data.target || "https://onlyfans.com"}';
+    const result = await page.goto(url, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
+    });
+    await page.waitForTimeout(${data.delay || 2500});
+    return { reloaded: true, url: page.url() };
+  } catch (e) {
+    throw new Error('Reload failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
 }`;
         break;
 
