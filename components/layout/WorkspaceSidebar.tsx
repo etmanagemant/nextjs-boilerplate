@@ -115,9 +115,25 @@ export default function WorkspaceSidebar({
   };
 
   const handleOpenNewTab = async (modelId: string) => {
-    // Navigate Browserless session to OnlyFans and open in main area
-    if (onOpenOnlyFans) {
-      onOpenOnlyFans(modelId);
+    // Try to open OnlyFans in a new browser tab with the model's profile
+    // First, try to get the model's OnlyFans handle from the session
+    try {
+      const response = await fetch(`/api/crm/model-profile?modelId=${encodeURIComponent(modelId)}`);
+      const data = response.ok ? await response.json() : {};
+      
+      // Default to opening a new incognito/private window with OnlyFans
+      const onlyFansUrl = data.onlyFansHandle 
+        ? `https://onlyfans.com/${data.onlyFansHandle}`
+        : "https://onlyfans.com";
+      
+      // Open in new tab/window
+      window.open(onlyFansUrl, "_blank", "width=1200,height=800,noopener,noreferrer");
+      
+      console.log("[SIDEBAR] Opened OnlyFans in new tab:", onlyFansUrl);
+    } catch (err) {
+      console.error("[SIDEBAR] Error opening new tab:", err);
+      // Fallback: just open OnlyFans.com
+      window.open("https://onlyfans.com", "_blank", "width=1200,height=800,noopener,noreferrer");
     }
     setContextMenu(null);
   };
@@ -136,10 +152,19 @@ export default function WorkspaceSidebar({
       });
 
       if (!response.ok) {
-        console.error("Failed to refresh session");
+        const errorData = await response.json();
+        console.error("[SIDEBAR] ❌ Failed to refresh session:", errorData);
+        alert("Fehler beim Neuladen der Session. Bitte versuchen Sie es später erneut.");
+      } else {
+        console.log("[SIDEBAR] ✅ Session refreshed");
+        // Also open OnlyFans in the embedded viewer
+        if (onOpenOnlyFans) {
+          onOpenOnlyFans(modelId);
+        }
       }
     } catch (err) {
-      console.error("Error refreshing session:", err);
+      console.error("[SIDEBAR] Error refreshing session:", err);
+      alert("Fehler beim Neuladen der Session");
     }
     setContextMenu(null);
   };

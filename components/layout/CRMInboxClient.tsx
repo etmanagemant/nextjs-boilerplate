@@ -23,6 +23,7 @@ import ChatThreadColumn from "./CRMChatThreadColumn";
 import SalesCockpitColumn from "./CRMSalesCockpitColumn";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 import { OnlyFansViewer } from "@/components/OnlyFansViewer";
+import { NextShiftsView } from "./NextShiftsView";
 
 interface ConnectedModel {
   id: string;
@@ -187,20 +188,23 @@ export default function CRMInboxClient({
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* MAIN CONTENT AREA - Flex Layout */}
         <div className="flex-1 flex overflow-hidden">
-          {!selectedFanId && !selectedOnlyFansModel ? (
-            // HERO BANNER MODE (no chat selected AND no OnlyFans selected)
+          {!selectedModel ? (
+            // NO MODEL SELECTED - Show placeholder
             <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
               <div className="text-center mb-8">
                 <h1 className="text-4xl font-black mb-3 uppercase tracking-wider">
                   <span>💬</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">CRM Live Inbox</span>
                 </h1>
-                <p className="text-slate-400">
-                  {selectedModel
-                    ? `Select a fan/chat for ${selectedModel} to start messaging`
-                    : "Connect a model first to view chats"}
-                </p>
+                <p className="text-slate-400">Wähle ein Model aus der Sidebar aus</p>
               </div>
             </div>
+          ) : !selectedFanId && !selectedOnlyFansModel ? (
+            // NEXT SHIFTS VIEW (Default landing page)
+            <NextShiftsView
+              modelId={selectedModel}
+              modelName={connectedModels.find((m) => m.id === selectedModel)?.name || "Model"}
+              onOpenOnlyFans={(modelId) => setSelectedOnlyFansModel(modelId)}
+            />
           ) : selectedOnlyFansModel && !selectedFanId ? (
             // ONLYFANS ONLY MODE (OnlyFans open but no chat selected)
             <div className="w-full bg-black">
