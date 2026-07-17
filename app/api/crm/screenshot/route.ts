@@ -54,12 +54,18 @@ export async function GET(request: NextRequest) {
     console.log("[SCREENSHOT] Connecting to Browserless via WebSocket...");
 
     // Send screenshot command via Chrome DevTools Protocol
-    const screenshotBase64 = await sendCDPCommand(wsEndpoint, {
+    const result = await sendCDPCommand(wsEndpoint, {
       method: "Page.captureScreenshot",
       params: {},
     });
 
-    console.log("[SCREENSHOT] ✅ Screenshot captured");
+    // Extract base64 data from result
+    const screenshotBase64 = (result as any)?.data;
+    if (!screenshotBase64) {
+      throw new Error("No screenshot data returned from CDP");
+    }
+
+    console.log("[SCREENSHOT] ✅ Screenshot captured, length:", screenshotBase64.length);
 
     return NextResponse.json(
       {

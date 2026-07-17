@@ -170,10 +170,15 @@ export async function POST(request: NextRequest) {
 
     // Get screenshot
     console.log("[INTERACT] Capturing screenshot...");
-    const screenshotBase64 = await sendCDPCommand(wsEndpoint, {
+    const screenshotResult = await sendCDPCommand(wsEndpoint, {
       method: "Page.captureScreenshot",
       params: {},
     });
+
+    const screenshotBase64 = (screenshotResult as any)?.data;
+    if (!screenshotBase64) {
+      throw new Error("No screenshot data returned from CDP");
+    }
 
     return NextResponse.json(
       {
