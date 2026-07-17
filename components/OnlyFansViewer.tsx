@@ -276,21 +276,24 @@ export function OnlyFansViewer({
 
   // Wrapper element (can be modal, embedded, or standalone)
   const viewerContent = (
-    <div className="relative w-full h-full bg-black rounded-lg overflow-hidden">
-      {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-30 bg-gradient-to-b from-black/80 to-transparent p-3 flex items-center justify-between">
-        <h3 className="text-white font-bold text-lg">{modelName}</h3>
+    <div className="relative w-full h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] rounded-lg overflow-hidden border border-[#D4AF37]/10">
+      {/* Header - Dark theme with Gold accents */}
+      <div className="absolute top-0 left-0 right-0 z-30 bg-gradient-to-b from-[#0A0A0A] via-[#050505]/95 to-transparent p-4 flex items-center justify-between border-b border-[#D4AF37]/20">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">👁️</span>
+          <h3 className="text-[#F3E5AB] font-black text-lg uppercase tracking-wider">{modelName}</h3>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={fetchScreenshot}
-            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm transition"
+            className="px-4 py-2 bg-gradient-to-b from-[#D4AF37]/80 to-[#AA7C11]/80 hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/30"
             title="Refresh screenshot"
           >
-            📸 Screenshot
+            📸 Refresh
           </button>
           <button
             onClick={handleRefreshSession}
-            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition"
+            className="px-4 py-2 bg-gradient-to-b from-[#D4AF37]/60 to-[#AA7C11]/60 hover:from-[#D4AF37]/80 hover:to-[#AA7C11]/80 text-black font-bold rounded-lg text-sm transition shadow-lg"
             title="Reload page and refresh session"
           >
             🔄 Reload
@@ -298,10 +301,10 @@ export function OnlyFansViewer({
           {!isEmbedded && (
             <button
               onClick={onClose}
-              className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm transition"
+              className="px-4 py-2 bg-gradient-to-b from-slate-600/80 to-slate-700/80 hover:from-slate-500 hover:to-slate-600 text-white font-bold rounded-lg text-sm transition shadow-lg"
               title="Close"
             >
-              ✕
+              ✕ Close
             </button>
           )}
         </div>
@@ -309,45 +312,46 @@ export function OnlyFansViewer({
 
       {/* Loading State */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-          <div className="text-white text-center">
-            <div className="animate-spin mb-4">⏳</div>
-            <p>Loading OnlyFans...</p>
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/60 to-[#0A0A0A]/80 z-10 backdrop-blur-sm">
+          <div className="text-center">
+            <div className="animate-spin mb-4 text-3xl">⏳</div>
+            <p className="text-[#F3E5AB] font-bold text-lg">Laden...</p>
+            <p className="text-slate-400 text-sm mt-2">OnlyFans Stream wird verbunden</p>
           </div>
         </div>
       )}
 
-      {/* Error State */}
+      {/* Error State - Enhanced styling */}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-10">
-          <div className="bg-red-950/80 border border-red-500 rounded-lg p-6 text-red-300 max-w-2xl">
-            <p className="font-bold mb-2 text-red-100">⚠️ OnlyFans Stream Error</p>
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/80 to-[#0A0A0A]/90 z-10 backdrop-blur-sm p-4">
+          <div className="bg-gradient-to-br from-[#2D1A0A] to-[#1A0F05] border-2 border-[#D4AF37]/40 rounded-xl p-6 text-[#F3E5AB] max-w-2xl shadow-2xl">
+            <p className="font-black mb-3 text-lg text-[#D4AF37] uppercase tracking-wider">⚠️ OnlyFans Stream Fehler</p>
             
             {/* Error Message */}
-            <div className="bg-red-950/50 rounded p-3 mb-4 text-sm font-mono">
+            <div className="bg-[#050505]/80 border border-[#D4AF37]/20 rounded-lg p-4 mb-4 text-sm font-mono text-slate-300">
               <p>{error}</p>
             </div>
 
             {/* Diagnostic Help */}
-            <div className="text-xs text-red-300/70 mb-4 border border-red-700/30 rounded p-3">
-              <p className="font-bold mb-2">Debugging Info:</p>
-              <ul className="list-disc list-inside space-y-1">
+            <div className="text-xs text-slate-300 mb-4 border border-[#D4AF37]/20 rounded-lg p-4 bg-[#0A0A0A]/60">
+              <p className="font-bold mb-3 text-[#D4AF37] uppercase tracking-wider">ℹ️ Debug-Info:</p>
+              <ul className="list-disc list-inside space-y-2 text-slate-400">
                 {error.includes("No active session") && (
                   <>
-                    <li>Model ID: <span className="font-mono">{modelId}</span></li>
-                    <li>⚠️ No active Browserless session found for this model</li>
-                    <li>👉 Try: Setup model in /management/crm-connect first</li>
+                    <li>Model ID: <span className="font-mono text-[#F3E5AB]">{modelId}</span></li>
+                    <li>⚠️ Keine aktive Browserless-Session gefunden</li>
+                    <li>👉 Lösung: Model in /management/crm-connect neu verbinden</li>
                   </>
                 )}
                 {error.includes("Session configuration missing") && (
                   <>
-                    <li>Session exists but configuration is incomplete</li>
-                    <li>👉 Try: Refresh the model or re-authenticate</li>
+                    <li>Session existiert aber Konfiguration unvollständig</li>
+                    <li>👉 Lösung: Model aktualisieren oder neu authentifizieren</li>
                   </>
                 )}
                 {error.includes("Bad Request") && (
                   <>
-                    <li>Browserless API rejected the request (HTTP 400)</li>
+                    <li>Browserless API hat Request abgelehnt (HTTP 400)</li>
                     <li>Session may be invalid, expired, or corrupted</li>
                     <li>👉 Try: Click "Refresh Session" or reconnect model</li>
                     <li>👉 If issue persists: Go to /management/crm-connect and re-setup</li>
@@ -367,37 +371,37 @@ export function OnlyFansViewer({
                 )}
                 {error.includes("Navigation failed") && (
                   <>
-                    <li>Failed to navigate to OnlyFans</li>
-                    <li>Session may not be properly authenticated</li>
-                    <li>👉 Try: Refresh session or check browser logs (F12)</li>
+                    <li>Navigation zu OnlyFans fehlgeschlagen</li>
+                    <li>Session könnte nicht richtig authentifiziert sein</li>
+                    <li>👉 Lösung: Session aktualisieren oder Browser-Logs prüfen (F12)</li>
                   </>
                 )}
                 {!error.includes("No active session") && !error.includes("configuration") && !error.includes("Bad Request") && !error.includes("Authentication") && !error.includes("Rate limited") && !error.includes("Navigation") && (
-                  <li>Unknown error - Check browser console (F12) for full trace</li>
+                  <li>Unbekannter Fehler - Browser-Konsole (F12) für Details prüfen</li>
                 )}
               </ul>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-2">
+            <div className="flex gap-3 mt-4">
               <button
                 onClick={handleRetry}
-                className="flex-1 px-4 py-2 bg-red-600 rounded text-white text-sm hover:bg-red-700 transition"
+                className="flex-1 px-4 py-3 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/40"
               >
-                🔄 Retry
+                🔄 Erneut versuchen
               </button>
               <button
                 onClick={handleRefreshSession}
-                className="flex-1 px-4 py-2 bg-orange-600 rounded text-white text-sm hover:bg-orange-700 transition"
+                className="flex-1 px-4 py-3 bg-gradient-to-b from-[#D4AF37]/70 to-[#AA7C11]/70 hover:from-[#D4AF37] hover:to-[#AA7C11] text-black font-bold rounded-lg text-sm transition shadow-lg"
               >
-                🔗 Refresh Session
+                🔗 Session aktualisieren
               </button>
               {isModal && (
                 <button
                   onClick={onClose}
-                  className="flex-1 px-4 py-2 bg-gray-700 rounded text-white text-sm hover:bg-gray-800 transition"
+                  className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-sm transition shadow-lg"
                 >
-                  Close
+                  Schließen
                 </button>
               )}
             </div>
@@ -405,11 +409,11 @@ export function OnlyFansViewer({
         </div>
       )}
 
-      {/* Canvas - OnlyFans Stream */}
+      {/* Canvas - OnlyFans Stream with dark border */}
       <canvas
         ref={canvasRef}
         onClick={handleCanvasClick}
-        className="w-full h-full object-contain cursor-pointer"
+        className="w-full h-full object-contain cursor-pointer border-t border-[#D4AF37]/20"
         style={{ maxHeight: "100%" }}
       />
     </div>
@@ -418,8 +422,8 @@ export function OnlyFansViewer({
   // If modal mode, wrap in backdrop
   if (isModal) {
     return (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl h-[90vh] rounded-xl overflow-hidden shadow-2xl border border-purple-600/30">
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-40 flex items-center justify-center p-4">
+        <div className="w-full max-w-4xl h-[90vh] rounded-xl overflow-hidden shadow-2xl border-2 border-[#D4AF37]/40 bg-[#050505]">
           {viewerContent}
         </div>
       </div>
@@ -429,7 +433,7 @@ export function OnlyFansViewer({
   // If embedded mode, return full-size viewer (no padding/rounded)
   if (isEmbedded) {
     return (
-      <div className="w-full h-full bg-black overflow-hidden">
+      <div className="w-full h-full bg-[#0A0A0A] overflow-hidden border border-[#D4AF37]/20">
         {viewerContent}
       </div>
     );
