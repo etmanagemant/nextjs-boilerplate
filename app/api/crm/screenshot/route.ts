@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
+import { sendCDPCommand } from "@/lib/browserless";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -76,67 +77,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-/**
- * Send CDP command via WebSocket (compatible with Vercel Edge Runtime)
- */
-async function sendCDPCommand(
-  wsEndpoint: string,
-  command: any
-): Promise<string> {
-  const WebSocket = require("ws");
-
-  return new Promise((resolve, reject) => {
-    let messageId = 1;
-    const ws = new WebSocket(wsEndpoint);
-
-    const timeout = setTimeout(() => {
-      ws.close();
-      reject(new Error("WebSocket timeout"));
-    }, 30000);
-
-    ws.on("open", () => {
-      console.log("[WS] Connected");
-      const msg = {
-        id: messageId++,
-        ...command,
-      };
-      ws.send(JSON.stringify(msg));
-    });
-
-    ws.on("message", (data: string) => {
-      try {
-        const response = JSON.parse(data);
-        console.log("[WS] Got response for id:", response.id);
-
-        // Check if this is the screenshot response
-        if (response.result?.data) {
-          clearTimeout(timeout);
-          ws.close();
-          resolve(response.result.data);
-          return;
-        }
-
-        // Check for errors
-        if (response.error) {
-          clearTimeout(timeout);
-          ws.close();
-          reject(new Error(`CDP Error: ${response.error.message}`));
-        }
-      } catch (e) {
-        console.error("[WS] Parse error:", e);
-      }
-    });
-
-    ws.on("error", (err: any) => {
-      clearTimeout(timeout);
-      console.error("[WS] Error:", err);
-      reject(err);
-    });
-
-    ws.on("close", () => {
-      clearTimeout(timeout);
-    });
-  });
 }

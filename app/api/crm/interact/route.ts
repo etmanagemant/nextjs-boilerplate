@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
+import { sendCDPCommand } from "@/lib/browserless";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -192,61 +193,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-/**
- * Send CDP command via WebSocket
- */
-async function sendCDPCommand(wsEndpoint: string, command: any): Promise<any> {
-  const WebSocket = require("ws");
-
-  return new Promise((resolve, reject) => {
-    let messageId = 1;
-    const ws = new WebSocket(wsEndpoint);
-
-    const timeout = setTimeout(() => {
-      ws.close();
-      reject(new Error("WebSocket timeout"));
-    }, 30000);
-
-    ws.on("open", () => {
-      const msg = {
-        id: messageId++,
-        ...command,
-      };
-      ws.send(JSON.stringify(msg));
-    });
-
-    ws.on("message", (data: string) => {
-      try {
-        const response = JSON.parse(data);
-
-        // Check for response to our command
-        if (response.result) {
-          clearTimeout(timeout);
-          ws.close();
-          resolve(response.result);
-          return;
-        }
-
-        if (response.error) {
-          clearTimeout(timeout);
-          ws.close();
-          reject(new Error(`CDP Error: ${response.error.message}`));
-          return;
-        }
-      } catch (e) {
-        console.error("[WS] Parse error:", e);
-      }
-    });
-
-    ws.on("error", (err: any) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-
-    ws.on("close", () => {
-      clearTimeout(timeout);
-    });
-  });
 }
