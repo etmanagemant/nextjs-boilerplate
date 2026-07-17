@@ -29,10 +29,11 @@ export async function sendCDPCommand(
         reject(new Error(`CDP command timeout after ${timeoutMs}ms`));
       }, timeoutMs);
 
-      ws.on("error", (error) => {
+      ws.on("error", (error: any) => {
         if (timeout) clearTimeout(timeout);
-        console.error("[CDP] WebSocket error:", error);
-        reject(error);
+        console.error("[CDP] WebSocket error:", error?.message || error);
+        console.error("[CDP] ws_endpoint was:", wsEndpoint);
+        reject(new Error(`WebSocket connection failed: ${error?.message || error}`));
       });
 
       ws.on("open", () => {

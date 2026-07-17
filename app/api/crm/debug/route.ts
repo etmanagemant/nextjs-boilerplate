@@ -69,14 +69,23 @@ export async function GET(request: NextRequest) {
     }
 
     console.log("[DEBUG] Testing WebSocket connection...");
+    console.log("[DEBUG] ws_endpoint:", wsEndpoint?.substring(0, 100) + "...");
 
     // 4. Try to send a CDP command to test connection
-    const testCommand = await sendCDPCommand(wsEndpoint, {
-      method: "Page.captureScreenshot",
-      params: {},
-    }).catch(e => null);
+    let testCommand: unknown = null;
+    let connectionError: string | null = null;
 
-    const connectionHealthy = testCommand !== null;
+    try {
+      testCommand = await sendCDPCommand(wsEndpoint, {
+        method: "Page.captureScreenshot",
+        params: {},
+      });
+    } catch (e: any) {
+      connectionError = e?.message || String(e);
+      console.error("[DEBUG] Connection test error:", connectionError);
+    }
+
+    const connectionHealthy = testCommand !== null && !connectionError;
 
     if (!connectionHealthy) {
       console.error("[DEBUG] Connection test failed");
@@ -84,8 +93,9 @@ export async function GET(request: NextRequest) {
         status: "ws_connection_failed",
         modelId,
         message: "WebSocket connection test failed",
-        error: "Could not communicate with Browserless session",
-        action: "Session may be expired - reconnect model",
+        error: connectionError || "Could not communicate with Browserless session",
+        wsEndpointPreview: wsEndpoint?.substring(0, 100) + "...",
+        action: "Session may be expired - reconnect model in /management/crm-connect",
       });
     }
 
