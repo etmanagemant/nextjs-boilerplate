@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { NextRequest, NextResponse } from "next/server";
+import puppeteer from "puppeteer-core";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
  * GET /api/crm/debug?modelId=xxx
  * 
  * Returns full diagnostic info for debugging
+ * Tests WebSocket connection health
  */
 export async function GET(request: NextRequest) {
   const modelId = request.nextUrl.searchParams.get("modelId");
@@ -55,43 +57,58 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 3. Check browserless config
-    const browserlessSessionId = session.auth_cookies?.browserless_session_id;
-    const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
+    // 3. Check WebSocket config
+    const wsEndpoint = session.auth_cookies?.ws_endpoint;
 
-    if (!browserlessSessionId) {
+    if (!wsEndpoint) {
       return NextResponse.json({
-        status: "missing_browserless_session",
+        status: "missing_ws_endpoint",
         modelId,
-        message: "Browserless session ID not found",
+        message: "WebSocket endpoint not found in session",
         action: "Reconnect model",
       });
     }
 
-    if (!browserlessApiKey) {
+    console.log("[DEBUG] Testing WebSocket connection...");
+    console.log("[DEBUG] ws_endpoint:", wsEndpoint.substring(0, 100) + "...");
+
+    // 4. Try to connect via WebSocket to test connection
+    let browser;
+    try {
+      browser = await puppeteer.connect({
+        browserWSEndpoint: wsEndpoint,
+        defaultViewport: null,
+      });
+      console.log("[DEBUG] ✅ WebSocket connection successful");
+    } catch (connectError: any) {
+      console.error("[DEBUG] ❌ WebSocket connection failed:", connectError.message);
       return NextResponse.json({
-        status: "missing_api_key",
-        message: "BROWSERLESS_API_KEY not configured on server",
-        action: "Contact admin - environment variable missing",
+        status: "ws_connection_failed",
+        modelId,
+        message: "WebSocket connection failed",
+        error: connectError.message,
+        action: "Session may be expired - reconnect model",
       });
     }
 
-    // 4. Try to fetch a screenshot to test connection
-    // Connect to persistent session using sessionId query parameter
-    const screenshotUrl = `https://chrome.browserless.io/screenshot?token=${browserlessApiKey}&sessionId=${encodeURIComponent(browserlessSessionId)}`;
-    
-    const screenshotResponse = await fetch(screenshotUrl, { method: "GET" });
+    // 5. Try to get a page and take screenshot
+    let screenshotTaken = false;
+    try {
+      const pages = await browser.pages();
+      const page = pages[0] || (await browser.newPage());
 
-    if (!screenshotResponse.ok) {
-      const errorText = await screenshotResponse.text();
-      return NextResponse.json({
-        status: "browserless_error",
-        modelId,
-        message: "Browserless screenshot failed",
-        browserlessStatus: screenshotResponse.status,
-        error: errorText.substring(0, 200),
-        action: "Session may be expired - reconnect model",
+      const screenshotBuffer = await page.screenshot({
+        type: "png",
+        fullPage: false,
       });
+
+      console.log("[DEBUG] ✅ Screenshot successful:", screenshotBuffer.length, "bytes");
+      screenshotTaken = true;
+    } catch (screenshotError: any) {
+      console.error("[DEBUG] ⚠️ Screenshot failed:", screenshotError.message);
+    } finally {
+      // Disconnect (don't close - keeps session alive)
+      await browser.disconnect();
     }
 
     // All checks passed
@@ -103,7 +120,11 @@ export async function GET(request: NextRequest) {
         is_active: session.is_active,
         created_at: session.created_at,
         last_used: session.last_used,
-        has_browserless_session: true,
+        has_ws_endpoint: true,
+      },
+      websocket: {
+        connected: true,
+        screenshotCapable: screenshotTaken,
       },
       action: "Ready to load OnlyFans in CRM-Inbox",
     });

@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { NextRequest, NextResponse } from "next/server";
+import puppeteer from "puppeteer-core";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
  * Get live screenshot from Browserless OnlyFans session
  * GET /api/crm/screenshot?modelId=xxx
  * 
+ * Uses Puppeteer WebSocket connection to existing persistent session
  * Returns: Base64 encoded PNG screenshot
  */
 export async function GET(request: NextRequest) {
@@ -23,10 +25,10 @@ export async function GET(request: NextRequest) {
     console.log("[SCREENSHOT] Fetching for model:", modelId);
     const supabase = createSupabaseAdminClient();
 
-    // Get active session
+    // Get active session with ws_endpoint
     const { data: session, error: sessionError } = await supabase
       .from("crm_model_sessions")
-      .select("*")
+      .select("auth_cookies")
       .eq("model_id", modelId)
       .eq("is_active", true)
       .maybeSingle();
@@ -39,39 +41,45 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const browserlessSessionId = session.auth_cookies?.browserless_session_id;
-    const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
+    const wsEndpoint = session.auth_cookies?.ws_endpoint;
 
-    if (!browserlessSessionId || !browserlessApiKey) {
+    if (!wsEndpoint) {
+      console.error("[SCREENSHOT] ❌ WebSocket endpoint not found");
       return NextResponse.json(
-        { error: "Session configuration missing" },
+        { error: "Session configuration missing - no ws_endpoint" },
         { status: 400 }
       );
     }
 
-    // Get screenshot from Browserless
-    // Connect to persistent session using sessionId query parameter
-    const screenshotUrl = `https://chrome.browserless.io/screenshot?token=${browserlessApiKey}&sessionId=${encodeURIComponent(browserlessSessionId)}`;
+    console.log("[SCREENSHOT] Connecting to Browserless via WebSocket...");
+    console.log("[SCREENSHOT] ws_endpoint:", wsEndpoint.substring(0, 100) + "...");
 
-    console.log("[SCREENSHOT] Fetching from Browserless...");
-    const response = await fetch(screenshotUrl, {
-      method: "GET",
+    // Connect to existing session via WebSocket
+    const browser = await puppeteer.connect({
+      browserWSEndpoint: wsEndpoint,
+      defaultViewport: null,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[SCREENSHOT] ❌ Browserless error:", errorText);
-      return NextResponse.json(
-        { error: "Failed to get screenshot" },
-        { status: 500 }
-      );
-    }
+    console.log("[SCREENSHOT] ✅ Connected to browser");
 
-    // Get image buffer
-    const imageBuffer = await response.arrayBuffer();
-    const base64 = Buffer.from(imageBuffer).toString("base64");
+    // Get first page (should be OnlyFans already loaded)
+    const pages = await browser.pages();
+    const page = pages[0] || (await browser.newPage());
 
-    console.log("[SCREENSHOT] ✅ Screenshot captured:", imageBuffer.byteLength, "bytes");
+    console.log("[SCREENSHOT] Taking screenshot...");
+
+    // Take screenshot
+    const screenshotBuffer = await page.screenshot({
+      type: "png",
+      fullPage: false,
+    });
+
+    const base64 = screenshotBuffer.toString("base64");
+
+    console.log("[SCREENSHOT] ✅ Screenshot captured:", screenshotBuffer.length, "bytes");
+
+    // Disconnect (don't close - keeps session alive)
+    await browser.disconnect();
 
     return NextResponse.json(
       {
@@ -82,7 +90,6 @@ export async function GET(request: NextRequest) {
       },
       { status: 200 }
     );
-
   } catch (err: any) {
     console.error("[SCREENSHOT] ❌ Error:", err?.message);
     return NextResponse.json(
