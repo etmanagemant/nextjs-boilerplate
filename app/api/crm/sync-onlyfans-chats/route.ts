@@ -105,18 +105,17 @@ export async function POST(request: NextRequest) {
     // Fetch from OnlyFans API endpoint using Browserless
     const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}`;
 
-    const functionCode = `async () => {
-  try {
-    await page.goto('https://onlyfans.com/api2/v2/inbox', {
-      waitUntil: 'networkidle2',
-      timeout: 30000
-    });
-    const content = await page.content();
-    const jsonMatch = content.match(/<pre[^>]*>([^<]+)<\\/pre>/);
-    return jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(content);
-  } catch(e) {
-    return { error: e.message };
+    const functionCode = `function() {
+  await page.goto('https://onlyfans.com/api2/v2/inbox', {
+    waitUntil: 'networkidle2',
+    timeout: 30000
+  });
+  const content = await page.content();
+  const jsonMatch = content.match(/<pre[^>]*>([^<]+)<\\/pre>/);
+  if (jsonMatch) {
+    return JSON.parse(jsonMatch[1]);
   }
+  return JSON.parse(content);
 }`;
 
     const browserlessResponse = await fetch(browserlessUrl, {
@@ -125,7 +124,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        code: functionCode.trim(),
+        code: functionCode,
         timeout: 30000,
       }),
     });
