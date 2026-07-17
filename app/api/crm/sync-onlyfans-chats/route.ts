@@ -125,7 +125,6 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         code: functionCode,
-        timeout: 30000,
       }),
     });
 
