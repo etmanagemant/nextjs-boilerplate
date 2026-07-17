@@ -23,7 +23,6 @@ import ChatThreadColumn from "./CRMChatThreadColumn";
 import SalesCockpitColumn from "./CRMSalesCockpitColumn";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 import { OnlyFansViewer } from "@/components/OnlyFansViewer";
-import { NextShiftsView } from "./NextShiftsView";
 
 interface ConnectedModel {
   id: string;
@@ -199,12 +198,25 @@ export default function CRMInboxClient({
               </div>
             </div>
           ) : !selectedFanId && !selectedOnlyFansModel ? (
-            // NEXT SHIFTS VIEW (Default landing page)
-            <NextShiftsView
-              modelId={selectedModel}
-              modelName={connectedModels.find((m) => m.id === selectedModel)?.name || "Model"}
-              onOpenOnlyFans={(modelId) => setSelectedOnlyFansModel(modelId)}
-            />
+            // DEFAULT LANDING - Show message
+            <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-black mb-4 uppercase tracking-wider text-[#D4AF37]">
+                  📝 {connectedModels.find((m) => m.id === selectedModel)?.name}
+                </h2>
+                <p className="text-slate-400 mb-6 max-w-md">
+                  Wähle einen Fan aus der Chat-Liste aus oder öffne OnlyFans mit Rechtsklick auf das Model in der Sidebar
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <div className="bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-lg p-3">
+                    <p className="text-xs text-slate-300 font-mono">💬 Left-Click / 3-Dots: Open/Refresh</p>
+                  </div>
+                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
+                    <p className="text-xs text-emerald-300 font-mono">🌐 Right-Click: Direct OnlyFans</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : selectedOnlyFansModel && !selectedFanId ? (
             // ONLYFANS ONLY MODE (OnlyFans open but no chat selected)
             <div className="w-full bg-black">

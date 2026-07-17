@@ -234,7 +234,15 @@ export default function WorkspaceSidebar({
                 <div key={model.id} className="relative">
                   <button
                     onClick={(e) => handleOpenContextMenu(model.id, e)}
-                    onContextMenu={(e) => handleOpenContextMenu(model.id, e)}
+                    onContextMenu={(e) => {
+                      // RIGHT-CLICK: Direct OnlyFans load (NO MENU)
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (onOpenOnlyFans) {
+                        onOpenOnlyFans(model.id);
+                        console.log(`[SIDEBAR] Right-click: Opening OnlyFans for ${model.id}`);
+                      }
+                    }}
                     className={`w-full flex items-center justify-between gap-2 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition group ${
                       isActive
                         ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
