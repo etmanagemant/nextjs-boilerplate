@@ -7,6 +7,7 @@ interface OnlyFansViewerProps {
   modelName?: string;
   onClose: () => void;
   isModal?: boolean;
+  isEmbedded?: boolean;
 }
 
 /**
@@ -17,7 +18,8 @@ export function OnlyFansViewer({
   modelId, 
   modelName = "OnlyFans", 
   onClose, 
-  isModal = true 
+  isModal = false,
+  isEmbedded = false
 }: OnlyFansViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -138,7 +140,7 @@ export function OnlyFansViewer({
     // We'll implement this for message input specifically
   };
 
-  // Wrapper element (can be modal or embedded)
+  // Wrapper element (can be modal, embedded, or standalone)
   const viewerContent = (
     <div className="relative w-full h-full bg-black rounded-lg overflow-hidden">
       {/* Header */}
@@ -152,13 +154,15 @@ export function OnlyFansViewer({
           >
             🔄
           </button>
-          <button
-            onClick={onClose}
-            className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm"
-            title="Close"
-          >
-            ✕
-          </button>
+          {!isEmbedded && (
+            <button
+              onClick={onClose}
+              className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm"
+              title="Close"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
@@ -212,6 +216,15 @@ export function OnlyFansViewer({
     );
   }
 
-  // Otherwise return bare viewer
+  // If embedded mode, return full-size viewer (no padding/rounded)
+  if (isEmbedded) {
+    return (
+      <div className="w-full h-full bg-black overflow-hidden">
+        {viewerContent}
+      </div>
+    );
+  }
+
+  // Otherwise return bare viewer with rounded corners
   return viewerContent;
 }

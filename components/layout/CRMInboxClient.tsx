@@ -47,7 +47,6 @@ export default function CRMInboxClient({
   const searchParams = useSearchParams();
   const modelFromUrl = searchParams.get("model");
 
-  // State Management
   const [selectedModel, setSelectedModel] = useState<string | null>(
     modelFromUrl || (connectedModels.length > 0 ? connectedModels[0].id : null)
   );
@@ -57,21 +56,16 @@ export default function CRMInboxClient({
   const [currentMessage, setCurrentMessage] = useState("");
   const [emojis, setEmojis] = useState<string[]>([]);
   const [scripts, setScripts] = useState<ScriptLibrary[]>(initialScripts);
-  const [selectedScript, setSelectedScript] = useState<ScriptLibrary | null>(
-    null
-  );
+  const [selectedScript, setSelectedScript] = useState<ScriptLibrary | null>(null);
   const [fanMetadata, setFanMetadata] = useState<FanMetadata | null>(null);
-
-  // UI State
   const [isLoadingFans, setIsLoadingFans] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
-  // OnlyFans Viewer State (Multi-Tab)
-  const [openModels, setOpenModels] = useState<Set<string>>(new Set());
+  // OnlyFans Viewer State - which model to display in modal
+  const [selectedOnlyFansModel, setSelectedOnlyFansModel] = useState<string | null>(null);
 
-  // Fetch chatter's emojis on mount
   useEffect(() => {
     const loadEmojis = async () => {
       const emojiList = await fetchChatterEmojis(chatterId);
@@ -80,7 +74,6 @@ export default function CRMInboxClient({
     loadEmojis();
   }, [chatterId]);
 
-  // When selectedModel changes: load fans for this model
   useEffect(() => {
     if (!selectedModel) {
       setFans([]);
@@ -93,7 +86,7 @@ export default function CRMInboxClient({
       try {
         const fanList = await fetchActiveFans(chatterId, selectedModel);
         setFans(fanList);
-        setSelectedFanId(null); // Reset selected fan when model changes
+        setSelectedFanId(null);
       } finally {
         setIsLoadingFans(false);
       }
@@ -102,7 +95,6 @@ export default function CRMInboxClient({
     loadFansForModel();
   }, [selectedModel, chatterId]);
 
-  // When fan is selected: load messages and metadata
   useEffect(() => {
     if (!selectedFanId) {
       setMessages([]);
@@ -113,15 +105,12 @@ export default function CRMInboxClient({
     const loadFanData = async () => {
       setIsLoadingMessages(true);
       try {
-        // Fetch messages
         const msgs = await fetchChatMessages(chatterId, selectedFanId);
         setMessages(msgs);
 
-        // Fetch metadata
         const metadata = await fetchFanMetadata(chatterId, selectedFanId);
         setFanMetadata(metadata);
 
-        // Mark as read
         await markMessagesAsRead(chatterId, selectedFanId);
       } finally {
         setIsLoadingMessages(false);
@@ -131,14 +120,12 @@ export default function CRMInboxClient({
     loadFanData();
   }, [selectedFanId, chatterId]);
 
-  // When script is selected: inject into textarea
   useEffect(() => {
     if (selectedScript) {
       setCurrentMessage(selectedScript.script_content);
     }
   }, [selectedScript]);
 
-  // Send message handler
   const handleSendMessage = async () => {
     if (!selectedFanId || !currentMessage.trim()) return;
 
@@ -155,7 +142,6 @@ export default function CRMInboxClient({
         setCurrentMessage("");
         setSelectedScript(null);
 
-        // Reload messages
         const msgs = await fetchChatMessages(chatterId, selectedFanId);
         setMessages(msgs);
       }
@@ -164,7 +150,6 @@ export default function CRMInboxClient({
     }
   };
 
-  // Update fan notes handler
   const handleUpdateNotes = async (notes: string) => {
     if (!selectedFanId) return;
 
@@ -177,7 +162,6 @@ export default function CRMInboxClient({
     }
   };
 
-  // Select fan handler
   const handleSelectFan = (fanId: string) => {
     setSelectedFanId(fanId);
   };
@@ -198,67 +182,79 @@ export default function CRMInboxClient({
 
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-hidden">
-      {/* MODEL SELECTOR HEADER */}
-      {connectedModels.length > 0 && (
-        <div className="border-b border-[#D4AF37]/20 bg-[#050505]/50 px-6 py-3 flex items-center gap-2 overflow-x-auto">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
-            Models:
-          </span>
-          {connectedModels.map((model) => (
-            <div key={model.id} className="relative group">
-              {/* Primary Button - Select Model */}
-              <button
-                onClick={() => {
-                  setSelectedModel(model.id);
-                  setSelectedFanId(null);
-                }}
-                className={`px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-xs whitespace-nowrap transition ${
-                  selectedModel === model.id
-                    ? "bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/40"
-                    : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/30"
-                }`}
-              >
-                {model.name}
-              </button>
+        {/* MODEL SELECTOR HEADER */}
+        {connectedModels.length > 0 && (
+          <div className="border-b border-[#D4AF37]/20 bg-[#050505]/50 px-6 py-3 flex items-center gap-3 overflow-x-auto">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+              Models:
+            </span>
+            {connectedModels.map((model) => (
+              <div key={model.id} className="relative group">
+                {/* Left Click = Select Model for CRM */}
+                <button
+                  onClick={() => {
+                    setSelectedModel(model.id);
+                    setSelectedFanId(null);
+                  }}
+                  onContextMenu={(e) => {
+                    // Right Click = Open in new browser tab
+                    e.preventDefault();
+                    window.open(`https://onlyfans.com/${model.id}`, "_blank");
+                  }}
+                  className={`px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-xs whitespace-nowrap transition ${
+                    selectedModel === model.id
+                      ? "bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/40"
+                      : "bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/30"
+                  }`}
+                >
+                  {model.name}
+                </button>
 
-              {/* OnlyFans Button (visible on hover) */}
-              <button
-                onClick={() => {
-                  setOpenModels((prev) => new Set([...prev, model.id]));
-                }}
-                className={`absolute -right-10 top-0 px-2 py-2 rounded-lg font-bold text-xs transition opacity-0 group-hover:opacity-100 ${
-                  openModels.has(model.id)
-                    ? "bg-red-600 text-white"
-                    : "bg-purple-600 hover:bg-purple-700 text-white"
-                }`}
-                title="Open OnlyFans Stream"
-              >
-                🔴
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+                {/* 3-Dots Menu - shows on hover */}
+                <div className="absolute right-0 top-full mt-1 hidden group-hover:block bg-gray-800 border border-purple-600 rounded shadow-lg z-50 whitespace-nowrap">
+                  <button
+                    onClick={() => {
+                      setSelectedOnlyFansModel(model.id);
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-white hover:bg-purple-600 rounded-t transition"
+                  >
+                    📺 View in Canvas
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.open(`https://onlyfans.com/${model.id}`, "_blank");
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-white hover:bg-blue-600 rounded-b transition"
+                  >
+                    ↗️ Open in New Tab
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 flex overflow-hidden">
-        {!selectedFanId ? (
-          // HERO BANNER MODE
-          <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
-            <div className="text-center mb-8">
-              <h1 className="text-4xl font-black mb-3 uppercase tracking-wider">
-                <span>💬</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">CRM Live Inbox</span>
-              </h1>
-              <p className="text-slate-400">
-                {selectedModel
-                  ? `Select a fan/chat for ${selectedModel} to start messaging`
-                  : "Connect a model first to view chats"}
-              </p>
+        {/* MAIN CONTENT AREA */}
+        <div className="flex-1 flex overflow-hidden">
+          {!selectedFanId ? (
+            // HERO BANNER MODE (no chat selected)
+            <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
+              <div className="text-center mb-8">
+                <h1 className="text-4xl font-black mb-3 uppercase tracking-wider">
+                  <span>💬</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">CRM Live Inbox</span>
+                </h1>
+                <p className="text-slate-400">
+                  {selectedModel
+                    ? `Select a fan/chat for ${selectedModel} to start messaging`
+                    : "Connect a model first to view chats"}
+                </p>
+              </div>
             </div>
-            
-            {/* Chat List on Hero Screen */}
-            {selectedModel && (
-              <div className="w-1/4 border-r border-[#D4AF37]/20 h-full overflow-hidden">
+          ) : (
+            // 3-COLUMN MODE (fan selected)
+            <>
+              {/* Column 1: Chat List (25%) */}
+              <div className="w-1/4 border-r border-[#D4AF37]/20">
                 <ChatListColumn
                   fans={fans}
                   selectedFanId={selectedFanId}
@@ -266,70 +262,46 @@ export default function CRMInboxClient({
                   isLoading={isLoadingFans}
                 />
               </div>
-            )}
-          </div>
-        ) : (
-          // THREE COLUMN MODE
-          <>
-            {/* Column 1: Chat List (25%) */}
-            <div className="w-1/4 border-r border-[#D4AF37]/20">
-              <ChatListColumn
-                fans={fans}
-                selectedFanId={selectedFanId}
-                onSelectFan={handleSelectFan}
-                isLoading={isLoadingFans}
-              />
-            </div>
 
-            {/* Column 2: Chat Thread (50%) */}
-            <div className="w-1/2">
-              <ChatThreadColumn
-                messages={messages}
-                currentMessage={currentMessage}
-                onMessageChange={setCurrentMessage}
-                onSendMessage={handleSendMessage}
-                emojis={emojis}
-                selectedEmoji={selectedScript ? "✓" : undefined}
-                isLoading={isLoadingMessages}
-                isSending={isSending}
-              />
-            </div>
+              {/* Column 2: Chat Thread (50%) */}
+              <div className="w-1/2">
+                <ChatThreadColumn
+                  messages={messages}
+                  currentMessage={currentMessage}
+                  onMessageChange={setCurrentMessage}
+                  onSendMessage={handleSendMessage}
+                  emojis={emojis}
+                  selectedEmoji={selectedScript ? "✓" : undefined}
+                  isLoading={isLoadingMessages}
+                  isSending={isSending}
+                />
+              </div>
 
-            {/* Column 3: Sales Cockpit (25%) */}
-            <div className="w-1/4 border-l border-[#D4AF37]/20">
-              <SalesCockpitColumn
-                fanMetadata={fanMetadata}
-                scripts={scripts}
-                selectedScript={selectedScript}
-                onSelectScript={setSelectedScript}
-                onNotesChange={handleUpdateNotes}
-                isSavingNotes={isSavingNotes}
-              />
-            </div>
-          </>
-        )}
-      </div>
-    </main>
+              {/* Column 3: Sales Cockpit (25%) */}
+              <div className="w-1/4 border-l border-[#D4AF37]/20">
+                <SalesCockpitColumn
+                  fanMetadata={fanMetadata}
+                  scripts={scripts}
+                  selectedScript={selectedScript}
+                  onSelectScript={setSelectedScript}
+                  onNotesChange={handleUpdateNotes}
+                  isSavingNotes={isSavingNotes}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </main>
 
-    {/* OnlyFans Viewer Modals (Multi-Tab) */}
-    {Array.from(openModels).map((modelId) => {
-      const model = connectedModels.find((m) => m.id === modelId);
-      return model ? (
+      {/* OnlyFans Viewer Modal - floating over everything */}
+      {selectedOnlyFansModel && (
         <OnlyFansViewer
-          key={modelId}
-          modelId={modelId}
-          modelName={model.name}
+          modelId={selectedOnlyFansModel}
+          modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}
           isModal={true}
-          onClose={() => {
-            setOpenModels((prev) => {
-              const next = new Set(prev);
-              next.delete(modelId);
-              return next;
-            });
-          }}
+          onClose={() => setSelectedOnlyFansModel(null)}
         />
-      ) : null;
-    })}
+      )}
     </div>
   );
 }
