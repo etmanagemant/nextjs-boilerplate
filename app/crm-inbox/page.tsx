@@ -85,9 +85,6 @@ export default async function CRMInboxPage() {
 
     const fans = await fetchActiveFans(user.id);
     const scripts = await fetchScriptLibrary(user.id);
-    
-    // 📅 Fetch shifts for NextShiftsWidget
-    const { data: allShifts } = await supabase.from("shifts").select("*");
 
     return (
       <CRMInboxClient
@@ -96,9 +93,6 @@ export default async function CRMInboxPage() {
         initialScripts={scripts || []}
         connectedModels={connectedModels}
         userRole={userRole}
-        allShifts={allShifts || []}
-        userEmail={user.email || ""}
-        userId={user.id}
       />
     );
   } catch (err) {
