@@ -117,6 +117,100 @@ export function OnlyFansViewer({
   }, [modelId]);
 
   // Handle canvas click
+  const handleRetry = () => {
+    setError(null);
+    setIsLoading(true);
+    setLastScreenshot(null);
+    
+    if (screenshotIntervalRef.current) {
+      clearInterval(screenshotIntervalRef.current);
+    }
+
+    const initializeAndPoll = async () => {
+      try {
+        // Step 1: Navigate to OnlyFans first
+        console.log("[VIEWER] Retrying navigation to OnlyFans...");
+        const navigateResponse = await fetch("/api/crm/interact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            modelId,
+            action: "navigate",
+            data: { url: "https://onlyfans.com", delay: 1000 },
+          }),
+        });
+
+        if (!navigateResponse.ok) {
+          const errorData = await navigateResponse.json();
+          console.error("[VIEWER] Navigate error response:", errorData);
+          throw new Error(`Navigation failed: ${errorData.error}`);
+        }
+
+        console.log("[VIEWER] ✅ Navigated to OnlyFans, starting screenshot polling...");
+
+        // Step 2: Fetch initial screenshot
+        await fetchScreenshot();
+
+        // Step 3: Start polling every 200ms
+        if (screenshotIntervalRef.current) {
+          clearInterval(screenshotIntervalRef.current);
+        }
+        screenshotIntervalRef.current = setInterval(() => {
+          fetchScreenshot();
+        }, 200);
+      } catch (err: any) {
+        console.error("[VIEWER] Retry error:", err);
+        setError(err.message || "Failed to initialize OnlyFans viewer");
+        setIsLoading(false);
+      }
+    };
+
+    initializeAndPoll();
+  };
+
+  const handleRefreshSession = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await fetch("/api/crm/interact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelId,
+          action: "reload",
+          data: { delay: 1500 },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to refresh session");
+      }
+
+      const data = await response.json();
+      setLastScreenshot(data.screenshot);
+
+      // Draw new screenshot
+      if (canvasRef.current && data.screenshot) {
+        const img = new Image();
+        img.onload = () => {
+          const ctx = canvasRef.current?.getContext("2d");
+          if (ctx) {
+            canvasRef.current!.width = img.width;
+            canvasRef.current!.height = img.height;
+            ctx.drawImage(img, 0, 0);
+          }
+          setIsLoading(false);
+        };
+        img.src = data.screenshot;
+      }
+    } catch (err: any) {
+      setError(err.message);
+      setIsLoading(false);
+    }
+  };
+
+  // Handle canvas click
   const handleCanvasClick = async (
     event: React.MouseEvent<HTMLCanvasElement>
   ) => {
@@ -183,15 +277,22 @@ export function OnlyFansViewer({
         <div className="flex gap-2">
           <button
             onClick={fetchScreenshot}
-            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm"
+            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm transition"
             title="Refresh screenshot"
           >
-            🔄
+            📸 Screenshot
+          </button>
+          <button
+            onClick={handleRefreshSession}
+            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition"
+            title="Reload page and refresh session"
+          >
+            🔄 Reload
           </button>
           {!isEmbedded && (
             <button
               onClick={onClose}
-              className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm"
+              className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm transition"
               title="Close"
             >
               ✕
@@ -212,19 +313,67 @@ export function OnlyFansViewer({
 
       {/* Error State */}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
-          <div className="bg-red-900/30 border border-red-500 rounded p-6 text-red-300 max-w-md">
-            <p className="font-bold mb-2">Error loading OnlyFans</p>
-            <p className="text-sm mb-4">{error}</p>
-            <button
-              onClick={() => {
-                setError(null);
-                fetchScreenshot();
-              }}
-              className="px-4 py-2 bg-red-600 rounded text-white text-sm hover:bg-red-700 w-full"
-            >
-              Retry
-            </button>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-10">
+          <div className="bg-red-950/80 border border-red-500 rounded-lg p-6 text-red-300 max-w-2xl">
+            <p className="font-bold mb-2 text-red-100">⚠️ OnlyFans Stream Error</p>
+            
+            {/* Error Message */}
+            <div className="bg-red-950/50 rounded p-3 mb-4 text-sm font-mono">
+              <p>{error}</p>
+            </div>
+
+            {/* Diagnostic Help */}
+            <div className="text-xs text-red-300/70 mb-4 border border-red-700/30 rounded p-3">
+              <p className="font-bold mb-2">Debugging Info:</p>
+              <ul className="list-disc list-inside space-y-1">
+                {error.includes("No active session") && (
+                  <>
+                    <li>Model ID: <span className="font-mono">{modelId}</span></li>
+                    <li>⚠️ No active Browserless session found for this model</li>
+                    <li>Try: Setup model in /management/crm-connect first</li>
+                  </>
+                )}
+                {error.includes("Session configuration missing") && (
+                  <>
+                    <li>Session exists but configuration is incomplete</li>
+                    <li>Try: Refresh the model or re-authenticate</li>
+                  </>
+                )}
+                {error.includes("Navigation failed") && (
+                  <>
+                    <li>Failed to navigate to OnlyFans</li>
+                    <li>Try: Refresh session or check browser logs (F12)</li>
+                  </>
+                )}
+                {!error.includes("No active session") && !error.includes("configuration") && !error.includes("Navigation") && (
+                  <li>Check browser console (F12) for full error trace</li>
+                )}
+              </ul>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={handleRetry}
+                className="flex-1 px-4 py-2 bg-red-600 rounded text-white text-sm hover:bg-red-700 transition"
+              >
+                🔄 Retry
+              </button>
+              <button
+                onClick={handleRefreshSession}
+                className="flex-1 px-4 py-2 bg-orange-600 rounded text-white text-sm hover:bg-orange-700 transition"
+              >
+                🔗 Refresh Session
+              </button>
+              {isModal && (
+                <button
+                  onClick={onClose}
+                  className="flex-1 px-4 py-2 bg-gray-700 rounded text-white text-sm hover:bg-gray-800 transition"
+                >
+                  Close
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
