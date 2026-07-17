@@ -234,24 +234,31 @@ export default function WorkspaceSidebar({
                 <div key={model.id} className="relative group">
                   <button
                     onClick={(e) => {
-                      // LEFT-CLICK: Direct OnlyFans load (NO MENU)
+                      // LEFT-CLICK: Select model based on context
                       e.preventDefault();
                       e.stopPropagation();
+                      
+                      // On CRM-Inbox: Open OnlyFans viewer
                       if (onOpenOnlyFans) {
                         onOpenOnlyFans(model.id);
                         console.log(`[SIDEBAR] Left-click: Opening OnlyFans for ${model.id}`);
+                      }
+                      // On other pages (Script Vault, Upload Vault, CRM-Connect): Select model
+                      else if (onSelectModel) {
+                        onSelectModel(model.id);
+                        console.log(`[SIDEBAR] Left-click: Selecting model ${model.id}`);
                       }
                     }}
                     onContextMenu={(e) => {
                       // RIGHT-CLICK: Context Menu (Open new tab | Refresh session)
                       handleOpenContextMenu(model.id, e);
                     }}
-                    className={`w-full flex items-center justify-between gap-2 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition cursor-pointer ${
                       isActive
                         ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
                         : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
                     }`}
-                    title={`${model.name} - Left-click: Open OnlyFans | Right-click: Menu`}
+                    title={`${model.name} - Left-click: Select / Open | Right-click: Menu`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-lg flex-shrink-0">👤</span>

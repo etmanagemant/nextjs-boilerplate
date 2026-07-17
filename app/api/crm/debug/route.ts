@@ -77,7 +77,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. Try to fetch a screenshot to test connection
-    const screenshotUrl = `https://chrome.browserless.io/screenshot?token=${browserlessApiKey}&sessionId=${browserlessSessionId}`;
+    // NOTE: Browserless doesn't accept sessionId as query param
+    const screenshotUrl = `https://chrome.browserless.io/screenshot?token=${browserlessApiKey}`;
     
     const screenshotResponse = await fetch(screenshotUrl, { method: "GET" });
 

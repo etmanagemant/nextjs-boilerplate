@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Get screenshot from Browserless
-    const screenshotUrl = `https://chrome.browserless.io/screenshot?token=${browserlessApiKey}&sessionId=${browserlessSessionId}`;
+    // NOTE: Browserless doesn't accept sessionId as query param - it's bound to the token/session
+    const screenshotUrl = `https://chrome.browserless.io/screenshot?token=${browserlessApiKey}`;
 
     console.log("[SCREENSHOT] Fetching from Browserless...");
     const response = await fetch(screenshotUrl, {

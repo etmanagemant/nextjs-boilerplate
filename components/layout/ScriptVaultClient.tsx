@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 
@@ -42,6 +43,7 @@ export default function ScriptVaultClient({
   userName,
   connectedModels = [],
 }: ScriptVaultClientProps) {
+  const router = useRouter();
   const [scripts, setScripts] = useState<Script[]>(initialScripts);
   const [isLoading, setIsLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -162,7 +164,7 @@ export default function ScriptVaultClient({
       <WorkspaceSidebar
         connectedModels={connectedModels}
         selectedModel={null}
-        onSelectModel={() => {}}
+        onSelectModel={(modelId) => router.push(`/crm-inbox?model=${modelId}`)}
         currentHub="scripts"
         userRole={userRole}
       />

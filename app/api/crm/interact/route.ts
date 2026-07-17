@@ -161,13 +161,15 @@ export async function POST(request: NextRequest) {
     console.log("[INTERACT] Executing function...");
 
     // Send to Browserless
-    const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}&sessionId=${browserlessSessionId}`;
+    const browserlessUrl = `https://chrome.browserless.io/function?token=${browserlessApiKey}`;
     const requestBody = {
       code: functionCode,
+      sessionId: browserlessSessionId,
     };
 
     console.log("[INTERACT] 📤 Sending to Browserless:", {
-      url: browserlessUrl.replace(browserlessApiKey, "***").replace(browserlessSessionId, "***"),
+      url: browserlessUrl.replace(browserlessApiKey, "***"),
+      sessionId: browserlessSessionId.substring(0, 20) + "...",
       action,
     });
 
@@ -210,7 +212,8 @@ export async function POST(request: NextRequest) {
 
     // Get new screenshot after action
     console.log("[INTERACT] Capturing new screenshot...");
-    const screenshotUrl = `https://chrome.browserless.io/screenshot?token=${browserlessApiKey}&sessionId=${browserlessSessionId}`;
+    // NOTE: Browserless doesn't accept sessionId as query param - it's bound to the token/session
+    const screenshotUrl = `https://chrome.browserless.io/screenshot?token=${browserlessApiKey}`;
 
     const screenshotResponse = await fetch(screenshotUrl, {
       method: "GET",

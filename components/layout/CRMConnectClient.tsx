@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 import { ModelCardSkeleton, ScriptLibrarySkeleton } from "./CRMSkeletonLoaders";
@@ -53,6 +54,7 @@ export default function CRMConnectClient({
   initialChatters,
   connectedModels = [],
 }: CRMConnectClientProps) {
+  const router = useRouter();
   const [models, setModels] = useState<Model[]>(initialModels);
   const [sessions, setSessions] = useState<Map<string, CreatorSession>>(
     new Map()
@@ -171,7 +173,7 @@ export default function CRMConnectClient({
       <WorkspaceSidebar
         connectedModels={connectedModels}
         selectedModel={null}
-        onSelectModel={() => {}}
+        onSelectModel={(modelId) => router.push(`/crm-inbox?model=${modelId}`)}
         currentHub="connection"
         userRole="admin"
       />
