@@ -1,18 +1,17 @@
-import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
-import { sendCDPCommand } from "@/lib/browserless";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Get live screenshot from Browserless OnlyFans session
- * GET /api/crm/screenshot?modelId=xxx
+ * Get live screenshot from Puppeteer VPS server
+ * GET /api/crm/screenshot?modelId=xxx&url=https://...
  * 
- * Uses WebSocket + Chrome DevTools Protocol to capture screenshot
+ * Forwards request to VPS Puppeteer server
  * Returns: Base64 encoded PNG screenshot
  */
 export async function GET(request: NextRequest) {
   const modelId = request.nextUrl.searchParams.get("modelId");
+  const url = request.nextUrl.searchParams.get("url");
 
   if (!modelId) {
     return NextResponse.json(
@@ -22,55 +21,42 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log("[SCREENSHOT] Fetching for model:", modelId);
-    const supabase = createSupabaseAdminClient();
-
-    // Get active session with ws_endpoint
-    const { data: session, error: sessionError } = await supabase
-      .from("crm_model_sessions")
-      .select("auth_cookies")
-      .eq("model_id", modelId)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (sessionError || !session) {
-      console.error("[SCREENSHOT] ❌ Session not found");
+    console.log("[SCREENSHOT] Fetching from VPS for model:", modelId);
+    
+    const vpsUrl = process.env.VPS_API_URL;
+    if (!vpsUrl) {
+      console.error("[SCREENSHOT] ❌ VPS_API_URL not configured");
       return NextResponse.json(
-        { error: "No active session" },
-        { status: 404 }
+        { error: "VPS not configured" },
+        { status: 500 }
       );
     }
 
-    const wsEndpoint = session.auth_cookies?.ws_endpoint;
-
-    if (!wsEndpoint) {
-      console.error("[SCREENSHOT] ❌ WebSocket endpoint not found");
-      return NextResponse.json(
-        { error: "Session configuration missing - no ws_endpoint" },
-        { status: 400 }
-      );
+    // Build request URL to VPS
+    let vpsEndpoint = `${vpsUrl}/screenshot?modelId=${encodeURIComponent(modelId)}`;
+    if (url) {
+      vpsEndpoint += `&url=${encodeURIComponent(url)}`;
     }
 
-    console.log("[SCREENSHOT] Connecting to Browserless via WebSocket...");
+    console.log("[SCREENSHOT] Calling VPS:", vpsEndpoint);
 
-    // Send screenshot command via Chrome DevTools Protocol
-    const result = await sendCDPCommand(wsEndpoint, {
-      method: "Page.captureScreenshot",
-      params: {},
+    // Forward to VPS server
+    const response = await fetch(vpsEndpoint, {
+      method: "GET",
     });
 
-    // Extract base64 data from result
-    const screenshotBase64 = (result as any)?.data;
-    if (!screenshotBase64) {
-      throw new Error("No screenshot data returned from CDP");
+    if (!response.ok) {
+      throw new Error(`VPS returned ${response.status}`);
     }
 
-    console.log("[SCREENSHOT] ✅ Screenshot captured, length:", screenshotBase64.length);
+    const data = await response.json();
+
+    console.log("[SCREENSHOT] ✅ Screenshot received from VPS");
 
     return NextResponse.json(
       {
         status: "success",
-        screenshot: `data:image/png;base64,${screenshotBase64}`,
+        screenshot: data.screenshot,
         modelId: modelId,
         timestamp: new Date().toISOString(),
       },
