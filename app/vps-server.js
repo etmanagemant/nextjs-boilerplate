@@ -4,10 +4,24 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
-// GLOBAL REJECTION SHIELD - prevent auto-reboot on unhandled promise rejections
-process.on('unhandledRejection', (reason, p) => {
-  console.error('[REJECTION SHIELD] Unhandled Rejection at:', p);
-  console.error('[REJECTION SHIELD] Reason:', reason);
+// ============================================================================
+// PROCESS HARDENING - Global Exception Shield
+// ============================================================================
+
+// Intercept unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🛡️ SHIELD: Unhandled Rejection intercepted');
+  console.error('🛡️ Promise:', promise);
+  console.error('🛡️ Reason:', reason);
+  console.error('🛡️ Stack:', reason instanceof Error ? reason.stack : 'No stack trace');
+});
+
+// Intercept uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('🛡️ SHIELD: Uncaught Exception intercepted');
+  console.error('🛡️ Error:', error.message);
+  console.error('🛡️ Stack:', error.stack);
+  // Continue running instead of crashing
 });
 
 const app = express();
@@ -75,8 +89,19 @@ app.post('/init-session', async (req, res) => {
     }
 
     const sessionId = uuidv4();
-    const browser = await initBrowser(sessionId);
-    const page = await browser.newPage();
+    
+    let browser, page;
+    try {
+      browser = await initBrowser(sessionId);
+      page = await browser.newPage();
+    } catch (browserErr) {
+      console.error('[INIT-SESSION] Browser init error:', browserErr.message);
+      return res.status(200).json({
+        success: false,
+        error: `Browser initialization failed: ${browserErr.message}`,
+        sessionId: null,
+      });
+    }
 
     sessions[sessionId] = {
       browser,
@@ -87,14 +112,15 @@ app.post('/init-session', async (req, res) => {
       cookieCount: 0,
     };
 
-    // Navigate to OnlyFans login page
+    // Navigate to OnlyFans login page with error handling
     try {
       await page.goto('https://www.onlyfans.com/login', {
         waitUntil: 'domcontentloaded',
         timeout: 15000,
       });
     } catch (navErr) {
-      console.log(`[INIT] Navigation attempt: ${navErr.message}`);
+      console.warn(`[INIT] Navigation warning: ${navErr.message}`);
+      // Continue anyway - page might still be usable
     }
 
     res.json({
@@ -104,19 +130,14 @@ app.post('/init-session', async (req, res) => {
       message: 'Browser session initialized, admin can now login at OnlyFans',
     });
   } catch (error) {
-    // Try to close browser on error
-    try {
-      if (sessions[sessionId]?.browser) {
-        await sessions[sessionId].browser.close();
-      }
-    } catch (e) {
-      console.error(`[INIT] Error closing browser on fail: ${e.message}`);
-    }
-    delete sessions[sessionId];
-    console.error('[ERROR] /init-session:', error.message);
-    res.status(500).json({
+    console.error('[ERROR] /init-session caught exception:', error.message);
+    console.error('[ERROR] Stack:', error.stack);
+    // Return graceful error response instead of crashing
+    res.status(200).json({
+      success: false,
       error: error.message,
-      timestamp: new Date().toISOString(),
+      sessionId: null,
+      stack: error.stack,
     });
   }
 });
@@ -134,15 +155,39 @@ app.get('/verify-session', async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    const pageUrl = session.page.url();
-    const pageTitle = await session.page.title();
-    const cookies = await session.page.cookies();
+    let pageUrl, pageTitle, cookies, sessCookie, isLoggedIn;
+
+    try {
+      pageUrl = session.page.url();
+    } catch (e) {
+      console.warn('[VERIFY] Could not get page URL:', e.message);
+      pageUrl = 'unknown';
+    }
+
+    try {
+      pageTitle = await session.page.title();
+    } catch (e) {
+      console.warn('[VERIFY] Could not get page title:', e.message);
+      pageTitle = 'unknown';
+    }
+
+    try {
+      cookies = await session.page.cookies();
+    } catch (e) {
+      console.warn('[VERIFY] Could not get cookies:', e.message);
+      cookies = [];
+    }
 
     // Strict validation: Login is only successful if:
     // 1. Page URL is exactly 'https://www.onlyfans.com' (not /login)
     // 2. Cookie named 'sess' exists and is populated
-    const sessCookie = cookies.find((c) => c.name === 'sess');
-    const isLoggedIn = pageUrl === 'https://www.onlyfans.com' && !!sessCookie?.value;
+    try {
+      sessCookie = cookies.find((c) => c.name === 'sess');
+      isLoggedIn = pageUrl === 'https://www.onlyfans.com' && !!sessCookie?.value;
+    } catch (e) {
+      console.warn('[VERIFY] Cookie validation error:', e.message);
+      isLoggedIn = false;
+    }
 
     session.isLoggedIn = isLoggedIn;
     session.cookieCount = isLoggedIn ? cookies.length : 0;
@@ -155,10 +200,13 @@ app.get('/verify-session', async (req, res) => {
       message: isLoggedIn ? '✅ Login verified (sess cookie found)!' : '⏳ Waiting for login...',
     });
   } catch (error) {
-    console.error('[ERROR] /verify-session:', error.message);
-    res.status(500).json({
+    console.error('[ERROR] /verify-session caught exception:', error.message);
+    console.error('[ERROR] Stack:', error.stack);
+    // Return graceful error response
+    res.status(200).json({
+      isLoggedIn: false,
       error: error.message,
-      timestamp: new Date().toISOString(),
+      message: 'Verification error - retrying...',
     });
   }
 });
@@ -176,26 +224,47 @@ app.post('/save-session', async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    const cookies = await session.page.cookies();
+    let cookies;
+    try {
+      cookies = await session.page.cookies();
+    } catch (cookieErr) {
+      console.warn('[SAVE] Error getting cookies:', cookieErr.message);
+      cookies = [];
+    }
+
     const cookiePath = path.join(COOKIES_DIR, `${session.modelId}.json`);
 
-    fs.writeFileSync(
-      cookiePath,
-      JSON.stringify(
-        {
-          modelId: session.modelId,
-          sessionId,
-          cookies,
-          createdAt: session.createdAt,
-          savedAt: new Date(),
-        },
-        null,
-        2
-      )
-    );
+    try {
+      fs.writeFileSync(
+        cookiePath,
+        JSON.stringify(
+          {
+            modelId: session.modelId,
+            sessionId,
+            cookies,
+            createdAt: session.createdAt,
+            savedAt: new Date(),
+          },
+          null,
+          2
+        )
+      );
+    } catch (writeErr) {
+      console.error('[SAVE] Error writing cookies file:', writeErr.message);
+      return res.status(200).json({
+        success: false,
+        error: `Failed to save cookies: ${writeErr.message}`,
+      });
+    }
 
     // Close browser
-    await session.browser.close();
+    try {
+      await session.browser.close();
+    } catch (closeErr) {
+      console.warn('[SAVE] Error closing browser:', closeErr.message);
+      // Continue anyway
+    }
+
     delete sessions[sessionId];
 
     res.json({
@@ -205,10 +274,13 @@ app.post('/save-session', async (req, res) => {
       message: 'Session saved and browser closed',
     });
   } catch (error) {
-    console.error('[ERROR] /save-session:', error.message);
-    res.status(500).json({
+    console.error('[ERROR] /save-session caught exception:', error.message);
+    console.error('[ERROR] Stack:', error.stack);
+    // Return graceful error response
+    res.status(200).json({
+      success: false,
       error: error.message,
-      timestamp: new Date().toISOString(),
+      stack: error.stack,
     });
   }
 });
@@ -226,13 +298,38 @@ app.get('/screenshot', async (req, res) => {
       return res.status(404).json({ error: 'No saved session for model' });
     }
 
-    const savedData = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'));
-    const screenshotSessionId = uuidv4();
-    const browser = await initBrowser(screenshotSessionId);
-    const page = await browser.newPage();
+    let savedData;
+    try {
+      savedData = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'));
+    } catch (parseErr) {
+      console.error('[SCREENSHOT] Cookie file parse error:', parseErr.message);
+      return res.status(200).json({
+        success: false,
+        error: `Failed to parse cookie file: ${parseErr.message}`,
+      });
+    }
 
-    // Load cookies
-    await page.setCookie(...savedData.cookies);
+    const screenshotSessionId = uuidv4();
+    let browser, page;
+
+    try {
+      browser = await initBrowser(screenshotSessionId);
+      page = await browser.newPage();
+    } catch (browserErr) {
+      console.error('[SCREENSHOT] Browser init error:', browserErr.message);
+      return res.status(200).json({
+        success: false,
+        error: `Browser init failed: ${browserErr.message}`,
+      });
+    }
+
+    try {
+      // Load cookies
+      await page.setCookie(...savedData.cookies);
+    } catch (setCookieErr) {
+      console.warn('[SCREENSHOT] Cookie set error:', setCookieErr.message);
+      // Continue anyway
+    }
 
     // Navigate to OnlyFans
     try {
@@ -241,32 +338,52 @@ app.get('/screenshot', async (req, res) => {
         timeout: 15000,
       });
     } catch (navErr) {
-      console.log(`[SCREENSHOT] Navigation warning: ${navErr.message}`);
+      console.warn(`[SCREENSHOT] Navigation warning: ${navErr.message}`);
     }
 
     // Take screenshot with error handling
-    let screenshot;
+    let screenshot = null;
     try {
       screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 });
     } catch (screenshotErr) {
-      console.warn(`[SCREENSHOT] Fallback to quality 60: ${screenshotErr.message}`);
-      screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 60 });
+      console.warn(`[SCREENSHOT] Quality 80 failed: ${screenshotErr.message}`);
+      try {
+        screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 60 });
+      } catch (fallbackErr) {
+        console.warn(`[SCREENSHOT] Quality 60 failed: ${fallbackErr.message}`);
+        screenshot = null;
+      }
     }
 
-    await browser.close();
+    let pageUrl = 'unknown', pageTitle = 'Unknown';
+    try {
+      pageUrl = page.url();
+      pageTitle = await page.title();
+    } catch (e) {
+      console.warn('[SCREENSHOT] Could not get page info:', e.message);
+    }
+
+    try {
+      await browser.close();
+    } catch (closeErr) {
+      console.warn('[SCREENSHOT] Browser close error:', closeErr.message);
+    }
 
     res.json({
       status: 'success',
       modelId,
       screenshot,
-      pageUrl: page.url(),
-      pageTitle: await page.title(),
+      pageUrl,
+      pageTitle,
+      hasScreenshot: !!screenshot,
     });
   } catch (error) {
-    console.error('[ERROR] /screenshot:', error.message);
-    res.status(500).json({
+    console.error('[ERROR] /screenshot caught exception:', error.message);
+    console.error('[ERROR] Stack:', error.stack);
+    res.status(200).json({
+      status: 'error',
       error: error.message,
-      timestamp: new Date().toISOString(),
+      screenshot: null,
     });
   }
 });
@@ -284,68 +401,123 @@ app.post('/interact', async (req, res) => {
       return res.status(404).json({ error: 'No saved session for model' });
     }
 
-    const savedData = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'));
+    let savedData;
+    try {
+      savedData = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'));
+    } catch (parseErr) {
+      console.error('[INTERACT] Cookie file parse error:', parseErr.message);
+      return res.status(200).json({
+        success: false,
+        error: `Failed to parse cookie file: ${parseErr.message}`,
+      });
+    }
+
     const interactSessionId = uuidv4();
-    const browser = await initBrowser(interactSessionId);
-    const page = await browser.newPage();
+    let browser, page;
 
-    // Load cookies
-    await page.setCookie(...savedData.cookies);
-    await page.goto('https://www.onlyfans.com', {
-      waitUntil: 'domcontentloaded',
-      timeout: 15000,
-    }).catch(err => console.log(`[INTERACT] Nav warning: ${err.message}`));
+    try {
+      browser = await initBrowser(interactSessionId);
+      page = await browser.newPage();
+    } catch (browserErr) {
+      console.error('[INTERACT] Browser init error:', browserErr.message);
+      return res.status(200).json({
+        success: false,
+        error: `Browser init failed: ${browserErr.message}`,
+      });
+    }
 
-    let result;
-    switch (action) {
-      case 'click':
-        await page.click(selector);
-        result = 'Clicked';
-        break;
-      case 'type':
-        await page.type(selector, value, { delay: 50 });
-        result = 'Typed';
-        break;
-      case 'navigate':
-        await page.goto(value, { waitUntil: 'domcontentloaded', timeout: 15000 });
-        result = 'Navigated';
-        break;
-      case 'scroll':
-        await page.evaluate((v) => window.scrollBy(0, v), value || 500);
-        result = 'Scrolled';
-        break;
-      case 'reload':
-        await page.reload({ waitUntil: 'domcontentloaded' });
-        result = 'Reloaded';
-        break;
-      default:
-        result = 'Unknown action';
+    try {
+      // Load cookies
+      await page.setCookie(...savedData.cookies);
+    } catch (setCookieErr) {
+      console.warn('[INTERACT] Cookie set error:', setCookieErr.message);
+    }
+
+    try {
+      await page.goto('https://www.onlyfans.com', {
+        waitUntil: 'domcontentloaded',
+        timeout: 15000,
+      });
+    } catch (navErr) {
+      console.warn(`[INTERACT] Navigation warning: ${navErr.message}`);
+    }
+
+    let result = 'Unknown';
+    try {
+      switch (action) {
+        case 'click':
+          await page.click(selector);
+          result = 'Clicked';
+          break;
+        case 'type':
+          await page.type(selector, value, { delay: 50 });
+          result = 'Typed';
+          break;
+        case 'navigate':
+          await page.goto(value, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          result = 'Navigated';
+          break;
+        case 'scroll':
+          await page.evaluate((v) => window.scrollBy(0, v), value || 500);
+          result = 'Scrolled';
+          break;
+        case 'reload':
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          result = 'Reloaded';
+          break;
+        default:
+          result = 'Unknown action';
+      }
+    } catch (actionErr) {
+      console.warn(`[INTERACT] Action error (${action}): ${actionErr.message}`);
+      result = `Action error: ${actionErr.message}`;
     }
 
     // Take screenshot with error handling
-    let screenshot;
+    let screenshot = null;
     try {
       screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 });
     } catch (screenshotErr) {
-      console.warn(`[INTERACT] Fallback to quality 60: ${screenshotErr.message}`);
-      screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 60 });
+      console.warn(`[INTERACT] Quality 80 failed: ${screenshotErr.message}`);
+      try {
+        screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 60 });
+      } catch (fallbackErr) {
+        console.warn(`[INTERACT] Quality 60 failed: ${fallbackErr.message}`);
+        screenshot = null;
+      }
     }
 
-    await browser.close();
+    let pageUrl = 'unknown', pageTitle = 'Unknown';
+    try {
+      pageUrl = page.url();
+      pageTitle = await page.title();
+    } catch (e) {
+      console.warn('[INTERACT] Could not get page info:', e.message);
+    }
+
+    try {
+      await browser.close();
+    } catch (closeErr) {
+      console.warn('[INTERACT] Browser close error:', closeErr.message);
+    }
 
     res.json({
       status: 'success',
       action,
       result,
       screenshot,
-      pageUrl: page.url(),
-      pageTitle: await page.title(),
+      pageUrl,
+      pageTitle,
+      hasScreenshot: !!screenshot,
     });
   } catch (error) {
-    console.error('[ERROR] /interact:', error.message);
-    res.status(500).json({
+    console.error('[ERROR] /interact caught exception:', error.message);
+    console.error('[ERROR] Stack:', error.stack);
+    res.status(200).json({
+      status: 'error',
+      action: req.body.action,
       error: error.message,
-      timestamp: new Date().toISOString(),
+      screenshot: null,
     });
   }
 });
@@ -454,34 +626,39 @@ app.get('/stream-frame', async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    // Attempt screenshot with error handling
-    let screenshot;
+    // Attempt screenshot with comprehensive error handling
+    let screenshot = null;
     try {
-      screenshot = await session.page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 });
+      screenshot = await Promise.race([
+        session.page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Screenshot timeout')), 8000))
+      ]);
     } catch (screenshotErr) {
-      console.warn(`[STREAM-FRAME] Screenshot error (fallback to quality 60): ${screenshotErr.message}`);
-      // Fallback: retry with lower quality and timeout
+      console.warn(`[STREAM-FRAME] Quality 80 failed: ${screenshotErr.message}`);
       try {
         screenshot = await Promise.race([
           session.page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 60 }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Screenshot timeout')), 5000))
         ]);
       } catch (fallbackErr) {
-        console.error(`[STREAM-FRAME] Fallback screenshot failed: ${fallbackErr.message}`);
-        // Return placeholder response instead of error
-        return res.json({
-          screenshot: null,
-          pageTitle: 'Screenshot unavailable',
-          pageUrl: session.page.url(),
-          isLoggedIn: session.isLoggedIn,
-          cookieCount: session.cookieCount,
-          error: 'Page busy - retrying...',
-        });
+        console.warn(`[STREAM-FRAME] Quality 60 failed: ${fallbackErr.message}`);
+        screenshot = null;
       }
     }
 
-    const pageTitle = await session.page.title().catch(() => 'Unknown');
-    const pageUrl = session.page.url();
+    let pageTitle = 'Unknown', pageUrl = 'unknown';
+    
+    try {
+      pageTitle = await session.page.title();
+    } catch (e) {
+      console.warn('[STREAM-FRAME] Title error:', e.message);
+    }
+
+    try {
+      pageUrl = session.page.url();
+    } catch (e) {
+      console.warn('[STREAM-FRAME] URL error:', e.message);
+    }
 
     res.json({
       screenshot,
@@ -489,10 +666,17 @@ app.get('/stream-frame', async (req, res) => {
       pageUrl,
       isLoggedIn: session.isLoggedIn,
       cookieCount: session.cookieCount,
+      hasScreenshot: !!screenshot,
     });
   } catch (error) {
-    console.error('[ERROR] /stream-frame:', error.message);
-    res.status(500).json({ error: error.message });
+    console.error('[ERROR] /stream-frame caught exception:', error.message);
+    console.error('[ERROR] Stack:', error.stack);
+    // Return graceful response instead of 500
+    res.status(200).json({
+      screenshot: null,
+      error: error.message,
+      hasScreenshot: false,
+    });
   }
 });
 
