@@ -21,7 +21,7 @@ export default function BrowserLoginStreamComponent({
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [cookieCount, setCookieCount] = useState(0);
-  const browserWindowRef = useRef<Window | null>(null);
+  const [vpsStreamUrl, setVpsStreamUrl] = useState<string>("");
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Step 1: Open browser window for manual login
@@ -48,25 +48,17 @@ export default function BrowserLoginStreamComponent({
       setSessionId(sid);
       console.log("✅ Session created:", sid);
 
+      // Set VPS stream URL directly in modal (bypass popup blocker)
+      setVpsStreamUrl(`http://192.248.184.79:3000/stream?sessionId=${sid}`);
+
       setStatus("waiting");
-      setMessage("🌐 Opening browser... Please login to OnlyFans with the model credentials.");
-
-      // Open browser window to OnlyFans login
-      browserWindowRef.current = window.open(
-        "https://onlyfans.com/login",
-        "ModelBrowserLogin",
-        "width=1280,height=720,resizable=yes"
-      );
-
-      if (!browserWindowRef.current) {
-        throw new Error("Could not open browser window. Check popup blocker.");
-      }
+      setMessage("🌐 Browser stream loading... Please login to OnlyFans with the model credentials.");
 
       // Start polling to check if user logged in
       startPolling(sid);
     } catch (err: any) {
       setStatus("error");
-      setError(err.message || "Failed to open browser");
+      setError(err.message || "Failed to initialize browser session");
       console.error("❌ Error:", err);
     }
   };
@@ -155,10 +147,6 @@ export default function BrowserLoginStreamComponent({
       setMessage("🎉 Model connected successfully!");
 
       // Close browser window
-      if (browserWindowRef.current && !browserWindowRef.current.closed) {
-        browserWindowRef.current.close();
-      }
-
       // Close modal
       setTimeout(() => {
         onSuccess();
@@ -224,14 +212,28 @@ export default function BrowserLoginStreamComponent({
           )}
 
           {status === "waiting" && (
-            <div className="text-center">
-              <div className="mb-4 flex justify-center">
-                <div className="animate-pulse">
-                  <div className="w-8 h-8 bg-[#D4AF37] rounded-full"></div>
-                </div>
+            <div>
+              <div className="mb-4 bg-black/60 rounded-lg border border-[#D4AF37]/30 overflow-hidden aspect-video flex items-center justify-center">
+                {vpsStreamUrl ? (
+                  <iframe
+                    src={vpsStreamUrl}
+                    className="w-full h-full border-0"
+                    title="OnlyFans Browser Stream"
+                    sandbox="allow-same-origin allow-scripts"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="mb-4 flex justify-center">
+                      <div className="animate-spin">
+                        <div className="w-8 h-8 border-4 border-[#D4AF37] border-t-transparent rounded-full"></div>
+                      </div>
+                    </div>
+                    <p className="text-gray-400 text-sm">Initializing stream...</p>
+                  </div>
+                )}
               </div>
-              <p className="text-gray-300 mb-2">{message}</p>
-              <p className="text-xs text-gray-500">Waiting for login confirmation...</p>
+              <p className="text-gray-300 mb-2 text-center text-sm">{message}</p>
+              <p className="text-xs text-gray-500 text-center">Waiting for login confirmation...</p>
             </div>
           )}
 
