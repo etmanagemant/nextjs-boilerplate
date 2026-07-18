@@ -7,7 +7,7 @@ import WorkspaceSidebar from "./WorkspaceSidebar";
 import { ModelCardSkeleton, ScriptLibrarySkeleton } from "./CRMSkeletonLoaders";
 import ConnectCreatorPanel from "./ConnectCreatorPanel";
 import ScriptLibraryManager from "./ScriptLibraryManager";
-import ManualSessionInjectorComponent from "./ManualSessionInjectorComponent";
+import BrowserLoginStreamComponent from "./BrowserLoginStreamComponent";
 
 interface Model {
   id: string;
@@ -64,8 +64,8 @@ export default function CRMConnectClient({
   const [isLoadingScripts, setIsLoadingScripts] = useState(true);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [isSessionInjectorOpen, setIsSessionInjectorOpen] = useState(false);
-  const [selectedModelForSessionInjector, setSelectedModelForSessionInjector] =
+  const [isBrowserLoginOpen, setIsBrowserLoginOpen] = useState(false);
+  const [selectedModelForBrowserLogin, setSelectedModelForBrowserLogin] =
     useState<Model | null>(null);
 
   const supabase = createClient();
@@ -154,13 +154,13 @@ export default function CRMConnectClient({
   };
 
   const handleOpenBrowserLogin = (model: Model) => {
-    setSelectedModelForSessionInjector(model);
-    setIsSessionInjectorOpen(true);
+    setSelectedModelForBrowserLogin(model);
+    setIsBrowserLoginOpen(true);
   };
 
   const handleCloseBrowserLogin = () => {
-    setIsSessionInjectorOpen(false);
-    setSelectedModelForSessionInjector(null);
+    setIsBrowserLoginOpen(false);
+    setSelectedModelForBrowserLogin(null);
   };
 
   const handleBrowserConnectionSuccess = () => {
@@ -274,7 +274,7 @@ export default function CRMConnectClient({
                           onClick={() => handleOpenBrowserLogin(model)}
                           className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black hover:shadow-lg hover:shadow-[#D4AF37]/40"
                         >
-                          <span>🔑</span> Session-Key
+                          <span>🌐</span> Browser-Login
                         </button>
                       )}
                       {isConnected ? (
@@ -392,10 +392,10 @@ export default function CRMConnectClient({
       )}
 
       {/* Browser Login Stream Component */}
-      {isSessionInjectorOpen && selectedModelForSessionInjector && (
-        <ManualSessionInjectorComponent
-          modelId={selectedModelForSessionInjector.id}
-          modelName={selectedModelForSessionInjector.name}
+      {isBrowserLoginOpen && selectedModelForBrowserLogin && (
+        <BrowserLoginStreamComponent
+          modelId={selectedModelForBrowserLogin.id}
+          modelName={selectedModelForBrowserLogin.name}
           onSuccess={handleBrowserConnectionSuccess}
           onClose={handleCloseBrowserLogin}
         />
