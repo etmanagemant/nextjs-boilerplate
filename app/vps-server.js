@@ -567,7 +567,7 @@ app.get('/stream', async (req, res) => {
     
     async function captureFrame() {
       try {
-        const response = await fetch(\`http://192.248.184.79:3000/stream-frame?sessionId=\${sessionId}\`, {
+        const response = await fetch(`http://80.240.30.188:3000/stream-frame?sessionId=${sessionId}`, {
           method: 'GET',
           headers: { 'Accept': 'application/json' }
         });

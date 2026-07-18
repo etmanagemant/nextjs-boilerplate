@@ -49,7 +49,7 @@ export default function BrowserLoginStreamComponent({
       console.log("✅ Session created:", sid);
 
       // Set VPS stream URL directly in modal (bypass popup blocker)
-      setVpsStreamUrl(`http://192.248.184.79:3000/stream?sessionId=${sid}`);
+      setVpsStreamUrl(`http://80.240.30.188:3000/stream?sessionId=${sid}`);
 
       setStatus("waiting");
       setMessage("🌐 Browser stream loading... Please login to OnlyFans with the model credentials.");
