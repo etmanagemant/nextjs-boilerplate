@@ -77,13 +77,13 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Check if session exists and has cookies
+    // Check if session exists and has valid VPS auth_cookies
     const isAuthenticated =
       session &&
       session.is_active &&
       session.auth_cookies &&
-      session.auth_cookies.cookies &&
-      session.auth_cookies.cookies.length > 0;
+      typeof session.auth_cookies === 'object' &&
+      Object.keys(session.auth_cookies).length > 0;
 
     return NextResponse.json(
       {
@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
         modelId,
         sessionId: session?.id || null,
         cookieCount: isAuthenticated
-          ? session?.auth_cookies?.cookies?.length || 0
+          ? session?.auth_cookies?.cookie_count || 0
           : 0,
         lastVerified: session?.last_verified_at || null,
         timestamp: new Date().toISOString(),

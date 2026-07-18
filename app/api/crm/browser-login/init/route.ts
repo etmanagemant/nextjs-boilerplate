@@ -92,11 +92,10 @@ export async function POST(req: NextRequest) {
 
     console.log(`[BROWSER-LOGIN INIT] ✅ Session created: ${vpsData.sessionId}`);
 
-    // Return WebSocket endpoint to frontend
+    // Return session ID to frontend (VPS format)
     return NextResponse.json({
       status: "success",
       sessionId: vpsData.sessionId,
-      wsEndpoint: vpsData.wsEndpoint,
       message: "Browser window opened. Please login with model credentials.",
     }, { status: 200 });
   } catch (error: any) {

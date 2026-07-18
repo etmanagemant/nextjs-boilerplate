@@ -58,12 +58,12 @@ export async function POST(request: NextRequest) {
 
     console.log("[MODEL-OPEN] ✅ Returning session data");
 
-    // Return cookies to frontend so it can set them in Iframe
+    // Return VPS session data to frontend
     return NextResponse.json(
       {
         status: "success",
         modelId: modelId,
-        cookies: authCookies.cookies || authCookies, // Handle both formats
+        vpsSession: authCookies,  // VPS format: {vps_server, session_id, created_at, verification_status, cookie_count}
         onlyFansUrl: "https://onlyfans.com/inbox",
         sessionValid: true,
       },

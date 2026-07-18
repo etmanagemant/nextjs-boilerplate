@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
           is_active: session.is_active,
           created_at: session.created_at,
           last_used: session.last_used,
-          has_browserless_session: !!session.auth_cookies?.browserless_session_id,
+          has_vps_session: !!session.auth_cookies?.session_id,
           has_auth_cookies: !!session.auth_cookies,
         },
       });

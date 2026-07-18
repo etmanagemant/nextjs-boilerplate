@@ -43,7 +43,7 @@ export default function BrowserLoginStreamComponent({
       }
 
       const data = await response.json();
-      const { sessionId: sid, wsEndpoint } = data;
+      const { sessionId: sid } = data;
 
       setSessionId(sid);
       console.log("✅ Session created:", sid);

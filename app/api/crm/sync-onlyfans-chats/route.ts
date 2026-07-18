@@ -73,26 +73,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ USE PERSISTENT SESSION: Browserless session is still open with cookies intact
-    const browserlessSessionId = session.auth_cookies.browserless_session_id;
-    const wsEndpoint = session.auth_cookies.ws_endpoint;
+    // 🔴 CRITICAL: Extract VPS session identifiers (NEW FORMAT)
+    const vpsServer = session.auth_cookies?.vps_server;
+    const vpsSessionId = session.auth_cookies?.session_id;
     
-    console.log("[SYNC] Browserless config:", {
-      has_sessionId: !!browserlessSessionId,
-      has_wsEndpoint: !!wsEndpoint,
+    console.log("[SYNC] VPS config:", {
+      has_vpsServer: !!vpsServer,
+      has_sessionId: !!vpsSessionId,
     });
 
-    if (!browserlessSessionId || !wsEndpoint) {
-      console.error("[SYNC] ❌ Missing browserless config");
+    if (!vpsServer || !vpsSessionId) {
+      console.error("[SYNC] ❌ Missing VPS config");
       return NextResponse.json(
-        { error: "Browserless session not properly initialized" },
+        { error: "VPS session not properly initialized" },
         { status: 400 }
       );
     }
 
-    console.log("[SYNC] 🔗 Using persistent Browserless session:", browserlessSessionId);
+    console.log("[SYNC] 🔗 Using VPS session:", vpsSessionId);
 
-    // Use Browserless to fetch OnlyFans data with the active session
+    // Use VPS to fetch OnlyFans data with the active session
     const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
     if (!browserlessApiKey) {
       console.error("[SYNC] ❌ BROWSERLESS_API_KEY not configured");
