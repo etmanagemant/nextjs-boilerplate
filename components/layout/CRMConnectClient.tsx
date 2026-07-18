@@ -396,7 +396,7 @@ export default function CRMConnectClient({
         <BrowserLoginStreamComponent
           modelId={selectedModelForBrowserLogin.id}
           modelName={selectedModelForBrowserLogin.name}
-          onConnectionSuccess={handleBrowserConnectionSuccess}
+          onSuccess={handleBrowserConnectionSuccess}
           onClose={handleCloseBrowserLogin}
         />
       )}

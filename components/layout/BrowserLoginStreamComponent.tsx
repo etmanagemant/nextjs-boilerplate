@@ -1,389 +1,289 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { createClient } from "@/lib/supabaseClient";
 
-interface BrowserLoginStreamProps {
+interface BrowserLoginStreamComponentProps {
   modelId: string;
   modelName: string;
-  onConnectionSuccess: () => void;
   onClose: () => void;
+  onSuccess: () => void;
 }
 
 export default function BrowserLoginStreamComponent({
   modelId,
   modelName,
-  onConnectionSuccess,
   onClose,
-}: BrowserLoginStreamProps) {
-  const [isBrowserRunning, setIsBrowserRunning] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [authStatus, setAuthStatus] = useState<
-    "idle" | "loading" | "waiting" | "authenticated" | "error"
-  >("idle");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [statusMessage, setStatusMessage] = useState("");
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
-    null
-  );
-  const [verificationAttempts, setVerificationAttempts] = useState(0);
+  onSuccess,
+}: BrowserLoginStreamComponentProps) {
+  const [status, setStatus] = useState<"idle" | "opening" | "waiting" | "verified" | "connecting" | "error">("idle");
+  const [sessionId, setSessionId] = useState<string>("");
+  const [message, setMessage] = useState<string>("");
+  const [error, setError] = useState<string>("");
+  const [cookieCount, setCookieCount] = useState(0);
+  const browserWindowRef = useRef<Window | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 🎯 CREDENTIALS STATE
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-
-  // 🎯 USE REF FOR SESSIONID - Synchronous, no state batching issues
-  const sessionIdRef = useRef<string>("");
-
-  // 🚀 START HEADLESS BROWSER SESSION WITH CREDENTIALS
-  const handleStartBrowserLogin = async () => {
-    // Validate credentials
-    if (!username.trim() || !password.trim()) {
-      setErrorMessage("Bitte geben Sie Username und Passwort ein");
-      return;
-    }
-
-    setIsConnecting(true);
-    setAuthStatus("loading");
-    setErrorMessage("");
-    setStatusMessage("🚀 Verbindung zu VPS wird hergestellt...");
-    setVerificationAttempts(0);
+  // Step 1: Open browser window for manual login
+  const handleOpenBrowser = async () => {
+    setStatus("opening");
+    setMessage("🔄 Initializing browser session...");
+    setError("");
 
     try {
-      console.log("📤 Sending request to /api/crm/browser-login");
-      
-      const response = await fetch("/api/crm/browser-login", {
+      const response = await fetch("/api/crm/browser-login/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          modelId,
-          username,
-          password,
-        }),
+        body: JSON.stringify({ modelId }),
       });
 
-      console.log(`📥 Response status: ${response.status}`);
-      console.log(`Content-Type: ${response.headers.get("content-type")}`);
-
-      // Check if response is JSON
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const responseText = await response.text();
-        console.error("❌ Response is not JSON:", responseText.substring(0, 500));
-        throw new Error(
-          `Server error (${response.status}). Check browser DevTools Network tab for detailed error.`
-        );
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to init session");
       }
 
       const data = await response.json();
-      console.log("✅ Response JSON parsed:", data);
+      const { sessionId: sid, wsEndpoint } = data;
+
+      setSessionId(sid);
+      console.log("✅ Session created:", sid);
+
+      setStatus("waiting");
+      setMessage("🌐 Opening browser... Please login to OnlyFans with the model credentials.");
+
+      // Open browser window to OnlyFans login
+      browserWindowRef.current = window.open(
+        "https://onlyfans.com/login",
+        "ModelBrowserLogin",
+        "width=1280,height=720,resizable=yes"
+      );
+
+      if (!browserWindowRef.current) {
+        throw new Error("Could not open browser window. Check popup blocker.");
+      }
+
+      // Start polling to check if user logged in
+      startPolling(sid);
+    } catch (err: any) {
+      setStatus("error");
+      setError(err.message || "Failed to open browser");
+      console.error("❌ Error:", err);
+    }
+  };
+
+  // Step 2: Poll to check if user logged in
+  const startPolling = (sid: string) => {
+    let attempts = 0;
+    const maxAttempts = 120; // 2 minutes with 1 second interval
+
+    pollingIntervalRef.current = setInterval(async () => {
+      attempts++;
+
+      try {
+        const response = await fetch(
+          `/api/crm/browser-login/verify?sessionId=${sid}`,
+          { method: "GET" }
+        );
+
+        if (!response.ok) {
+          console.log(`[Polling] Check attempt ${attempts}/${maxAttempts}...`);
+          return;
+        }
+
+        const data = await response.json();
+
+        if (data.isLoggedIn) {
+          console.log("✅ Login detected!");
+          setCookieCount(data.cookieCount || 0);
+          setStatus("verified");
+          setMessage(`✅ Login detected! ${data.cookieCount} cookies found.`);
+
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+          }
+          return;
+        }
+
+        if (attempts % 10 === 0) {
+          console.log(`[Polling] ${attempts} seconds - still waiting...`);
+        }
+      } catch (err) {
+        console.error("[Polling] Error:", err);
+      }
+
+      if (attempts >= maxAttempts) {
+        setStatus("error");
+        setMessage("Timeout: Login verification took too long");
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+        }
+      }
+    }, 1000);
+  };
+
+  // Step 3: Confirm and save session
+  const handleConfirmConnection = async () => {
+    setStatus("connecting");
+    setMessage("💾 Saving session to database...");
+
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("Not authenticated");
+      }
+
+      const response = await fetch("/api/crm/browser-login/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ modelId, sessionId }),
+      });
 
       if (!response.ok) {
-        console.error("❌ API Error Response:", data);
-        throw new Error(
-          data.error || `Server error: ${data.errorType || "Unknown"}`
-        );
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to confirm session");
       }
 
-      // Store session ID for verification - USE REF FOR SYNCHRONOUS ACCESS!
-      sessionIdRef.current = data.sessionId;
-      console.log("✅ Session ID stored in ref:", sessionIdRef.current);
-      setIsBrowserRunning(true);
-      setAuthStatus("authenticated");
-      setStatusMessage("✅ OnlyFans-Login erfolgreich! Verbindung gespeichert.");
+      const data = await response.json();
+      console.log("✅ Session confirmed:", data);
 
-    } catch (err: any) {
-      console.error("❌ Browser login error:", err);
-      setAuthStatus("error");
-      setErrorMessage(
-        err.message || "Failed to start browser session. Check console for details."
-      );
-      setIsBrowserRunning(false);
-    } finally {
-      setIsConnecting(false);
-    }
-  };
+      setStatus("idle");
+      setMessage("🎉 Model connected successfully!");
 
-  // 👑 FINALIZE CONNECTION - Ready to go!
-  const handleFinalizeConnection = async () => {
-    try {
-      setStatusMessage("Finalisiere Verbindung...");
-
-      // Clear polling interval if any
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        setPollingInterval(null);
+      // Close browser window
+      if (browserWindowRef.current && !browserWindowRef.current.closed) {
+        browserWindowRef.current.close();
       }
 
-      // Call success callback to refresh sessions
-      onConnectionSuccess();
-
-      // Show success message
-      setStatusMessage("🎉 Creator erfolgreich verbunden!");
-
-      // Close panel after 2 seconds
+      // Close modal
       setTimeout(() => {
-        handleCloseModal();
-      }, 2000);
-    } catch (err) {
-      console.error("Finalization error:", err);
-      setAuthStatus("error");
-      setErrorMessage("Failed to finalize connection");
+        onSuccess();
+      }, 1000);
+    } catch (err: any) {
+      setStatus("error");
+      setError(err.message || "Failed to confirm session");
+      console.error("❌ Error:", err);
     }
   };
 
-  // 🧹 CLEANUP BROWSER SESSION
-  const handleCloseModal = () => {
-    // Stop polling if running
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      setPollingInterval(null);
-    }
-    // Clear ref
-    sessionIdRef.current = "";
-    // Reset state
-    setIsBrowserRunning(false);
-    setAuthStatus("idle");
-    setStatusMessage("");
-    setErrorMessage("");
-    setVerificationAttempts(0);
-    setUsername("");
-    setPassword("");
-    // Close modal
-    onClose();
-  };
-
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
       }
     };
-  }, [pollingInterval]);
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl bg-[#0A0A0A] border-2 border-[#D4AF37] rounded-2xl shadow-2xl shadow-[#D4AF37]/30 overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-[#D4AF37]/20 to-[#AA7C11]/20 px-8 py-6 border-b border-[#D4AF37]/30">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-black text-[#D4AF37] uppercase tracking-wider">
-                <span>🔮</span> Automatisches Creator Onboarding
-              </h2>
-              <p className="text-sm text-slate-400 mt-2">
-                Creator: <span className="text-[#D4AF37]">{modelName}</span>
-              </p>
-            </div>
-            <button
-              onClick={handleCloseModal}
-              className="text-slate-400 hover:text-[#D4AF37] font-bold text-2xl hover:scale-110 transition"
-              title="Modal schließen"
-            >
-              ✕
-            </button>
-          </div>
+      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#0f0f0f] border border-[#D4AF37]/30 rounded-lg shadow-2xl max-w-lg w-full p-8">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-[#D4AF37]">🌐 Browser Login</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-[#D4AF37] transition"
+          >
+            ✕
+          </button>
         </div>
 
-        {/* Content */}
-        <div className="p-8 space-y-6">
-          {/* STATUS MESSAGE */}
-          {statusMessage && (
-            <div className="p-4 bg-[#AA7C11]/10 border border-[#D4AF37]/30 rounded-lg">
-              <p className="text-sm text-[#F3E5AB] text-center animate-pulse">
-                {statusMessage}
+        <div className="mb-6 p-4 bg-black/40 rounded-lg border border-[#D4AF37]/20">
+          <p className="text-gray-300">
+            <span className="font-bold text-[#D4AF37]">Model:</span> {modelName}
+          </p>
+        </div>
+
+        <div className="mb-6">
+          {status === "idle" && (
+            <div className="text-center">
+              <p className="text-gray-300 mb-4">
+                Click the button to open a browser window. Then login with model credentials.
               </p>
-            </div>
-          )}
-
-          {/* ERROR MESSAGE */}
-          {errorMessage && (
-            <div className="p-4 bg-red-500/20 border border-red-500/50 rounded-lg">
-              <p className="text-sm text-red-300">
-                <span className="font-bold">❌ Fehler:</span> {errorMessage}
-              </p>
-            </div>
-          )}
-
-          {/* LIVE STREAM CONTAINER */}
-          {isBrowserRunning ? (
-            <div className="space-y-4">
-              {/* Viewport / Loading State */}
-              <div className="relative w-full aspect-video bg-gradient-to-br from-[#050505] to-black border-2 border-[#AA7C11]/30 rounded-xl overflow-hidden">
-                {/* Loading State - Session starting */}
-                {authStatus === "loading" && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                    <div className="space-y-4 w-3/4">
-                      {/* Animated skeleton bars */}
-                      <div className="h-6 bg-gradient-to-r from-[#D4AF37]/20 via-[#D4AF37]/40 to-[#D4AF37]/20 rounded-full animate-pulse"></div>
-                      <div className="h-4 bg-gradient-to-r from-[#D4AF37]/20 via-[#D4AF37]/40 to-[#D4AF37]/20 rounded-full animate-pulse"></div>
-                      <div className="h-4 bg-gradient-to-r from-[#D4AF37]/20 via-[#D4AF37]/40 to-[#D4AF37]/20 rounded-full animate-pulse w-2/3"></div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Waiting State - Waiting for user to authenticate */}
-                {authStatus === "waiting" && (
-                  <div className="absolute inset-0 flex items-center justify-center text-center bg-gradient-to-br from-blue-500/10 to-blue-900/10">
-                    <div className="space-y-4">
-                      <p className="text-6xl animate-spin">⏳</p>
-                      <p className="text-[#D4AF37] font-bold text-lg">
-                        Authentifizierung wird verarbeitet...
-                      </p>
-                      <p className="text-slate-400 text-sm">
-                        Bitte warten Sie...
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Placeholder - When not running */}
-                {!isBrowserRunning && authStatus === "idle" && (
-                  <div className="absolute inset-0 flex items-center justify-center text-center">
-                    <div>
-                      <p className="text-4xl mb-4">🔐</p>
-                      <p className="text-[#D4AF37] font-bold text-lg">
-                        OnlyFans Login
-                      </p>
-                      <p className="text-slate-500 text-xs mt-2">
-                        Credentials unten eingeben...
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Success State - Authenticated! */}
-                {authStatus === "authenticated" && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 to-emerald-900/20 flex items-center justify-center">
-                    <div className="text-center">
-                      <p className="text-6xl mb-4 animate-bounce">✅</p>
-                      <p className="text-emerald-400 font-bold text-xl">
-                        OnlyFans-Authentifizierung bestätigt!
-                      </p>
-                      <p className="text-emerald-300 text-sm mt-2">
-                        Cookies wurden sicher gespeichert
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Error State */}
-                {authStatus === "error" && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-red-500/20 to-red-900/20 flex items-center justify-center">
-                    <div className="text-center">
-                      <p className="text-6xl mb-4">❌</p>
-                      <p className="text-red-400 font-bold text-lg">
-                        Fehler bei der Authentifizierung
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Instructions */}
-              <div className="bg-black/40 p-4 rounded-lg border border-[#AA7C11]/10">
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  {authStatus === "loading" &&
-                    "⏳ Verbinde zu VPS und starte Puppeteer Browser..."}
-                  {authStatus === "authenticated" &&
-                    "✅ OnlyFans-Login erfolgreich! Session wurde gespeichert. Klicken Sie auf den goldenen Button unten, um die Verbindung zu finalisieren."}
-                  {authStatus === "error" &&
-                    "❌ Es gab ein Problem mit dem Browser-Prozess. Bitte überprüfen Sie Ihre Anmeldedaten und versuchen Sie es erneut."}
-                  {authStatus === "idle" &&
-                    "Geben Sie Ihren OnlyFans-Username und Passwort ein."}
-                </p>
-              </div>
-            </div>
-          ) : (
-            /* Initial State - Credentials Input */
-            <div className="flex flex-col items-center justify-center py-12 space-y-6">
-              <p className="text-center text-slate-400 max-w-lg">
-                Geben Sie die OnlyFans-Anmeldedaten ein. Das System wird sich automatisch anmelden und die Session speichern.
-              </p>
-
-              <div className="w-full max-w-md space-y-4">
-                {/* Username Input */}
-                <div>
-                  <label className="block text-sm text-[#D4AF37] font-semibold mb-2">
-                    📧 OnlyFans Username
-                  </label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="E-Mail oder Username"
-                    className="w-full px-4 py-3 bg-black/40 border border-[#AA7C11]/30 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-[#D4AF37] transition"
-                  />
-                </div>
-
-                {/* Password Input */}
-                <div>
-                  <label className="block text-sm text-[#D4AF37] font-semibold mb-2">
-                    🔐 Passwort
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Passwort"
-                    className="w-full px-4 py-3 bg-black/40 border border-[#AA7C11]/30 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-[#D4AF37] transition"
-                  />
-                </div>
-
-                {/* Login Button */}
-                <button
-                  onClick={handleStartBrowserLogin}
-                  disabled={isConnecting || !username.trim() || !password.trim()}
-                  className="w-full px-8 py-4 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#BB8D23] text-black font-bold uppercase tracking-wider text-lg rounded-lg shadow-lg shadow-[#D4AF37]/40 hover:shadow-[#D4AF37]/60 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isConnecting ? (
-                    "⏳ Verbinde..."
-                  ) : (
-                    <>
-                      <span>🌐</span> Zur OnlyFans verbinden
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-500 text-center">
-                Ihre Anmeldedaten werden nur zur Authentifizierung verwendet
-                und sicher in der Datenbank gespeichert.
-              </p>
-            </div>
-          )}
-
-          {/* GOLDEN FINALIZE BUTTON - Shows when authenticated */}
-          {authStatus === "authenticated" && (
-            <div className="pt-4 border-t border-[#AA7C11]/20">
               <button
-                onClick={handleFinalizeConnection}
-                className="w-full px-8 py-6 bg-gradient-to-b from-[#D4AF37] via-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:via-[#E5C158] hover:to-[#BB8D23] text-black font-black uppercase tracking-widest text-xl rounded-lg shadow-2xl shadow-[#D4AF37]/50 hover:shadow-[#D4AF37]/80 transition animate-pulse"
+                onClick={handleOpenBrowser}
+                className="w-full py-3 px-4 rounded-lg font-bold uppercase tracking-wider text-sm bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black hover:from-[#E5C158] hover:shadow-lg hover:shadow-[#D4AF37]/40 transition"
               >
-                <span>👑</span> CREATOR JETZT VERBINDEN
+                🌐 Open Browser
               </button>
-              <p className="text-xs text-slate-500 text-center mt-3">
-                Klicken Sie, um die Verbindung abzuschließen.
-              </p>
             </div>
           )}
 
-          {/* RETRY - Goes back to idle state */}
-          {authStatus === "error" && (
-            <div className="pt-4 border-t border-[#AA7C11]/20">
+          {status === "opening" && (
+            <div className="text-center">
+              <div className="mb-4 flex justify-center">
+                <div className="animate-spin">
+                  <div className="w-8 h-8 border-4 border-[#D4AF37] border-t-transparent rounded-full"></div>
+                </div>
+              </div>
+              <p className="text-[#D4AF37] font-semibold">{message}</p>
+            </div>
+          )}
+
+          {status === "waiting" && (
+            <div className="text-center">
+              <div className="mb-4 flex justify-center">
+                <div className="animate-pulse">
+                  <div className="w-8 h-8 bg-[#D4AF37] rounded-full"></div>
+                </div>
+              </div>
+              <p className="text-gray-300 mb-2">{message}</p>
+              <p className="text-xs text-gray-500">Waiting for login confirmation...</p>
+            </div>
+          )}
+
+          {status === "verified" && (
+            <div className="text-center">
+              <div className="mb-4 text-4xl">✅</div>
+              <p className="text-[#D4AF37] font-semibold mb-4">{message}</p>
+              <button
+                onClick={handleConfirmConnection}
+                className="w-full py-3 px-4 rounded-lg font-bold uppercase tracking-wider text-sm bg-gradient-to-b from-green-500 to-green-700 text-white hover:from-green-400 hover:shadow-lg hover:shadow-green-500/40 transition"
+              >
+                ✓ Confirm & Connect
+              </button>
+            </div>
+          )}
+
+          {status === "connecting" && (
+            <div className="text-center">
+              <div className="mb-4 flex justify-center">
+                <div className="animate-spin">
+                  <div className="w-8 h-8 border-4 border-[#D4AF37] border-t-transparent rounded-full"></div>
+                </div>
+              </div>
+              <p className="text-[#D4AF37] font-semibold">{message}</p>
+            </div>
+          )}
+
+          {status === "error" && (
+            <div className="text-center">
+              <div className="mb-4 text-4xl">❌</div>
+              <p className="text-red-400 mb-4">{error}</p>
               <button
                 onClick={() => {
-                  setAuthStatus("idle");
-                  setErrorMessage("");
-                  setStatusMessage("");
+                  setStatus("idle");
+                  setError("");
+                  setSessionId("");
+                  setCookieCount(0);
                 }}
-                className="w-full px-6 py-3 bg-[#D4AF37]/20 hover:bg-[#D4AF37]/40 text-[#D4AF37] font-bold uppercase tracking-wider rounded-lg border border-[#D4AF37]/50 transition"
+                className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-sm bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black hover:from-[#E5C158] transition"
               >
-                <span>🔄</span> Erneut versuchen
+                🔄 Try Again
               </button>
             </div>
           )}
         </div>
+
+        <button
+          onClick={onClose}
+          className="w-full py-2 px-4 rounded-lg font-semibold text-gray-400 hover:text-[#D4AF37] transition border border-gray-600 hover:border-[#D4AF37]"
+        >
+          Close
+        </button>
       </div>
     </div>
   );

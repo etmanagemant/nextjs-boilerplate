@@ -2,70 +2,81 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+export const runtime = "nodejs";
 
-export async function POST(req: NextRequest) {
-  console.log("[VERIFY-STATUS] Check");
+async function validateAdmin(req: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return false;
+
+    if (
+      user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
+      user.email === "etmanagement@gmail.com" ||
+      user.email === "etmanagemant@gmail.com"
+    ) {
+      return true;
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    
+    return profile?.role === "admin";
+  } catch (err) {
+    console.error("[validateAdmin] Error:", err);
+    return false;
+  }
+}
+
+export async function GET(req: NextRequest) {
+  console.log("[BROWSER-LOGIN VERIFY] Checking login status...");
 
   try {
-    const body = await req.json();
-    const { modelId, sessionId } = body;
-
-    if (!modelId || !sessionId) {
-      return NextResponse.json(
-        { status: "error", error: "Missing modelId or sessionId" },
-        { status: 400 }
-      );
+    const isAdmin = await validateAdmin(req);
+    if (!isAdmin) {
+      return NextResponse.json({ status: "error", error: "Unauthorized" }, { status: 403 });
     }
 
-    const supabase = await createClient();
-    const { data: session, error } = await supabase
-      .from("crm_model_sessions")
-      .select("*")
-      .eq("model_id", modelId)
-      .eq("id", sessionId)
-      .maybeSingle();
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get("sessionId");
 
-    if (error || !session) {
-      console.log("[VERIFY-STATUS] No session");
-      return NextResponse.json(
-        {
-          status: "waiting",
-          verified: false,
-          message: "Session not started",
-        },
-        { status: 200 }
-      );
+    if (!sessionId) {
+      return NextResponse.json({ status: "error", error: "Missing sessionId" }, { status: 400 });
     }
 
-    // ⚠️ ONLY return status - do NOT auto-verify
-    // User must manually click button to confirm
-    if (session.is_active) {
-      console.log("[VERIFY-STATUS] Already confirmed");
-      return NextResponse.json(
-        {
-          status: "success",
-          verified: true,
-          message: "User confirmed",
-        },
-        { status: 200 }
-      );
+    const vpsUrl = process.env.VPS_API_URL;
+    if (!vpsUrl) {
+      return NextResponse.json({ status: "error", error: "VPS not configured" }, { status: 500 });
     }
 
-    // Waiting for user to confirm
-    console.log("[VERIFY-STATUS] Waiting for user confirmation");
-    return NextResponse.json(
-      {
-        status: "waiting",
-        verified: false,
-        message: "Please confirm after login",
-      },
-      { status: 200 }
-    );
-  } catch (err: any) {
-    console.error("[VERIFY-STATUS] Error:", err?.message);
-    return NextResponse.json(
-      { status: "error", error: err?.message },
-      { status: 500 }
-    );
+    const response = await fetch(`${vpsUrl}/verify-session?sessionId=${sessionId}`, { method: "GET" });
+
+    if (!response.ok) {
+      console.error(`[BROWSER-LOGIN VERIFY] VPS error: ${response.status}`);
+      return NextResponse.json({ status: "error", error: `VPS error` }, { status: response.status });
+    }
+
+    const vpsData = await response.json();
+
+    if (vpsData.isLoggedIn) {
+      console.log(`[BROWSER-LOGIN VERIFY] ✅ Login detected! ${vpsData.cookieCount} cookies`);
+    }
+
+    return NextResponse.json({
+      status: "success",
+      isLoggedIn: vpsData.isLoggedIn,
+      cookieCount: vpsData.cookieCount,
+      pageTitle: vpsData.pageTitle,
+      pageUrl: vpsData.pageUrl,
+      message: vpsData.message,
+    });
+  } catch (error: any) {
+    console.error("[BROWSER-LOGIN VERIFY] Error:", error.message);
+    return NextResponse.json({ status: "error", error: error.message }, { status: 500 });
   }
 }
