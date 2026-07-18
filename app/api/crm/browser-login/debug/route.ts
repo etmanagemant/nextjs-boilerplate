@@ -17,11 +17,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch(`${vpsUrl}/health`, {
       method: "GET",
-      timeout: 10000,
+      signal: controller.signal,
     });
 
+    clearTimeout(timeoutId);
     const data = await response.text();
 
     return NextResponse.json({
