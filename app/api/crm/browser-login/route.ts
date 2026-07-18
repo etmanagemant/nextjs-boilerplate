@@ -47,9 +47,8 @@ async function validateAdmin(req: NextRequest) {
 }
 
 async function handleBrowserLogin(req: NextRequest) {
-  console.log("[handleBrowserLogin] === START BROWSERLESS MODE ===");
+  console.log("[handleBrowserLogin] === START VPS MODE ===");
   console.log("[handleBrowserLogin] Method:", req.method);
-  console.log("[handleBrowserLogin] Content-Type:", req.headers.get("content-type"));
   
   try {
     // Validate admin
@@ -68,17 +67,12 @@ async function handleBrowserLogin(req: NextRequest) {
     // Parse request body
     let body: any = {};
     try {
-      console.log("[handleBrowserLogin] Attempting to parse request body...");
       body = await req.json();
-      console.log("[handleBrowserLogin] ✅ Body parsed successfully:", JSON.stringify(body));
     } catch (parseErr: any) {
-      console.error("[handleBrowserLogin] ❌ JSON parsing failed:", parseErr?.message);
-      console.error("[handleBrowserLogin] Error type:", parseErr?.constructor?.name);
       return safeJsonResponse(
         { 
           status: "error",
           error: `Failed to parse JSON: ${parseErr?.message || "Unknown error"}`,
-          details: "Check server logs for debugging info",
           timestamp: new Date().toISOString()
         },
         400
@@ -86,10 +80,8 @@ async function handleBrowserLogin(req: NextRequest) {
     }
     
     const { modelId } = body;
-    console.log("[handleBrowserLogin] Extracted modelId:", modelId, "| Type:", typeof modelId);
     
     if (!modelId || typeof modelId !== "string") {
-      console.error("[handleBrowserLogin] ❌ Invalid modelId:", modelId);
       return safeJsonResponse(
         { 
           status: "error",
@@ -101,119 +93,58 @@ async function handleBrowserLogin(req: NextRequest) {
       );
     }
 
-    // Get API Key
-    const apiKey = process.env.BROWSERLESS_API_KEY;
-    if (!apiKey) {
-      console.error("[handleBrowserLogin] ❌ BROWSERLESS_API_KEY is undefined in environment");
+    // Get VPS URL
+    const vpsUrl = process.env.VPS_API_URL;
+    if (!vpsUrl) {
       return safeJsonResponse(
         { 
           status: "error",
-          error: "Browserless API key not configured in environment",
-          timestamp: new Date().toISOString()
-        },
-        500
-      );
-    }
-    
-    console.log("[handleBrowserLogin] API Key length:", apiKey.length);
-    console.log("[handleBrowserLogin] API Key first 10 chars:", apiKey.substring(0, 10));
-
-    // Start Browserless session
-    console.log("[handleBrowserLogin] Starting Browserless session...");
-    console.log("[handleBrowserLogin] API Key configured:", !!apiKey);
-    
-    let sessionData: any = null;
-    let wsEndpoint: string = "";
-    
-    try {
-      console.log("[handleBrowserLogin] Calling Browserless REST API...");
-      const sessionResponse = await fetch(`https://chrome.browserless.io/session?token=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ttl: 30,
-        }),
-      });
-
-      console.log("[handleBrowserLogin] Browserless response status:", sessionResponse.status);
-      const contentType = sessionResponse.headers.get("content-type") || "unknown";
-      console.log("[handleBrowserLogin] Browserless response content-type:", contentType);
-
-      // Check if response is JSON
-      if (!contentType.includes("application/json")) {
-        const htmlBody = await sessionResponse.text();
-        console.error("[handleBrowserLogin] ❌ Browserless returned non-JSON response (HTML):");
-        console.error("[handleBrowserLogin] First 500 chars:", htmlBody.substring(0, 500));
-        
-        // Common Browserless errors
-        if (htmlBody.includes("POST Body")) {
-          console.error("[handleBrowserLogin] Detected: Browserless auth/validation error (POST Body response)");
-        }
-        if (htmlBody.includes("401") || htmlBody.includes("Unauthorized")) {
-          console.error("[handleBrowserLogin] Detected: 401 Unauthorized - Invalid API key");
-        }
-        
-        return safeJsonResponse(
-          { 
-            status: "error",
-            error: "Browserless returned error (likely invalid API key)",
-            details: htmlBody.substring(0, 200),
-            timestamp: new Date().toISOString()
-          },
-          500
-        );
-      }
-
-      sessionData = await sessionResponse.json();
-      console.log("[handleBrowserLogin] ✅ Browserless session data parsed successfully");
-      console.log("[handleBrowserLogin] Response keys:", Object.keys(sessionData));
-      console.log("[handleBrowserLogin] connect present:", !!sessionData.connect);
-      console.log("[handleBrowserLogin] Session ID:", sessionData.id);
-      
-      if (!sessionResponse.ok || !sessionData.connect) {
-        console.error("[handleBrowserLogin] ❌ Browserless error response:", sessionData);
-        return safeJsonResponse(
-          { 
-            status: "error",
-            error: "Failed to create Browserless session",
-            details: sessionData.message || sessionData.error || "No connect URL in response",
-            timestamp: new Date().toISOString()
-          },
-          500
-        );
-      }
-      
-      wsEndpoint = sessionData.connect;
-    } catch (browserlessErr: any) {
-      console.error("[handleBrowserLogin] ❌ Browserless fetch failed:", browserlessErr?.message);
-      console.error("[handleBrowserLogin] Error type:", browserlessErr?.constructor?.name);
-      console.error("[handleBrowserLogin] Error stack:", browserlessErr?.stack?.substring(0, 500));
-      return safeJsonResponse(
-        { 
-          status: "error",
-          error: `Browserless connection error: ${browserlessErr?.message || "Unknown"}`,
+          error: "VPS not configured (VPS_API_URL missing)",
           timestamp: new Date().toISOString()
         },
         500
       );
     }
 
-    console.log("[handleBrowserLogin] ✅ Session created, WebSocket ready");
+    console.log("[handleBrowserLogin] Calling VPS /login for model:", modelId);
 
-    // Save session info to Supabase - IMPORTANT: is_active = false until verified!
+    // Call VPS login endpoint
+    const vpsLoginUrl = `${vpsUrl}/login`;
+    const response = await fetch(vpsLoginUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        modelId,
+        username: body.username,
+        password: body.password,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`VPS responded with ${response.status}`);
+    }
+
+    const loginData = await response.json();
+
+    if (loginData.status !== "success") {
+      throw new Error(loginData.error || "Login failed on VPS");
+    }
+
+    console.log("[handleBrowserLogin] ✅ VPS login successful");
+
+    // Save session info to Supabase
     const supabase = await createClient();
     const { data: upsertData, error: upsertError } = await supabase
       .from("crm_model_sessions")
       .upsert(
         {
           model_id: modelId,
-          is_active: false,  // ⚠️ NOT VERIFIED YET - Only true after successful auth confirmation
+          is_active: true,  // ✅ VPS session ready immediately
           last_verified_at: new Date().toISOString(),
           auth_cookies: {
-            browserless_session_id: sessionData.id,
-            ws_endpoint: wsEndpoint,
+            vps_server: vpsUrl,
             created_at: new Date().toISOString(),
-            verification_status: "pending",  // Track verification state
+            verification_status: "verified",
           },
         },
         { onConflict: "model_id" }
@@ -225,51 +156,28 @@ async function handleBrowserLogin(req: NextRequest) {
       throw new Error(`Failed to save session: ${(upsertError as any)?.message}`);
     }
 
-    // ⚠️ CRITICAL: After upsert, fetch the actual saved row to get correct ID
-    const { data: actualSession, error: fetchError } = await supabase
-      .from("crm_model_sessions")
-      .select("id")
-      .eq("model_id", modelId)
-      .maybeSingle();
+    const actualSessionId = upsertData.id;
 
-    if (fetchError || !actualSession) {
-      throw new Error("Failed to fetch saved session ID");
-    }
-
-    const actualSessionId = actualSession.id;
-
-    console.log("[handleBrowserLogin] ✅ Session saved to Supabase (pending verification)");
-    console.log("[handleBrowserLogin] Session ID:", actualSessionId);
-    console.log("[handleBrowserLogin] ⏳ Waiting for user to authenticate on OnlyFans...");
-
-    // SUCCESS - Browserless session is ready but NOT YET ACTIVE
-    console.log("[handleBrowserLogin] === SUCCESS (PENDING VERIFICATION) ===");
+    console.log("[handleBrowserLogin] === SUCCESS ===");
     return safeJsonResponse(
       {
         status: "success",
-        connected: false,  // ⚠️ Changed to false - session created but not verified
-        verified: false,
+        connected: true,
+        message: "Connected to OnlyFans via VPS",
         modelId,
-        sessionId: actualSessionId,  // ✅ Use actual saved session ID
-        wsEndpoint: wsEndpoint,
-        source: "browserless-direct",
-        message: "Session created. Waiting for OnlyFans authentication...",
+        sessionId: actualSessionId,
+        screenshot: loginData.screenshot,
         timestamp: new Date().toISOString(),
       },
       200
     );
   } catch (err: any) {
-    console.error("[handleBrowserLogin] === ERROR ===");
-    console.error("[handleBrowserLogin] Message:", err?.message);
-    console.error("[handleBrowserLogin] Type:", err?.constructor?.name);
-
+    console.error("[handleBrowserLogin] ❌ Error:", err?.message);
     return safeJsonResponse(
-      {
+      { 
         status: "error",
-        connected: false,
-        error: err?.message || "Authentication failed",
-        errorType: err?.constructor?.name || "Unknown",
-        timestamp: new Date().toISOString(),
+        error: err?.message || "Connection failed",
+        timestamp: new Date().toISOString()
       },
       500
     );
