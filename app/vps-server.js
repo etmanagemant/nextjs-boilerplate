@@ -196,8 +196,10 @@ async function getOrCreateSession(modelId) {
   const page = await browser.newPage();
   // 1920x1080 briefly overloaded this 1-vCPU/1GB VPS (load average 15+,
   // heavy swapping) since Chrome renders it entirely in software with
-  // --disable-gpu. 1280x800 is the safe ceiling until the VPS is upgraded.
-  await page.setViewport({ width: 1280, height: 800 });
+  // --disable-gpu. Was 1280x800 - the earlier 1920x1080 meltdown was mostly
+  // the concurrent-launch race (fixed by withModelLock now), not the
+  // resolution alone. Trying Full HD again with that lock in place.
+  await page.setViewport({ width: 1920, height: 1080 });
   await enableDarkMode(page);
 
   try {
@@ -234,8 +236,10 @@ async function restoreSession(modelId, cookies) {
   const page = await browser.newPage();
   // 1920x1080 briefly overloaded this 1-vCPU/1GB VPS (load average 15+,
   // heavy swapping) since Chrome renders it entirely in software with
-  // --disable-gpu. 1280x800 is the safe ceiling until the VPS is upgraded.
-  await page.setViewport({ width: 1280, height: 800 });
+  // --disable-gpu. Was 1280x800 - the earlier 1920x1080 meltdown was mostly
+  // the concurrent-launch race (fixed by withModelLock now), not the
+  // resolution alone. Trying Full HD again with that lock in place.
+  await page.setViewport({ width: 1920, height: 1080 });
   await enableDarkMode(page);
 
   try {
