@@ -46,7 +46,6 @@ export default async function RootLayout({
               {role !== "admin" && (
                 <Link href="/stripchat" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap"><span>🎬</span> Stripchat</Link>
               )}
-              <Link href="/assistant" title="Assistent" className="rounded-lg bg-[#0A0A0A] border border-[#AA7C11]/40 hover:border-[#D4AF37] px-3 py-2.5 text-sm shadow-md whitespace-nowrap">🤖</Link>
 
               {role === "admin" && (
                 <>
