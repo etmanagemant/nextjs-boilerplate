@@ -31,11 +31,21 @@ export default function BrowserLoginStreamComponent({
   // could land on the VPS out of order and garble what you typed. Chain
   // them on this queue so each one waits for the previous to finish first.
   const queueRef = useRef<Promise<void>>(Promise.resolve());
+  // The background poll (every 600ms) and the per-keystroke interact calls
+  // both draw frames independently. A slow poll response can land AFTER a
+  // newer keystroke's response and paint a stale frame over it - the typed
+  // letter flashes and then looks like it never happened. Tag every request
+  // with a sequence number at dispatch time and only ever draw the newest
+  // one that arrives, regardless of which one resolves first.
+  const frameSeqRef = useRef(0);
+  const appliedSeqRef = useRef(0);
 
-  const drawScreenshot = (base64OrDataUrl: string) => {
+  const drawScreenshot = (base64OrDataUrl: string, seq: number) => {
     if (!canvasRef.current) return;
     const img = new Image();
     img.onload = () => {
+      if (seq < appliedSeqRef.current) return;
+      appliedSeqRef.current = seq;
       const canvas = canvasRef.current;
       if (!canvas) return;
       canvas.width = img.width;
@@ -46,11 +56,12 @@ export default function BrowserLoginStreamComponent({
   };
 
   const fetchFrame = async () => {
+    const seq = ++frameSeqRef.current;
     try {
       const res = await fetch(`/api/crm/screenshot?modelId=${encodeURIComponent(modelId)}`);
       if (!res.ok) return;
       const data = await res.json();
-      if (data.screenshot) drawScreenshot(data.screenshot);
+      if (data.screenshot) drawScreenshot(data.screenshot, seq);
       setIsLoggedIn(!!data.isLoggedIn);
     } catch (err) {
       console.error("[LOGIN-VIEW] frame error:", err);
@@ -61,6 +72,7 @@ export default function BrowserLoginStreamComponent({
     // Queue this call after whatever's currently in flight, so rapid typing
     // or click-then-type doesn't send overlapping/out-of-order requests.
     const run = async () => {
+      const seq = ++frameSeqRef.current;
       try {
         const res = await fetch("/api/crm/interact", {
           method: "POST",
@@ -69,7 +81,7 @@ export default function BrowserLoginStreamComponent({
         });
         if (!res.ok) return;
         const result = await res.json();
-        if (result.screenshot) drawScreenshot(result.screenshot);
+        if (result.screenshot) drawScreenshot(result.screenshot, seq);
         setIsLoggedIn(!!result.isLoggedIn);
       } catch (err) {
         console.error("[LOGIN-VIEW] interact error:", err);
@@ -99,6 +111,9 @@ export default function BrowserLoginStreamComponent({
         setPhase("live");
         await fetchFrame();
         pollRef.current = setInterval(fetchFrame, 600);
+        // Focus immediately so the admin can start typing without first
+        // having to click into the canvas.
+        hiddenInputRef.current?.focus();
       } catch (err: any) {
         if (!cancelled) {
           setPhase("error");
@@ -163,7 +178,7 @@ export default function BrowserLoginStreamComponent({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#0f0f0f] border border-[#D4AF37]/30 rounded-lg shadow-2xl max-w-3xl w-full p-6">
+      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#0f0f0f] border border-[#D4AF37]/30 rounded-lg shadow-2xl w-[95vw] max-w-[1600px] p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-xl font-bold text-[#D4AF37]">🌐 Live Browser-Login</h2>
@@ -194,7 +209,7 @@ export default function BrowserLoginStreamComponent({
               <canvas
                 ref={canvasRef}
                 onClick={handleCanvasClick}
-                className="w-full h-auto max-h-[60vh] object-contain cursor-pointer block mx-auto"
+                className="w-full h-auto max-h-[80vh] object-contain cursor-pointer block mx-auto"
               />
               {/* Invisible input that captures keystrokes and forwards them to the live page */}
               <input

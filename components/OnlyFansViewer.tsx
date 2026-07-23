@@ -55,9 +55,34 @@ export function OnlyFansViewer({
   const [sessionExpired, setSessionExpired] = useState(false);
   const [lastScreenshot, setLastScreenshot] = useState<string | null>(null);
   const screenshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // The background poll and click/keypress-triggered redraws all fetch and
+  // draw independently. A slow poll response landing after a newer
+  // keystroke's response would paint a stale frame over it, making it look
+  // like typing didn't register. Tag every request with a sequence number
+  // at dispatch time and only ever draw the newest one that arrives.
+  const frameSeqRef = useRef(0);
+  const appliedSeqRef = useRef(0);
+
+  const drawScreenshot = (base64: string, seq: number) => {
+    if (!canvasRef.current) return;
+    const img = new Image();
+    img.onload = () => {
+      if (seq < appliedSeqRef.current) return;
+      appliedSeqRef.current = seq;
+      const ctx = canvasRef.current?.getContext("2d");
+      if (ctx) {
+        canvasRef.current!.width = img.width;
+        canvasRef.current!.height = img.height;
+        ctx.drawImage(img, 0, 0);
+      }
+      setIsLoading(false);
+    };
+    img.src = `data:image/jpeg;base64,${base64}`;
+  };
 
   // Fetch screenshot
   const fetchScreenshot = async () => {
+    const seq = ++frameSeqRef.current;
     try {
       const response = await fetch(
         `/api/crm/screenshot?modelId=${encodeURIComponent(modelId)}`
@@ -81,20 +106,7 @@ export function OnlyFansViewer({
       setLastScreenshot(data.screenshot);
       setError(null);
 
-      // Draw on canvas
-      if (canvasRef.current && data.screenshot) {
-        const img = new Image();
-        img.onload = () => {
-          const ctx = canvasRef.current?.getContext("2d");
-          if (ctx) {
-            canvasRef.current!.width = img.width;
-            canvasRef.current!.height = img.height;
-            ctx.drawImage(img, 0, 0);
-          }
-          setIsLoading(false);
-        };
-        img.src = `data:image/jpeg;base64,${data.screenshot}`;
-      }
+      if (data.screenshot) drawScreenshot(data.screenshot, seq);
     } catch (err: any) {
       console.error("[VIEWER] Screenshot error:", err);
       setError(err.message);
@@ -188,21 +200,8 @@ export function OnlyFansViewer({
 
       const data = await response.json();
       setLastScreenshot(data.screenshot);
-
-      // Draw new screenshot
-      if (canvasRef.current && data.screenshot) {
-        const img = new Image();
-        img.onload = () => {
-          const ctx = canvasRef.current?.getContext("2d");
-          if (ctx) {
-            canvasRef.current!.width = img.width;
-            canvasRef.current!.height = img.height;
-            ctx.drawImage(img, 0, 0);
-          }
-          setIsLoading(false);
-        };
-        img.src = `data:image/jpeg;base64,${data.screenshot}`;
-      }
+      if (data.screenshot) drawScreenshot(data.screenshot, ++frameSeqRef.current);
+      else setIsLoading(false);
     } catch (err: any) {
       setError(err.message);
       setIsLoading(false);
@@ -223,20 +222,12 @@ export function OnlyFansViewer({
     const x = (event.clientX - rect.left) * scaleX;
     const y = (event.clientY - rect.top) * scaleY;
 
+    const seq = ++frameSeqRef.current;
     try {
       const data = await interact(modelId, "click", { x, y });
       if (data.screenshot) {
         setLastScreenshot(data.screenshot);
-        const img = new Image();
-        img.onload = () => {
-          const ctx = canvasRef.current?.getContext("2d");
-          if (ctx) {
-            canvasRef.current!.width = img.width;
-            canvasRef.current!.height = img.height;
-            ctx.drawImage(img, 0, 0);
-          }
-        };
-        img.src = `data:image/jpeg;base64,${data.screenshot}`;
+        drawScreenshot(data.screenshot, seq);
       }
     } catch (err) {
       console.error("[VIEWER] Click error:", err);
@@ -245,24 +236,37 @@ export function OnlyFansViewer({
     hiddenInputRef.current?.focus();
   };
 
-  // Forward keystrokes typed into the hidden input to whatever is focused on the live page
+  // Forward keystrokes typed into the hidden input to whatever is focused on
+  // the live page, and draw the response immediately instead of waiting up
+  // to 400ms for the next background poll - that wait is what made typing
+  // feel unresponsive.
   const handleHiddenInput = (event: React.ChangeEvent<HTMLInputElement>) => {
     const text = event.target.value;
     event.target.value = "";
-    if (text) interact(modelId, "keypress", { text }).catch((err) => console.error("[VIEWER] Type error:", err));
+    if (!text) return;
+    const seq = ++frameSeqRef.current;
+    interact(modelId, "keypress", { text })
+      .then((data) => data.screenshot && drawScreenshot(data.screenshot, seq))
+      .catch((err) => console.error("[VIEWER] Type error:", err));
   };
 
   const handleHiddenKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter" || event.key === "Tab" || event.key === "Backspace") {
       event.preventDefault();
-      interact(modelId, "key", { key: event.key }).catch((err) => console.error("[VIEWER] Key error:", err));
+      const seq = ++frameSeqRef.current;
+      interact(modelId, "key", { key: event.key })
+        .then((data) => data.screenshot && drawScreenshot(data.screenshot, seq))
+        .catch((err) => console.error("[VIEWER] Key error:", err));
     }
   };
 
   // Inserts an emoji into whatever field is currently focused on the live
   // OnlyFans page - click into the message box first, then tap an emoji here.
   const handleEmojiClick = (emoji: string) => {
-    interact(modelId, "keypress", { text: emoji }).catch((err) => console.error("[VIEWER] Emoji error:", err));
+    const seq = ++frameSeqRef.current;
+    interact(modelId, "keypress", { text: emoji })
+      .then((data) => data.screenshot && drawScreenshot(data.screenshot, seq))
+      .catch((err) => console.error("[VIEWER] Emoji error:", err));
   };
 
   // Wrapper element (can be modal, embedded, or standalone)
