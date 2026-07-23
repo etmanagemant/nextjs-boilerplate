@@ -2,17 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 
-async function interact(modelId: string, action: string, data: Record<string, unknown>) {
-  const response = await fetch("/api/crm/interact", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ modelId, action, data }),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Interact failed (${response.status})`);
-  }
-  return response.json();
+// Keystrokes/clicks used to fire as independent parallel requests, which
+// could land on the VPS out of order and garble what's typed. Chain calls
+// per model on this queue so each one waits for the previous to finish.
+const interactQueues = new Map<string, Promise<unknown>>();
+
+function interact(modelId: string, action: string, data: Record<string, unknown>) {
+  const run = async () => {
+    const response = await fetch("/api/crm/interact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modelId, action, data }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Interact failed (${response.status})`);
+    }
+    return response.json();
+  };
+
+  const queued = (interactQueues.get(modelId) || Promise.resolve()).then(run, run);
+  interactQueues.set(modelId, queued.catch(() => {}));
+  return queued;
 }
 
 interface OnlyFansViewerProps {

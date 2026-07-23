@@ -27,6 +27,10 @@ export default function BrowserLoginStreamComponent({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
+  // Keystrokes/clicks used to fire as independent parallel requests, which
+  // could land on the VPS out of order and garble what you typed. Chain
+  // them on this queue so each one waits for the previous to finish first.
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
 
   const drawScreenshot = (base64OrDataUrl: string) => {
     if (!canvasRef.current) return;
@@ -53,20 +57,26 @@ export default function BrowserLoginStreamComponent({
     }
   };
 
-  const interact = async (action: string, data: Record<string, unknown>) => {
-    try {
-      const res = await fetch("/api/crm/interact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId, action, data }),
-      });
-      if (!res.ok) return;
-      const result = await res.json();
-      if (result.screenshot) drawScreenshot(result.screenshot);
-      setIsLoggedIn(!!result.isLoggedIn);
-    } catch (err) {
-      console.error("[LOGIN-VIEW] interact error:", err);
-    }
+  const interact = (action: string, data: Record<string, unknown>) => {
+    // Queue this call after whatever's currently in flight, so rapid typing
+    // or click-then-type doesn't send overlapping/out-of-order requests.
+    const run = async () => {
+      try {
+        const res = await fetch("/api/crm/interact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ modelId, action, data }),
+        });
+        if (!res.ok) return;
+        const result = await res.json();
+        if (result.screenshot) drawScreenshot(result.screenshot);
+        setIsLoggedIn(!!result.isLoggedIn);
+      } catch (err) {
+        console.error("[LOGIN-VIEW] interact error:", err);
+      }
+    };
+    queueRef.current = queueRef.current.then(run);
+    return queueRef.current;
   };
 
   // Step 1: open the live browser on the VPS
