@@ -175,7 +175,9 @@ async function getOrCreateSession(modelId) {
   await enableDarkMode(page);
 
   try {
-    await page.goto('https://www.onlyfans.com/login', {
+    // The direct /login route has been unreliable ("page not available") -
+    // the root page shows the same login form to logged-out visitors anyway.
+    await page.goto('https://www.onlyfans.com', {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
     });
@@ -456,6 +458,18 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[SERVER] Listening on port ${PORT}`);
 });
+
+// Close every browser promptly on shutdown so systemd doesn't have to wait
+// out the full stop timeout and SIGKILL us (which used to take ~90s and
+// left the next start racing Xvfb).
+async function shutdown(signal) {
+  console.log(`[SERVER] ${signal} received, closing ${Object.keys(modelSessions).length} session(s)...`);
+  await Promise.all(Object.keys(modelSessions).map((modelId) => closeSession(modelId, `shutdown (${signal})`)));
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 5000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
