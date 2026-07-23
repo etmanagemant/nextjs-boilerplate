@@ -65,7 +65,9 @@ async function enforceSessionCap(excludeModelId) {
 async function launchBrowser(modelId) {
   return puppeteer.launch({
     headless: false,
-    executablePath: process.env.CHROMIUM_PATH || '/snap/bin/chromium',
+    // Uses Puppeteer's own managed Chrome (downloaded into ~/.cache/puppeteer
+    // by `npm install`) unless CHROMIUM_PATH points somewhere else.
+    executablePath: process.env.CHROMIUM_PATH || puppeteer.executablePath(),
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
