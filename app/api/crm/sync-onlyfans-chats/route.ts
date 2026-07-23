@@ -5,17 +5,17 @@ import { vpsFetch } from "@/lib/vpsClient";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const IGNORED_COOKIE_KEYS = ["vps_server", "session_id", "created_at", "verification_status", "cookie_count"];
-
 /**
  * Sync OnlyFans chats for a specific model.
  * POST /api/crm/sync-onlyfans-chats
  * Body: { modelId: string, sessionId: string }
  *
- * Uses the same flat cookie map ({ name: value }) the login flow stores,
- * fetched through a short-lived headless browser on the VPS (not
- * Browserless - its free tier is only 100 sessions/month, nowhere near
- * enough for routine polling every model gets called for periodically).
+ * Reuses the model's already-authenticated live session on the VPS (if one
+ * is currently open) instead of cloning cookies into a fresh browser - a
+ * cookie-only clone got rejected by OnlyFans even with valid cookies, while
+ * the live session is proven authenticated. Opportunistic: if nobody has
+ * this model connected right now, there's nothing to sync from and this
+ * just no-ops instead of erroring.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     const { data: session, error: sessionError } = await supabase
       .from("crm_model_sessions")
-      .select("*")
+      .select("id")
       .eq("model_id", modelId)
       .eq("id", sessionId)
       .eq("is_active", true)
@@ -43,38 +43,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Session not found or not active" }, { status: 404 });
     }
 
-    const cookieMap = session.auth_cookies as Record<string, string> | null;
-    if (!cookieMap || typeof cookieMap !== "object" || Object.keys(cookieMap).length === 0) {
-      return NextResponse.json({ error: "No auth cookies stored for this session" }, { status: 400 });
-    }
-
-    const cookies = Object.entries(cookieMap)
-      .filter(([name]) => !IGNORED_COOKIE_KEYS.includes(name))
-      .map(([name, value]) => ({ name, value, domain: ".onlyfans.com", path: "/" }));
-
-    const vpsResponse = await vpsFetch("/fetch-inbox", {
+    const vpsResponse = await vpsFetch("/sync-live", {
       method: "POST",
-      body: JSON.stringify({ modelId, cookies }),
+      body: JSON.stringify({ modelId }),
     });
 
     if (!vpsResponse.ok) {
       const errorText = await vpsResponse.text();
-      return NextResponse.json({ error: "VPS fetch-inbox failed: " + errorText.slice(0, 200) }, { status: 502 });
+      return NextResponse.json({ error: "VPS sync-live failed: " + errorText.slice(0, 200) }, { status: 502 });
     }
 
     const vpsResult = await vpsResponse.json();
-    if (vpsResult.status !== "success") {
-      return NextResponse.json({ error: vpsResult.error || "VPS fetch-inbox failed" }, { status: 502 });
+
+    if (vpsResult.status === "no_live_session") {
+      return NextResponse.json({
+        status: "success",
+        message: "No live session open for this model right now - skipped",
+        fansCount: 0,
+        messagesCount: 0,
+        skipped: true,
+        timestamp: new Date().toISOString(),
+      });
     }
 
-    const inboxList = vpsResult.data?.list || [];
+    if (vpsResult.status !== "success") {
+      return NextResponse.json({ error: vpsResult.error || "VPS sync-live failed" }, { status: 502 });
+    }
+
+    const payload = vpsResult.data?.json;
+    const inboxList = payload?.list || payload?.data?.list || [];
+
+    if (!Array.isArray(inboxList) || inboxList.length === 0) {
+      console.warn("[SYNC] Unexpected or empty response shape:", JSON.stringify(vpsResult.data).slice(0, 500));
+    }
 
     let fanCount = 0;
     let messageCount = 0;
 
     for (const conversation of inboxList) {
-      const userId = conversation.user?.id;
-      const username = conversation.user?.username;
+      const userId = conversation.user?.id ?? conversation.withUser?.id;
+      const username = conversation.user?.username ?? conversation.withUser?.username;
       if (!userId) continue;
 
       fanCount++;
@@ -90,7 +98,7 @@ export async function POST(request: NextRequest) {
         { onConflict: "model_id,fan_id" }
       );
 
-      const messages = conversation.messages || [];
+      const messages = conversation.messages || conversation.lastMessage ? [conversation.lastMessage].filter(Boolean) : [];
       for (const msg of messages) {
         const { data: existing } = await supabase
           .from("crm_fan_messages")

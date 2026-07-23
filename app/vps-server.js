@@ -507,57 +507,60 @@ app.post('/disconnect', async (req, res) => {
   }
 });
 
-// Lightweight headless fetch of a model's OnlyFans inbox JSON, used by the
-// periodic background sync (Next.js /api/cron/sync-chats calls back into
-// this). Separate from the persistent headful live-view sessions - own
-// profile dir, own short-lived browser, no Xvfb/screenshot cost, and no
-// interference with whatever's running in modelSessions for that model.
-app.post('/fetch-inbox', async (req, res) => {
-  const { modelId, cookies } = req.body || {};
-  if (!modelId || !Array.isArray(cookies)) {
-    return res.status(400).json({ error: 'Missing modelId or cookies array' });
+// Sync inbox data by reusing the model's already-authenticated live session
+// (if one is currently open) instead of cloning cookies into a fresh
+// browser - a separate cookie-only clone got redirected to login even with
+// valid cookies, while this exact session is proven authenticated (it's
+// rendering the real inbox visually right now). Fetches run inside that
+// page's own JS context via page.evaluate, so they carry whatever
+// same-origin auth OnlyFans expects automatically. Only works opportunistically:
+// if nobody currently has this model connected/open, there's nothing to
+// reuse and this returns no_live_session rather than spinning up a new one.
+app.post('/sync-live', async (req, res) => {
+  const { modelId, discover } = req.body || {};
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+
+  const session = modelSessions[modelId];
+  if (!session) {
+    return res.json({ status: 'no_live_session', modelId });
   }
+  session.lastActivity = Date.now();
 
-  const syncProfileDir = `/tmp/sync-${modelId}`;
-  let browser;
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath: process.env.CHROMIUM_PATH || puppeteer.executablePath(),
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        `--user-data-dir=${syncProfileDir}`,
-      ],
-    });
-
-    const page = await browser.newPage();
-    try {
-      await page.setCookie(...cookies);
-    } catch (e) {
-      console.warn(`[FETCH-INBOX] Cookie set error for ${modelId}:`, e.message);
+    if (discover) {
+      // One-off discovery pass: navigate to the real chats page and record
+      // every /api2/ call the app itself makes, to find the real endpoint
+      // instead of guessing.
+      const calls = [];
+      const onRequest = (r) => {
+        if (r.url().includes('/api2/')) calls.push(`${r.method()} ${r.url()}`);
+      };
+      session.page.on('request', onRequest);
+      try {
+        await session.page.goto('https://onlyfans.com/my/chats', { waitUntil: 'networkidle2', timeout: 20000 });
+      } catch (e) {
+        console.warn(`[SYNC-LIVE] Discovery nav warning for ${modelId}:`, e.message);
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+      session.page.off('request', onRequest);
+      return res.json({ status: 'success', modelId, discovered: calls, pageUrl: session.page.url() });
     }
 
-    await page.goto('https://onlyfans.com/api2/v2/inbox', {
-      waitUntil: 'domcontentloaded',
-      timeout: 20000,
-    });
-
-    const content = await page.content();
-    const jsonMatch = content.match(/<pre[^>]*>([^<]+)<\/pre>/);
-    const data = JSON.parse(jsonMatch ? jsonMatch[1] : content);
+    const endpoint = process.env.ONLYFANS_CHATS_ENDPOINT || '/api2/v2/chats?limit=20&offset=0&order=activity';
+    const data = await session.page.evaluate(async (url) => {
+      const res = await fetch(url, { credentials: 'include' });
+      const text = await res.text();
+      try {
+        return { ok: res.ok, status: res.status, json: JSON.parse(text) };
+      } catch (e) {
+        return { ok: res.ok, status: res.status, text: text.slice(0, 500) };
+      }
+    }, endpoint);
 
     res.json({ status: 'success', modelId, data });
   } catch (error) {
-    console.error(`[FETCH-INBOX] Error for ${modelId}:`, error.message);
+    console.error(`[SYNC-LIVE] Error for ${modelId}:`, error.message);
     res.status(200).json({ status: 'error', error: error.message });
-  } finally {
-    if (browser) {
-      try { await browser.close(); } catch (e) { /* ignore */ }
-    }
-    fs.rm(syncProfileDir, { recursive: true, force: true }).catch(() => {});
   }
 });
 

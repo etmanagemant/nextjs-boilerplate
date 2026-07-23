@@ -27,12 +27,19 @@ export async function GET(request: NextRequest) {
     const supabase = createSupabaseAdminClient();
     const { data: dbSession } = await supabase
       .from("crm_model_sessions")
-      .select("is_active, auth_cookies")
+      .select("is_active, auth_cookies, last_verified_at")
       .eq("model_id", modelId)
       .maybeSingle();
 
     let data = await fetchFrame(modelId);
     const wasAlreadyConnected = !!dbSession?.is_active;
+    // Grace period: a session confirmed in the last 2 minutes might still be
+    // mid-navigation/settling on the VPS (or, as happened once, a manual
+    // debug connect briefly overlapping a real one) - don't treat a
+    // momentary logged-out read as proof OnlyFans invalidated it.
+    const confirmedRecently = dbSession?.last_verified_at
+      ? Date.now() - new Date(dbSession.last_verified_at).getTime() < 2 * 60 * 1000
+      : false;
 
     if (!data.hasSession) {
       const restored = wasAlreadyConnected
@@ -56,7 +63,7 @@ export async function GET(request: NextRequest) {
     // and that we definitely got a real (logged-out) page for, counts as
     // "expired" here - a fresh login-in-progress session is expected to show
     // isLoggedIn:false until the admin actually logs in.
-    if (wasAlreadyConnected && !data.isLoggedIn) {
+    if (wasAlreadyConnected && !data.isLoggedIn && !confirmedRecently) {
       await disconnectModelSession(supabase, modelId, "session invalidated (OnlyFans logged it out)");
       return NextResponse.json({
         status: "session_expired",
