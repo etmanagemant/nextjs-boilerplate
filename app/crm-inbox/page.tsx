@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { redirect } from "next/navigation";
 import CRMInboxClient from "@/components/layout/CRMInboxClient";
 import {
@@ -26,7 +27,7 @@ export default async function CRMInboxPage() {
 
   // Allow: chatter, moderator, admin roles. If no profile, allow (could be admin from auth)
   const userRole = profile?.role || "guest";
-  const isAllowed = ["chatter", "moderator", "admin"].includes(userRole) || 
+  const isAllowed = ["chatter", "moderator", "admin"].includes(userRole) ||
                     user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
                     user.email === "etmanagement@gmail.com" ||
                     user.email === "etmanagemant@gmail.com";
@@ -37,58 +38,41 @@ export default async function CRMInboxPage() {
 
   // 📊 FETCH INITIAL DATA
   try {
-    // Fetch ONLY ACTIVE connected models
-    const { data: crm_models } = await supabase
+    // crm_model_sessions RLS only allows admins to read it (it holds auth
+    // cookies), so a chatter's cookie-session client gets 0 rows here and
+    // used to silently fall through to "show every model, connected or
+    // not". Use the admin client instead - only model_id/name/avatar_url
+    // ever leave this server component, never the cookies themselves.
+    const adminSupabase = createSupabaseAdminClient();
+
+    const { data: crm_models } = await adminSupabase
       .from("crm_model_sessions")
       .select("model_id")
       .eq("is_active", true)
       .order("model_id", { ascending: true });
 
-    let connectedModels: any[] = [];
+    const modelIds = (crm_models || []).map((m: any) => m.model_id);
 
-    // First: Use crm_model_sessions if it has data
-    if (crm_models && crm_models.length > 0) {
-      // Get the model_ids and lookup their names from models table
-      const modelIds = crm_models.map((m: any) => m.model_id);
-      const { data: modelDetails } = await supabase
+    let connectedModels: { id: string; name: string; avatar_url: string | null }[] = [];
+    if (modelIds.length > 0) {
+      const { data: modelDetails } = await adminSupabase
         .from("models")
         .select("id, name, avatar_url")
         .in("id", modelIds);
 
-      // Create a map for quick lookup
-      const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
-      const avatarMap = new Map(modelDetails?.map((m: any) => [m.id, m.avatar_url]) || []);
+      const detailsMap = new Map(modelDetails?.map((m: any) => [m.id, m]) || []);
 
-      connectedModels = crm_models.map((m: any) => ({
-        id: m.model_id,
-        name: nameMap.get(m.model_id) || m.model_id, // Use name if found, else use id
-        avatar_url: avatarMap.get(m.model_id) || null,
+      connectedModels = modelIds.map((id: string) => ({
+        id,
+        name: detailsMap.get(id)?.name || id,
+        avatar_url: detailsMap.get(id)?.avatar_url || null,
       }));
-      console.log("✅ Loaded models from crm_model_sessions:", connectedModels);
-    } else {
-      // FALLBACK: Load from old models table if crm_model_sessions is empty
-      console.log("⚠️ crm_model_sessions empty, loading from old models table...");
-      const { data: fallbackModels } = await supabase
-        .from("models")
-        .select("id, name, platform_type, avatar_url")
-        .eq("platform_type", "onlyfans")
-        .order("name", { ascending: true });
-
-      if (fallbackModels && fallbackModels.length > 0) {
-        console.log("✅ Loaded models from fallback:", fallbackModels);
-        connectedModels = fallbackModels.map((m: any) => ({
-          id: m.id,
-          name: m.name || m.id,
-          avatar_url: m.avatar_url || null,
-        }));
-      }
     }
 
-    console.log("📋 Final connectedModels passed to client:", connectedModels);
-
-    const fans = await fetchActiveFans(user.id);
+    const initialModelId = connectedModels[0]?.id;
+    const fans = initialModelId ? await fetchActiveFans(initialModelId) : [];
     const scripts = await fetchScriptLibrary(user.id);
-    
+
     // 📅 Fetch shifts for NextShiftsWidget
     const { data: allShifts } = await supabase.from("shifts").select("*");
 

@@ -97,8 +97,8 @@ export default function WorkspaceSidebar({
 
   const workspaceTools = [
     { id: "connection", name: "Connection Hub", icon: "🔗", href: "/management/crm-connect", adminOnly: true },
-    { id: "scripts", name: "Script Vault", icon: "📜", href: "/script-vault" },
-    { id: "upload", name: "Upload Vault", icon: "📤", href: "/upload-vault" },
+    { id: "scripts", name: "Script Vault", icon: "📜", href: "/script-vault", adminOnly: true },
+    { id: "upload", name: "Upload Vault", icon: "📤", href: "/upload-vault", adminOnly: true },
   ];
 
   // Filter workspace tools based on role

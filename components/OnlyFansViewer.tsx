@@ -42,7 +42,6 @@ export function OnlyFansViewer({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastScreenshot, setLastScreenshot] = useState<string | null>(null);
   const screenshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -258,46 +257,6 @@ export function OnlyFansViewer({
   // Wrapper element (can be modal, embedded, or standalone)
   const viewerContent = (
     <div className="relative w-full h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] rounded-lg overflow-hidden border border-[#D4AF37]/10">
-      {/* Header - Dark theme with Gold accents */}
-      <div className="absolute top-0 left-0 right-0 z-30 bg-gradient-to-b from-[#0A0A0A] via-[#050505]/95 to-transparent p-4 flex items-center justify-between border-b border-[#D4AF37]/20">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">👁️</span>
-          <h3 className="text-[#F3E5AB] font-black text-lg uppercase tracking-wider">{modelName}</h3>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setIsFullscreen((v) => !v)}
-            className="px-4 py-2 bg-gradient-to-b from-[#D4AF37]/60 to-[#AA7C11]/60 hover:from-[#D4AF37]/80 hover:to-[#AA7C11]/80 text-black font-bold rounded-lg text-sm transition shadow-lg"
-            title={isFullscreen ? "Verkleinern" : "Vollbild"}
-          >
-            {isFullscreen ? "🗗 Verkleinern" : "⛶ Vollbild"}
-          </button>
-          <button
-            onClick={fetchScreenshot}
-            className="px-4 py-2 bg-gradient-to-b from-[#D4AF37]/80 to-[#AA7C11]/80 hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/30"
-            title="Refresh screenshot"
-          >
-            📸 Refresh
-          </button>
-          <button
-            onClick={handleRefreshSession}
-            className="px-4 py-2 bg-gradient-to-b from-[#D4AF37]/60 to-[#AA7C11]/60 hover:from-[#D4AF37]/80 hover:to-[#AA7C11]/80 text-black font-bold rounded-lg text-sm transition shadow-lg"
-            title="Reload page and refresh session"
-          >
-            🔄 Reload
-          </button>
-          {!isEmbedded && (
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-gradient-to-b from-slate-600/80 to-slate-700/80 hover:from-slate-500 hover:to-slate-600 text-white font-bold rounded-lg text-sm transition shadow-lg"
-              title="Close"
-            >
-              ✕ Close
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Loading State */}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/60 to-[#0A0A0A]/80 z-10 backdrop-blur-sm">
@@ -453,16 +412,6 @@ export function OnlyFansViewer({
       )}
     </div>
   );
-
-  // Fullscreen overrides modal/embedded layout - covers the whole viewport
-  // regardless of whatever column width the parent gave this component.
-  if (isFullscreen) {
-    return (
-      <div className="fixed inset-0 bg-black z-50">
-        {viewerContent}
-      </div>
-    );
-  }
 
   // If modal mode, wrap in backdrop
   if (isModal) {

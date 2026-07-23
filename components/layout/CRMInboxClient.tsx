@@ -240,10 +240,9 @@ export default function CRMInboxClient({
               />
             </div>
           ) : selectedOnlyFansModel && !selectedFanId ? (
-            // ONLYFANS FOCUS MODE - no native chat selected yet, so the real,
-            // populated conversations live entirely inside the live OnlyFans
-            // view. It gets the majority of the screen; the native widgets
-            // stay reachable as slim side columns instead of disappearing.
+            // ONLYFANS FOCUS MODE - no native fan chat selected yet. Sales
+            // Cockpit only makes sense once you're actually in a chat, so it
+            // stays hidden here; OnlyFans gets the space instead.
             <>
               <div className="w-48 flex-shrink-0 border-r border-[#D4AF37]/20">
                 <ChatListColumn
@@ -262,20 +261,6 @@ export default function CRMInboxClient({
                   isModal={false}
                   onClose={() => setSelectedOnlyFansModel(null)}
                   emojis={emojis}
-                />
-              </div>
-
-              <div className="w-72 flex-shrink-0 border-l border-[#D4AF37]/20">
-                <SalesCockpitColumn
-                  fanMetadata={fanMetadata}
-                  scripts={scripts}
-                  selectedScript={selectedScript}
-                  onSelectScript={setSelectedScript}
-                  onNotesChange={handleUpdateNotes}
-                  isSavingNotes={isSavingNotes}
-                  modelNotes={modelNotes}
-                  onModelNotesChange={handleUpdateModelNotes}
-                  isSavingModelNotes={isSavingModelNotes}
                 />
               </div>
             </>
