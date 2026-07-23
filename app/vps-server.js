@@ -588,6 +588,49 @@ app.post('/sync-live', async (req, res) => {
   }
 });
 
+// Send a chat message through the model's live, authenticated session -
+// same page.evaluate(fetch) trick as /sync-live and for the same reason: a
+// fresh cookie-cloned browser gets rejected by OnlyFans even with valid
+// cookies, while this session is proven authenticated. The exact endpoint
+// shape below is a best guess (same as the old, never-live-tested
+// Browserless version) - run POST /sync-live with discover:true against a
+// real logged-in session to confirm/correct it, same as the chats endpoint.
+app.post('/send-message', async (req, res) => {
+  const { modelId, fanId, text } = req.body || {};
+  if (!modelId || !fanId || !text) {
+    return res.status(400).json({ error: 'Missing modelId, fanId, or text' });
+  }
+
+  const session = modelSessions[modelId];
+  if (!session) {
+    return res.json({ status: 'no_live_session', modelId });
+  }
+  session.lastActivity = Date.now();
+
+  try {
+    const endpoint = process.env.ONLYFANS_SEND_MESSAGE_ENDPOINT || `/api2/v2/chats/${fanId}/messages`;
+    const data = await session.page.evaluate(async (url, messageText) => {
+      const res = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: messageText }),
+      });
+      const bodyText = await res.text();
+      try {
+        return { ok: res.ok, status: res.status, json: JSON.parse(bodyText) };
+      } catch (e) {
+        return { ok: res.ok, status: res.status, text: bodyText.slice(0, 500) };
+      }
+    }, endpoint, text);
+
+    res.json({ status: 'success', modelId, data });
+  } catch (error) {
+    console.error(`[SEND-MESSAGE] Error for ${modelId}:`, error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({

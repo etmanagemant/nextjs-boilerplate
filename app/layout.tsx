@@ -43,6 +43,10 @@ export default async function RootLayout({
               <Link href="/" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Start</Link>
               <Link href="/dashboard" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Dashboard</Link>
               <Link href="/crm-inbox" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap"><span>🔮</span> OnlyFans</Link>
+              {role !== "admin" && (
+                <Link href="/stripchat" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap"><span>🎬</span> Stripchat</Link>
+              )}
+              <Link href="/assistant" title="Assistent" className="rounded-lg bg-[#0A0A0A] border border-[#AA7C11]/40 hover:border-[#D4AF37] px-3 py-2.5 text-sm shadow-md whitespace-nowrap">🤖</Link>
 
               {role === "admin" && (
                 <>
@@ -79,6 +83,7 @@ export default async function RootLayout({
                 <>
                   <Link href="/management" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Management</Link>
                   <Link href="/massmessage" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Massmessage</Link>
+                  <Link href="/stripchat" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap"><span>🎬</span> Stripchat</Link>
                   <Link href="/content-plan" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap"><span>📅</span> Plan</Link>
                   <Link href="/buchhaltung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Buchhaltung</Link>
                 </>

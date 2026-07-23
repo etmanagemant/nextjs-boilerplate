@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { vpsFetch } from "@/lib/vpsClient";
+import { getCurrentUser } from "@/lib/getCurrentUser";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,17 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: NextRequest) {
   try {
+    // This sends real clicks/keystrokes into a model's live, authenticated
+    // OnlyFans session - had no auth check at all, so anyone who found this
+    // URL and a modelId could remote-control that session without ever
+    // logging into the CRM. Any logged-in user is enough here (chatters
+    // legitimately call this too); the pages that surface it already gate
+    // by role.
+    const { user } = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { modelId, action, data } = body;
 

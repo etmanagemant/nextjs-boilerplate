@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { vpsFetch } from "@/lib/vpsClient";
 import { disconnectModelSession } from "@/lib/crmSession";
+import { getCurrentUser } from "@/lib/getCurrentUser";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,14 @@ const IGNORED_COOKIE_KEYS = ["vps_server", "session_id", "created_at", "verifica
  * so the UI can prompt the admin to reconnect instead of showing a dead view.
  */
 export async function GET(request: NextRequest) {
+  // This is the live view of a model's authenticated OnlyFans session - had
+  // no auth check at all, so anyone who found this URL and a modelId could
+  // watch it without ever logging into the CRM.
+  const { user } = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const modelId = request.nextUrl.searchParams.get("modelId");
   if (!modelId) {
     return NextResponse.json({ error: "Missing modelId" }, { status: 400 });

@@ -6,6 +6,16 @@ export const maxDuration = 60; // File uploads may take time
 
 export async function POST(request: NextRequest) {
   try {
+    // Had no auth check at all - anyone who found this URL could upload
+    // arbitrary images and insert content-plan posts for any model.
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const modelId = formData.get("modelId") as string;

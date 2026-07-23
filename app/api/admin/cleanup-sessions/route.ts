@@ -3,7 +3,29 @@ import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+async function validateAdmin() {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+    return (
+      user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
+      user.email === "etmanagement@gmail.com" ||
+      user.email === "etmanagemant@gmail.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest) {
+  // This disconnects every currently-active model session - previously had
+  // no auth check at all, so anyone who found the URL could knock every
+  // connected model offline with a single unauthenticated POST.
+  if (!(await validateAdmin())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
   console.log("[CLEANUP] Reset all sessions to disconnected");
 
   try {
