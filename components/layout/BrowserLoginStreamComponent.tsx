@@ -111,7 +111,10 @@ export default function BrowserLoginStreamComponent({
 
         setPhase("live");
         await fetchFrame();
-        pollRef.current = setInterval(fetchFrame, 600);
+        // Tightened from 600ms now that the VPS parallelizes the screenshot
+        // capture with the login-state check instead of doing them one
+        // after another.
+        pollRef.current = setInterval(fetchFrame, 300);
         // Focus immediately so the admin can start typing without first
         // having to click into the canvas.
         hiddenInputRef.current?.focus();

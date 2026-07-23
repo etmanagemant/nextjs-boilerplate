@@ -132,9 +132,15 @@ export function OnlyFansViewer({
         if (screenshotIntervalRef.current) {
           clearInterval(screenshotIntervalRef.current);
         }
+        // The VPS now runs the screenshot capture and login-state check in
+        // parallel instead of sequentially and dropped an unused page.title()
+        // call, so it responds faster - tightened from 400ms accordingly.
+        // Don't push this much further on the current 1 vCPU VPS without
+        // upgrading it first (see chat) - JPEG-encoding Full HD frames is
+        // CPU-bound and this is a shared single core.
         screenshotIntervalRef.current = setInterval(() => {
           fetchScreenshot();
-        }, 400);
+        }, 250);
       } catch (err: any) {
         console.error("[VIEWER] Initialization error:", err);
         setError(err.message || "Failed to initialize OnlyFans viewer");
@@ -168,9 +174,15 @@ export function OnlyFansViewer({
         if (screenshotIntervalRef.current) {
           clearInterval(screenshotIntervalRef.current);
         }
+        // The VPS now runs the screenshot capture and login-state check in
+        // parallel instead of sequentially and dropped an unused page.title()
+        // call, so it responds faster - tightened from 400ms accordingly.
+        // Don't push this much further on the current 1 vCPU VPS without
+        // upgrading it first (see chat) - JPEG-encoding Full HD frames is
+        // CPU-bound and this is a shared single core.
         screenshotIntervalRef.current = setInterval(() => {
           fetchScreenshot();
-        }, 400);
+        }, 250);
       } catch (err: any) {
         console.error("[VIEWER] Retry error:", err);
         setError(err.message || "Failed to initialize OnlyFans viewer");
