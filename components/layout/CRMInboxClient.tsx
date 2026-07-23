@@ -220,19 +220,11 @@ export default function CRMInboxClient({
                 userFullName={undefined}
               />
             </div>
-          ) : selectedOnlyFansModel && !selectedFanId ? (
-            // ONLYFANS ONLY MODE (OnlyFans open but no chat selected)
-            <div className="w-full bg-black">
-              <OnlyFansViewer
-                modelId={selectedOnlyFansModel}
-                modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}
-                isEmbedded={true}
-                isModal={false}
-                onClose={() => setSelectedOnlyFansModel(null)}
-              />
-            </div>
           ) : (
-            // CHAT MODE - Dynamic columns based on OnlyFans visibility
+            // CHAT MODE - chat list / thread / sales cockpit stay visible at all
+            // times (smiley bar, script library, etc.) - OnlyFans live view is
+            // an additional column, never a replacement for them. Use the
+            // viewer's own "Vollbild" button for a fully immersive OF view.
             <>
               {/* Column 1: Chat List */}
               <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-r border-[#D4AF37]/20 transition-all duration-200`}>
@@ -244,18 +236,24 @@ export default function CRMInboxClient({
                 />
               </div>
 
-              {/* Column 2: Chat Thread */}
+              {/* Column 2: Chat Thread (or a hint while no fan is selected yet) */}
               <div className={`${selectedOnlyFansModel ? 'w-2/5' : 'w-1/2'} transition-all duration-200`}>
-                <ChatThreadColumn
-                  messages={messages}
-                  currentMessage={currentMessage}
-                  onMessageChange={setCurrentMessage}
-                  onSendMessage={handleSendMessage}
-                  emojis={emojis}
-                  selectedEmoji={selectedScript ? "✓" : undefined}
-                  isLoading={isLoadingMessages}
-                  isSending={isSending}
-                />
+                {selectedFanId ? (
+                  <ChatThreadColumn
+                    messages={messages}
+                    currentMessage={currentMessage}
+                    onMessageChange={setCurrentMessage}
+                    onSendMessage={handleSendMessage}
+                    emojis={emojis}
+                    selectedEmoji={selectedScript ? "✓" : undefined}
+                    isLoading={isLoadingMessages}
+                    isSending={isSending}
+                  />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center bg-[#0A0A0A] border-r border-[#D4AF37]/20 p-6 text-center">
+                    <p className="text-slate-400 text-sm">Wähle links einen Fan aus, um den Chat zu öffnen.</p>
+                  </div>
+                )}
               </div>
 
               {/* Column 3: Sales Cockpit */}
