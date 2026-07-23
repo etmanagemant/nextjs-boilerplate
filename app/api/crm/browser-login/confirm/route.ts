@@ -49,7 +49,6 @@ export async function POST(req: NextRequest) {
         is_active: true,
         auth_cookies: cookieMap,
         last_verified_at: new Date().toISOString(),
-        created_by: user.id,
       },
       { onConflict: "model_id" }
     );
