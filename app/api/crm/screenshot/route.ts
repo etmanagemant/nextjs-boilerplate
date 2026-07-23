@@ -42,11 +42,20 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "No active session for this model" }, { status: 404 });
       }
       data = await fetchFrame(modelId);
+
+      // The restore call reported success but the VPS still has no live
+      // session for this model - that's a VPS/infra hiccup (e.g. Chrome
+      // failed to launch), NOT proof the cookies are invalid. Don't touch
+      // Supabase in that case, just ask the client to retry.
+      if (!data.hasSession) {
+        return NextResponse.json({ error: "VPS session unavailable, try again shortly" }, { status: 503 });
+      }
     }
 
-    // Only a session that was previously a *confirmed, working* connection
-    // counts as "expired" here - a fresh login-in-progress session is
-    // expected to show isLoggedIn:false until the admin actually logs in.
+    // Only a session that was previously a *confirmed, working* connection,
+    // and that we definitely got a real (logged-out) page for, counts as
+    // "expired" here - a fresh login-in-progress session is expected to show
+    // isLoggedIn:false until the admin actually logs in.
     if (wasAlreadyConnected && !data.isLoggedIn) {
       await disconnectModelSession(supabase, modelId, "session invalidated (OnlyFans logged it out)");
       return NextResponse.json({
@@ -93,5 +102,9 @@ async function tryRestoreFromSupabase(modelId: string, authCookies: unknown): Pr
     body: JSON.stringify({ modelId, cookies }),
   });
 
-  return response.ok;
+  if (!response.ok) return false;
+  // The VPS returns HTTP 200 even for internal errors (e.g. Chrome failed to
+  // launch), with { status: "error" } in the body - check that explicitly.
+  const body = await response.json().catch(() => null);
+  return body?.status === "success";
 }

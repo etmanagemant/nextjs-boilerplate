@@ -123,25 +123,39 @@ async function enforceSessionCap(excludeModelId) {
 }
 
 async function launchBrowser(modelId) {
-  return puppeteer.launch({
-    headless: false,
-    // Uses Puppeteer's own managed Chrome (downloaded into ~/.cache/puppeteer
-    // by `npm install`) unless CHROMIUM_PATH points somewhere else.
-    executablePath: process.env.CHROMIUM_PATH || puppeteer.executablePath(),
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--disable-sync',
-      '--no-first-run',
-      '--disable-background-networking',
-      '--disable-default-apps',
-      '--disable-extensions',
-      '--disable-blink-features=AutomationControlled',
-      `--user-data-dir=/tmp/chromium-${modelId}`,
-    ],
-  });
+  const launchOnce = () =>
+    puppeteer.launch({
+      headless: false,
+      // Uses Puppeteer's own managed Chrome (downloaded into ~/.cache/puppeteer
+      // by `npm install`) unless CHROMIUM_PATH points somewhere else.
+      executablePath: process.env.CHROMIUM_PATH || puppeteer.executablePath(),
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-sync',
+        '--no-first-run',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-extensions',
+        '--disable-blink-features=AutomationControlled',
+        `--user-data-dir=/tmp/chromium-${modelId}`,
+      ],
+    });
+
+  try {
+    return await launchOnce();
+  } catch (e) {
+    // Right after a service restart, Xvfb can take a moment to bind its
+    // display - retry once instead of failing the whole connect attempt.
+    if (String(e.message).includes('Missing X server')) {
+      console.warn('[LAUNCH] Missing X server, retrying in 2s...');
+      await new Promise((r) => setTimeout(r, 2000));
+      return await launchOnce();
+    }
+    throw e;
+  }
 }
 
 // Get an existing live session, or open a fresh one navigated to the login page
@@ -213,8 +227,11 @@ async function getLoginState(page) {
   try { pageTitle = await page.title(); } catch (e) { /* ignore */ }
   try { cookies = await page.cookies(); } catch (e) { /* ignore */ }
 
+  // OnlyFans sets a 'sess' cookie for anonymous visitors too, so that alone
+  // is not proof of login. 'auth_id' is only set once actually authenticated.
   const sessCookie = cookies.find((c) => c.name === 'sess');
-  const isLoggedIn = !!sessCookie?.value && !pageUrl.includes('/login');
+  const authIdCookie = cookies.find((c) => c.name === 'auth_id');
+  const isLoggedIn = !!sessCookie?.value && !!authIdCookie?.value && !pageUrl.includes('/login');
 
   return { isLoggedIn, cookieCount: cookies.length, pageUrl, pageTitle };
 }
