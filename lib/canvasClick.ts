@@ -1,27 +1,30 @@
 /**
- * These live-view canvases render a screenshot via CSS object-fit: contain
- * inside a box whose aspect ratio rarely matches the screenshot's 16:9 -
- * that leaves blank letterbox bars on two sides. getBoundingClientRect()
- * only reports the full box, not the actually-rendered content rect, so
- * mapping clicks off the box alone silently shifts every click by however
- * wide those bars are. That's what made clicks land on the wrong element
- * (a checkbox needing a click "somewhere else", a category list selecting
- * the row below the one clicked).
+ * These live-view elements (canvas or, since the MJPEG stream, <img>)
+ * render a screenshot via CSS object-fit: contain inside a box whose
+ * aspect ratio rarely matches the screenshot's 16:9 - that leaves blank
+ * letterbox bars on two sides. getBoundingClientRect() only reports the
+ * full box, not the actually-rendered content rect, so mapping clicks off
+ * the box alone silently shifts every click by however wide those bars
+ * are. That's what made clicks land on the wrong element (a checkbox
+ * needing a click "somewhere else", a category list selecting the row
+ * below the one clicked).
  *
  * Returns null when the click landed inside a letterbox bar - there's
  * nothing real to click there.
  */
-export function mapClickToCanvasCoords(
+export function mapClickToRenderedElement(
   clientX: number,
   clientY: number,
-  canvas: HTMLCanvasElement
+  el: HTMLElement,
+  intrinsicWidth: number,
+  intrinsicHeight: number
 ): { x: number; y: number } | null {
-  const rect = canvas.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0 || canvas.width === 0 || canvas.height === 0) {
+  const rect = el.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0 || intrinsicWidth === 0 || intrinsicHeight === 0) {
     return null;
   }
 
-  const contentAspect = canvas.width / canvas.height;
+  const contentAspect = intrinsicWidth / intrinsicHeight;
   const boxAspect = rect.width / rect.height;
 
   let renderedWidth = rect.width;
@@ -47,7 +50,25 @@ export function mapClickToCanvasCoords(
   }
 
   return {
-    x: (contentX / renderedWidth) * canvas.width,
-    y: (contentY / renderedHeight) * canvas.height,
+    x: (contentX / renderedWidth) * intrinsicWidth,
+    y: (contentY / renderedHeight) * intrinsicHeight,
   };
+}
+
+/** Convenience wrapper for the canvas-based login viewer. */
+export function mapClickToCanvasCoords(
+  clientX: number,
+  clientY: number,
+  canvas: HTMLCanvasElement
+): { x: number; y: number } | null {
+  return mapClickToRenderedElement(clientX, clientY, canvas, canvas.width, canvas.height);
+}
+
+/** Convenience wrapper for the MJPEG-streamed <img> live view. */
+export function mapClickToImageCoords(
+  clientX: number,
+  clientY: number,
+  img: HTMLImageElement
+): { x: number; y: number } | null {
+  return mapClickToRenderedElement(clientX, clientY, img, img.naturalWidth, img.naturalHeight);
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { mapClickToCanvasCoords } from "@/lib/canvasClick";
+import { mapClickToRenderedElement } from "@/lib/canvasClick";
 
 interface BrowserLoginStreamComponentProps {
   modelId: string;
@@ -14,6 +14,13 @@ interface BrowserLoginStreamComponentProps {
  * Opens a live, click-and-type-able view of a real headful browser running
  * on the VPS, so the admin can actually log in to OnlyFans. Once a valid
  * session is detected, shows "Creator verbinden" to persist the cookies.
+ *
+ * Renders the live MJPEG stream (see /api/crm/stream-url) as the primary
+ * view once it loads - a continuous pushed feed instead of one screenshot
+ * per poll request, which made CAPTCHA-solving in particular feel like a
+ * slideshow. The old poll+canvas path is kept as an automatic fallback
+ * (shown until the stream loads, or permanently if it never does) since
+ * it's proven and the stream is new, unverified-live code.
  */
 export default function BrowserLoginStreamComponent({
   modelId,
@@ -26,20 +33,25 @@ export default function BrowserLoginStreamComponent({
   const [error, setError] = useState<string>("");
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   // Keystrokes/clicks used to fire as independent parallel requests, which
   // could land on the VPS out of order and garble what you typed. Chain
   // them on this queue so each one waits for the previous to finish first.
   const queueRef = useRef<Promise<void>>(Promise.resolve());
-  // The background poll (every 600ms) and the per-keystroke interact calls
-  // both draw frames independently. A slow poll response can land AFTER a
-  // newer keystroke's response and paint a stale frame over it - the typed
+  // The background poll and the per-keystroke interact calls both draw
+  // frames independently. A slow poll response can land AFTER a newer
+  // keystroke's response and paint a stale frame over it - the typed
   // letter flashes and then looks like it never happened. Tag every request
   // with a sequence number at dispatch time and only ever draw the newest
   // one that arrives, regardless of which one resolves first.
   const frameSeqRef = useRef(0);
   const appliedSeqRef = useRef(0);
+
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [streamOk, setStreamOk] = useState(false);
+  const streamRetriesRef = useRef(0);
 
   const drawScreenshot = (base64OrDataUrl: string, seq: number) => {
     if (!canvasRef.current) return;
@@ -62,7 +74,7 @@ export default function BrowserLoginStreamComponent({
       const res = await fetch(`/api/crm/screenshot?modelId=${encodeURIComponent(modelId)}`);
       if (!res.ok) return;
       const data = await res.json();
-      if (data.screenshot) drawScreenshot(data.screenshot, seq);
+      if (!streamOk && data.screenshot) drawScreenshot(data.screenshot, seq);
       setIsLoggedIn(!!data.isLoggedIn);
     } catch (err) {
       console.error("[LOGIN-VIEW] frame error:", err);
@@ -82,7 +94,7 @@ export default function BrowserLoginStreamComponent({
         });
         if (!res.ok) return;
         const result = await res.json();
-        if (result.screenshot) drawScreenshot(result.screenshot, seq);
+        if (!streamOk && result.screenshot) drawScreenshot(result.screenshot, seq);
         setIsLoggedIn(!!result.isLoggedIn);
       } catch (err) {
         console.error("[LOGIN-VIEW] interact error:", err);
@@ -90,6 +102,28 @@ export default function BrowserLoginStreamComponent({
     };
     queueRef.current = queueRef.current.then(run);
     return queueRef.current;
+  };
+
+  const refreshStreamUrl = () => {
+    fetch(`/api/crm/stream-url?modelId=${encodeURIComponent(modelId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.streamUrl) setStreamUrl(data.streamUrl);
+      })
+      .catch(() => {
+        /* stream stays off, poll+canvas fallback carries the view */
+      });
+  };
+
+  const handleStreamError = () => {
+    setStreamOk(false);
+    streamRetriesRef.current += 1;
+    if (streamRetriesRef.current > 5) {
+      setStreamUrl(null); // give up for this session, poll+canvas keeps working
+      return;
+    }
+    // The token behind the failed connection was single-use - mint a fresh one.
+    refreshStreamUrl();
   };
 
   // Step 1: open the live browser on the VPS
@@ -111,10 +145,8 @@ export default function BrowserLoginStreamComponent({
 
         setPhase("live");
         await fetchFrame();
-        // Tightened from 600ms now that the VPS parallelizes the screenshot
-        // capture with the login-state check instead of doing them one
-        // after another.
         pollRef.current = setInterval(fetchFrame, 300);
+        refreshStreamUrl();
         // Focus immediately so the admin can start typing without first
         // having to click into the canvas.
         hiddenInputRef.current?.focus();
@@ -135,18 +167,47 @@ export default function BrowserLoginStreamComponent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelId]);
 
-  // Maps CSS click position to actual screenshot pixels, accounting for
+  // Once the stream is confirmed live, the poll is only needed as a login-
+  // state check, not for visual updates - slow it down so the VPS isn't
+  // encoding two full frame feeds at once.
+  useEffect(() => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(fetchFrame, streamOk ? 3000 : 300);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamOk, modelId]);
+
+  // Shared click handler for whichever element is currently visible (the
+  // streamed <img> once it's up, the polled <canvas> as fallback until
+  // then). Maps CSS click position to actual frame pixels, accounting for
   // object-contain letterboxing (see lib/canvasClick.ts) - without this a
   // click could land offset from the checkbox/button you actually clicked.
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current) return;
-    const mapped = mapClickToCanvasCoords(e.clientX, e.clientY, canvasRef.current);
+  const performClick = (
+    clientX: number,
+    clientY: number,
+    el: HTMLCanvasElement | HTMLImageElement,
+    intrinsicWidth: number,
+    intrinsicHeight: number
+  ) => {
+    const mapped = mapClickToRenderedElement(clientX, clientY, el, intrinsicWidth, intrinsicHeight);
     if (!mapped) {
       hiddenInputRef.current?.focus();
       return;
     }
     interact("click", mapped);
     hiddenInputRef.current?.focus();
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current) return;
+    performClick(e.clientX, e.clientY, canvasRef.current, canvasRef.current.width, canvasRef.current.height);
+  };
+
+  const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
+    if (!imgRef.current) return;
+    performClick(e.clientX, e.clientY, imgRef.current, imgRef.current.naturalWidth, imgRef.current.naturalHeight);
   };
 
   // Forward every keystroke typed into the hidden input to the live page
@@ -163,20 +224,22 @@ export default function BrowserLoginStreamComponent({
     }
   };
 
-  // Without this, a mouse wheel over the canvas did nothing - any part of
-  // the login/CAPTCHA page below the fold (or a CAPTCHA checkbox that needs
+  // Without this, a mouse wheel over the view did nothing - any part of the
+  // login/CAPTCHA page below the fold (or a CAPTCHA checkbox that needs
   // scrolling into view) was unreachable. Native (non-passive) listener
   // because React's synthetic onWheel can't preventDefault the CRM page's
   // own scroll. Wheel events fire many times per gesture, so accumulate and
-  // send at most once per 80ms.
+  // send at most once per 80ms. Attached to whichever element is currently
+  // mounted (img or canvas).
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const el: HTMLElement | null = streamUrl && streamOk ? imgRef.current : canvasRef.current;
+    if (!el) return;
 
     let accumulated = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
-    const onWheel = (e: WheelEvent) => {
+    const onWheel = (rawEvent: Event) => {
+      const e = rawEvent as WheelEvent;
       e.preventDefault();
       accumulated += e.deltaY;
       if (timer) return;
@@ -188,13 +251,12 @@ export default function BrowserLoginStreamComponent({
       }, 80);
     };
 
-    canvas.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("wheel", onWheel, { passive: false });
     return () => {
-      canvas.removeEventListener("wheel", onWheel);
+      el.removeEventListener("wheel", onWheel);
       if (timer) clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelId]);
+  }, [modelId, streamUrl, streamOk]);
 
   const handleConfirm = async () => {
     setPhase("confirming");
@@ -246,11 +308,23 @@ export default function BrowserLoginStreamComponent({
               Klicke in das Fenster und logge dich mit den Model-Zugangsdaten bei OnlyFans ein. Klicken fokussiert Felder, danach kannst du direkt tippen.
             </p>
             <div className="relative bg-black rounded-lg overflow-hidden border border-[#D4AF37]/30">
-              <canvas
-                ref={canvasRef}
-                onClick={handleCanvasClick}
-                className="w-full h-auto max-h-[80vh] object-contain cursor-pointer block mx-auto"
-              />
+              {streamUrl ? (
+                <img
+                  ref={imgRef}
+                  src={streamUrl}
+                  onLoad={() => setStreamOk(true)}
+                  onError={handleStreamError}
+                  onClick={handleImageClick}
+                  className="w-full h-auto max-h-[80vh] object-contain cursor-pointer block mx-auto"
+                  alt="Live-Login-Ansicht"
+                />
+              ) : (
+                <canvas
+                  ref={canvasRef}
+                  onClick={handleCanvasClick}
+                  className="w-full h-auto max-h-[80vh] object-contain cursor-pointer block mx-auto"
+                />
+              )}
               {/* Invisible input that captures keystrokes and forwards them to the live page */}
               <input
                 ref={hiddenInputRef}

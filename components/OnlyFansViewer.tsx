@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { mapClickToCanvasCoords } from "@/lib/canvasClick";
+import { mapClickToRenderedElement } from "@/lib/canvasClick";
 
 // Keystrokes/clicks used to fire as independent parallel requests, which
 // could land on the VPS out of order and garble what's typed. Chain calls
@@ -42,6 +42,15 @@ const DEFAULT_EMOJIS = ["😊", "😂", "🔥", "❤️", "😍", "👏", "🎉"
 /**
  * OnlyFansViewer - Modal component for viewing OnlyFans streams
  * Can be used as a modal overlay or embedded viewer
+ *
+ * Renders the live MJPEG stream (see /api/crm/stream-url + the VPS's
+ * /stream route) as the primary view - a continuous pushed video feed
+ * instead of the old poll-one-screenshot-per-request approach, which made
+ * typing and especially CAPTCHA-solving feel like a slideshow. The old
+ * poll+canvas path is kept as an automatic fallback (rendered whenever the
+ * stream hasn't loaded) since it's proven and this is new, unverified-live
+ * code - if the stream never loads (VPS unreachable directly, blocked,
+ * etc.) the viewer just keeps working the way it always did.
  */
 export function OnlyFansViewer({
   modelId,
@@ -52,10 +61,10 @@ export function OnlyFansViewer({
   emojis = DEFAULT_EMOJIS,
 }: OnlyFansViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
-  const [lastScreenshot, setLastScreenshot] = useState<string | null>(null);
   const screenshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // The background poll and click/keypress-triggered redraws all fetch and
   // draw independently. A slow poll response landing after a newer
@@ -64,6 +73,10 @@ export function OnlyFansViewer({
   // at dispatch time and only ever draw the newest one that arrives.
   const frameSeqRef = useRef(0);
   const appliedSeqRef = useRef(0);
+
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [streamOk, setStreamOk] = useState(false);
+  const streamRetriesRef = useRef(0);
 
   const drawScreenshot = (base64: string, seq: number) => {
     if (!canvasRef.current) return;
@@ -82,7 +95,10 @@ export function OnlyFansViewer({
     img.src = `data:image/jpeg;base64,${base64}`;
   };
 
-  // Fetch screenshot
+  // Fetch screenshot - also doubles as the session health check (expired /
+  // needs-restore detection), which the raw MJPEG stream has no concept of,
+  // so this keeps running even once the stream is live (just much less
+  // often, since it's no longer needed for visual updates then).
   const fetchScreenshot = async () => {
     const seq = ++frameSeqRef.current;
     try {
@@ -105,9 +121,7 @@ export function OnlyFansViewer({
         return;
       }
 
-      setLastScreenshot(data.screenshot);
       setError(null);
-
       if (data.screenshot) drawScreenshot(data.screenshot, seq);
     } catch (err: any) {
       console.error("[VIEWER] Screenshot error:", err);
@@ -116,88 +130,71 @@ export function OnlyFansViewer({
     }
   };
 
-  // Start polling screenshots
+  const refreshStreamUrl = () => {
+    fetch(`/api/crm/stream-url?modelId=${encodeURIComponent(modelId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.streamUrl) setStreamUrl(data.streamUrl);
+      })
+      .catch(() => {
+        /* stream stays off, poll+canvas fallback carries the view */
+      });
+  };
+
+  const handleStreamError = () => {
+    setStreamOk(false);
+    streamRetriesRef.current += 1;
+    if (streamRetriesRef.current > 5) {
+      // Give up on streaming for this mount - the poll+canvas fallback
+      // (already running) keeps the view working.
+      setStreamUrl(null);
+      return;
+    }
+    // The token behind the failed connection was single-use - mint a fresh
+    // one before retrying.
+    refreshStreamUrl();
+  };
+
+  // Initial health check + start trying to open the live stream.
   useEffect(() => {
-    console.log("[VIEWER] Starting for model:", modelId);
     setIsLoading(true);
     setError(null);
+    setSessionExpired(false);
+    setStreamUrl(null);
+    setStreamOk(false);
+    streamRetriesRef.current = 0;
 
-    const initializeAndPoll = async () => {
-      try {
-        // The screenshot route transparently restores the session from saved
-        // cookies if the VPS browser isn't running anymore, so we can just
-        // start polling directly.
-        await fetchScreenshot();
-
-        if (screenshotIntervalRef.current) {
-          clearInterval(screenshotIntervalRef.current);
-        }
-        // The VPS now runs the screenshot capture and login-state check in
-        // parallel instead of sequentially and dropped an unused page.title()
-        // call, so it responds faster - tightened from 400ms accordingly.
-        // Don't push this much further on the current 1 vCPU VPS without
-        // upgrading it first (see chat) - JPEG-encoding Full HD frames is
-        // CPU-bound and this is a shared single core.
-        screenshotIntervalRef.current = setInterval(() => {
-          fetchScreenshot();
-        }, 250);
-      } catch (err: any) {
-        console.error("[VIEWER] Initialization error:", err);
-        setError(err.message || "Failed to initialize OnlyFans viewer");
-        setIsLoading(false);
-      }
-    };
-
-    initializeAndPoll();
-
-    return () => {
-      if (screenshotIntervalRef.current) {
-        clearInterval(screenshotIntervalRef.current);
-      }
-    };
+    fetchScreenshot();
+    refreshStreamUrl();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelId]);
 
-  // Handle canvas click
+  // Poll interval: fast (250ms) until the stream takes over, then slows to
+  // a 3s health-only check once streamOk - running both at full speed would
+  // double the VPS's screenshot-encoding load for no visible benefit, since
+  // the stream already handles visual updates at that point.
+  useEffect(() => {
+    if (screenshotIntervalRef.current) clearInterval(screenshotIntervalRef.current);
+    screenshotIntervalRef.current = setInterval(fetchScreenshot, streamOk ? 3000 : 250);
+    return () => {
+      if (screenshotIntervalRef.current) clearInterval(screenshotIntervalRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamOk, modelId]);
+
   const handleRetry = () => {
     setError(null);
     setIsLoading(true);
-    setLastScreenshot(null);
-    
-    if (screenshotIntervalRef.current) {
-      clearInterval(screenshotIntervalRef.current);
-    }
-
-    const initializeAndPoll = async () => {
-      try {
-        await fetchScreenshot();
-
-        if (screenshotIntervalRef.current) {
-          clearInterval(screenshotIntervalRef.current);
-        }
-        // The VPS now runs the screenshot capture and login-state check in
-        // parallel instead of sequentially and dropped an unused page.title()
-        // call, so it responds faster - tightened from 400ms accordingly.
-        // Don't push this much further on the current 1 vCPU VPS without
-        // upgrading it first (see chat) - JPEG-encoding Full HD frames is
-        // CPU-bound and this is a shared single core.
-        screenshotIntervalRef.current = setInterval(() => {
-          fetchScreenshot();
-        }, 250);
-      } catch (err: any) {
-        console.error("[VIEWER] Retry error:", err);
-        setError(err.message || "Failed to initialize OnlyFans viewer");
-        setIsLoading(false);
-      }
-    };
-
-    initializeAndPoll();
+    streamRetriesRef.current = 0;
+    fetchScreenshot();
+    refreshStreamUrl();
   };
 
   const handleRefreshSession = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const response = await fetch("/api/crm/interact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -213,7 +210,6 @@ export function OnlyFansViewer({
       }
 
       const data = await response.json();
-      setLastScreenshot(data.screenshot);
       if (data.screenshot) drawScreenshot(data.screenshot, ++frameSeqRef.current);
       else setIsLoading(false);
     } catch (err: any) {
@@ -224,28 +220,29 @@ export function OnlyFansViewer({
 
   const hiddenInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle canvas click - map from displayed CSS position to actual
-  // screenshot pixels, accounting for object-contain letterboxing (see
-  // lib/canvasClick.ts for why this can't just be a straight width ratio).
-  const handleCanvasClick = async (
-    event: React.MouseEvent<HTMLCanvasElement>
+  // Shared click handler for whichever element is currently visible (the
+  // streamed <img> once it's up, the polled <canvas> as fallback until
+  // then). Maps CSS position to actual frame pixels, accounting for
+  // object-contain letterboxing (see lib/canvasClick.ts).
+  const performClick = async (
+    clientX: number,
+    clientY: number,
+    el: HTMLCanvasElement | HTMLImageElement,
+    intrinsicWidth: number,
+    intrinsicHeight: number
   ) => {
-    if (!canvasRef.current) return;
-
-    const mapped = mapClickToCanvasCoords(event.clientX, event.clientY, canvasRef.current);
+    const mapped = mapClickToRenderedElement(clientX, clientY, el, intrinsicWidth, intrinsicHeight);
     if (!mapped) {
       hiddenInputRef.current?.focus();
       return;
     }
-    const { x, y } = mapped;
 
     const seq = ++frameSeqRef.current;
     try {
-      const data = await interact(modelId, "click", { x, y });
-      if (data.screenshot) {
-        setLastScreenshot(data.screenshot);
-        drawScreenshot(data.screenshot, seq);
-      }
+      const data = await interact(modelId, "click", mapped);
+      // Only need to hand-draw the response when there's no live stream
+      // doing that automatically.
+      if (!streamOk && data.screenshot) drawScreenshot(data.screenshot, seq);
     } catch (err) {
       console.error("[VIEWER] Click error:", err);
     }
@@ -253,17 +250,27 @@ export function OnlyFansViewer({
     hiddenInputRef.current?.focus();
   };
 
+  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current) return;
+    performClick(event.clientX, event.clientY, canvasRef.current, canvasRef.current.width, canvasRef.current.height);
+  };
+
+  const handleImageClick = (event: React.MouseEvent<HTMLImageElement>) => {
+    if (!imgRef.current) return;
+    performClick(event.clientX, event.clientY, imgRef.current, imgRef.current.naturalWidth, imgRef.current.naturalHeight);
+  };
+
   // Forward keystrokes typed into the hidden input to whatever is focused on
-  // the live page, and draw the response immediately instead of waiting up
-  // to 400ms for the next background poll - that wait is what made typing
-  // feel unresponsive.
+  // the live page. Only need to hand-draw the response when there's no live
+  // stream already showing it - otherwise waiting on that draw just adds
+  // needless work.
   const handleHiddenInput = (event: React.ChangeEvent<HTMLInputElement>) => {
     const text = event.target.value;
     event.target.value = "";
     if (!text) return;
     const seq = ++frameSeqRef.current;
     interact(modelId, "keypress", { text })
-      .then((data) => data.screenshot && drawScreenshot(data.screenshot, seq))
+      .then((data) => !streamOk && data.screenshot && drawScreenshot(data.screenshot, seq))
       .catch((err) => console.error("[VIEWER] Type error:", err));
   };
 
@@ -272,7 +279,7 @@ export function OnlyFansViewer({
       event.preventDefault();
       const seq = ++frameSeqRef.current;
       interact(modelId, "key", { key: event.key })
-        .then((data) => data.screenshot && drawScreenshot(data.screenshot, seq))
+        .then((data) => !streamOk && data.screenshot && drawScreenshot(data.screenshot, seq))
         .catch((err) => console.error("[VIEWER] Key error:", err));
     }
   };
@@ -282,27 +289,29 @@ export function OnlyFansViewer({
   const handleEmojiClick = (emoji: string) => {
     const seq = ++frameSeqRef.current;
     interact(modelId, "keypress", { text: emoji })
-      .then((data) => data.screenshot && drawScreenshot(data.screenshot, seq))
+      .then((data) => !streamOk && data.screenshot && drawScreenshot(data.screenshot, seq))
       .catch((err) => console.error("[VIEWER] Emoji error:", err));
   };
 
   // There was no way to scroll the live page at all before this - a mouse
-  // wheel over the canvas did nothing (it's just a static image), so any
-  // list longer than one screen (fan list, category list, chat history) was
-  // completely unreachable, and clicks based on a scroll position the real
-  // page was never actually at would land on the wrong row. Uses a native
-  // (non-passive) listener because React's synthetic onWheel is passive by
-  // default and can't preventDefault to stop the CRM page itself from
-  // scrolling instead of the embedded view. Wheel events fire dozens of
-  // times per gesture, so accumulate and send at most once per 80ms.
+  // wheel over the view did nothing, so any list longer than one screen
+  // (fan list, category list, chat history) was completely unreachable, and
+  // clicks based on a scroll position the real page was never actually at
+  // would land on the wrong row. Uses a native (non-passive) listener
+  // because React's synthetic onWheel is passive by default and can't
+  // preventDefault to stop the CRM page itself from scrolling instead of
+  // the embedded view. Wheel events fire dozens of times per gesture, so
+  // accumulate and send at most once per 80ms. Attached to whichever
+  // element is currently mounted (img or canvas).
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const el: HTMLElement | null = streamUrl && streamOk ? imgRef.current : canvasRef.current;
+    if (!el) return;
 
     let accumulated = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
-    const onWheel = (event: WheelEvent) => {
+    const onWheel = (rawEvent: Event) => {
+      const event = rawEvent as WheelEvent;
       event.preventDefault();
       accumulated += event.deltaY;
       if (timer) return;
@@ -312,17 +321,17 @@ export function OnlyFansViewer({
         timer = null;
         const seq = ++frameSeqRef.current;
         interact(modelId, "scroll", { amount })
-          .then((data) => data.screenshot && drawScreenshot(data.screenshot, seq))
+          .then((data) => !streamOk && data.screenshot && drawScreenshot(data.screenshot, seq))
           .catch((err) => console.error("[VIEWER] Scroll error:", err));
       }, 80);
     };
 
-    canvas.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("wheel", onWheel, { passive: false });
     return () => {
-      canvas.removeEventListener("wheel", onWheel);
+      el.removeEventListener("wheel", onWheel);
       if (timer) clearTimeout(timer);
     };
-  }, [modelId]);
+  }, [modelId, streamUrl, streamOk]);
 
   // Wrapper element (can be modal, embedded, or standalone)
   const viewerContent = (
@@ -363,7 +372,7 @@ export function OnlyFansViewer({
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/80 to-[#0A0A0A]/90 z-10 backdrop-blur-sm p-4">
           <div className="bg-gradient-to-br from-[#2D1A0A] to-[#1A0F05] border-2 border-[#D4AF37]/40 rounded-xl p-6 text-[#F3E5AB] max-w-2xl shadow-2xl">
             <p className="font-black mb-3 text-lg text-[#D4AF37] uppercase tracking-wider">⚠️ OnlyFans Stream Fehler</p>
-            
+
             {/* Error Message */}
             <div className="bg-[#050505]/80 border border-[#D4AF37]/20 rounded-lg p-4 mb-4 text-sm font-mono text-slate-300">
               <p>{error}</p>
@@ -446,13 +455,30 @@ export function OnlyFansViewer({
         </div>
       )}
 
-      {/* Canvas - OnlyFans Stream with dark border */}
-      <canvas
-        ref={canvasRef}
-        onClick={handleCanvasClick}
-        className="w-full h-full object-contain cursor-pointer border-t border-[#D4AF37]/20"
-        style={{ maxHeight: "100%" }}
-      />
+      {/* Live MJPEG stream (primary) or polled canvas (fallback until the
+          stream loads, or permanently if it never does) */}
+      {streamUrl ? (
+        <img
+          ref={imgRef}
+          src={streamUrl}
+          onLoad={() => {
+            setStreamOk(true);
+            setIsLoading(false);
+          }}
+          onError={handleStreamError}
+          onClick={handleImageClick}
+          className="w-full h-full object-contain cursor-pointer border-t border-[#D4AF37]/20"
+          style={{ maxHeight: "100%" }}
+          alt="OnlyFans Live-Ansicht"
+        />
+      ) : (
+        <canvas
+          ref={canvasRef}
+          onClick={handleCanvasClick}
+          className="w-full h-full object-contain cursor-pointer border-t border-[#D4AF37]/20"
+          style={{ maxHeight: "100%" }}
+        />
+      )}
 
       {/* Invisible input that captures keystrokes and forwards them to the live page */}
       <input

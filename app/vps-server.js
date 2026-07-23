@@ -2,6 +2,7 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const fs = require('fs/promises');
 const path = require('path');
+const crypto = require('crypto');
 
 // ============================================================================
 // PROCESS HARDENING - Global Exception Shield
@@ -32,9 +33,12 @@ app.use((req, res, next) => {
 
 // This server has no auth of its own beyond this shared secret - anyone who
 // knows it can control every connected model's live browser. /health stays
-// open so uptime monitors can hit it without the secret.
+// open so uptime monitors can hit it without the secret. /stream is hit
+// directly by the browser (via <img src>, not fetch, so it can't attach the
+// secret header) and instead checks its own short-lived per-request token -
+// see streamTokens below.
 app.use((req, res, next) => {
-  if (req.path === '/health') return next();
+  if (req.path === '/health' || req.path === '/stream') return next();
   const expected = process.env.VPS_SHARED_SECRET;
   if (!expected) return next(); // not configured - fail open rather than lock everyone out
   if (req.headers['x-vps-secret'] !== expected) {
@@ -52,6 +56,19 @@ app.use((req, res, next) => {
 
 const modelSessions = {}; // modelId -> { browser, page, lastActivity, createdAt }
 const IDLE_TIMEOUT_MS = 20 * 60 * 1000; // close a session after 20 min of no requests
+
+// Short-lived, single-use tokens for /stream (see the auth middleware above
+// for why that route can't use the shared secret). Next.js mints one via
+// POST /stream-token (which IS shared-secret protected) right before the
+// browser opens the stream, so the permanent secret never reaches the
+// client - only this one-shot, 60-second-lived token does.
+const streamTokens = {}; // token -> { modelId, expiresAt }
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, entry] of Object.entries(streamTokens)) {
+    if (entry.expiresAt < now) delete streamTokens[token];
+  }
+}, 60 * 1000);
 // Your Vultr box (ETMANAGEMENT, 80.240.30.188) has 1GB RAM - a single headful
 // Chromium session already uses 300-500MB, so default to ONE at a time.
 // Bump via MAX_CONCURRENT_SESSIONS env var if you upgrade the VPS.
@@ -629,6 +646,75 @@ app.post('/send-message', async (req, res) => {
     console.error(`[SEND-MESSAGE] Error for ${modelId}:`, error.message);
     res.status(200).json({ status: 'error', error: error.message });
   }
+});
+
+// Mint a one-shot token for /stream. Called by Next.js (shared-secret
+// protected), never directly by the browser.
+app.post('/stream-token', (req, res) => {
+  const { modelId } = req.body || {};
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+
+  const token = crypto.randomBytes(24).toString('hex');
+  streamTokens[token] = { modelId, expiresAt: Date.now() + 60 * 1000 };
+  res.json({ status: 'success', token });
+});
+
+// Continuous MJPEG stream of a model's live session - the polling
+// screenshot-per-request approach meant every frame paid for a full
+// HTTP round-trip, which made typing/clicking (and especially CAPTCHAs)
+// feel like a slideshow. This pushes frames from a tight server-side loop
+// over one long-lived connection instead, and is hit directly by the
+// browser (bypassing Vercel, whose serverless functions would kill a
+// connection this long-lived after a few seconds) - see the /stream-token
+// route and the auth middleware above for how that's kept safe without
+// exposing the permanent shared secret to the client.
+app.get('/stream', (req, res) => {
+  const { modelId, token } = req.query;
+  const entry = token && streamTokens[token];
+  if (!entry || entry.modelId !== modelId || entry.expiresAt < Date.now()) {
+    return res.status(401).end('Unauthorized or expired token');
+  }
+  delete streamTokens[token]; // single-use
+
+  const session = modelSessions[modelId];
+  if (!session) return res.status(404).end('No active session for this model');
+
+  res.writeHead(200, {
+    'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    Connection: 'keep-alive',
+  });
+
+  let closed = false;
+  req.on('close', () => {
+    closed = true;
+  });
+
+  const pushFrame = async () => {
+    if (closed) return;
+    const current = modelSessions[modelId];
+    if (!current) {
+      return res.end();
+    }
+    current.lastActivity = Date.now();
+    try {
+      const jpeg = await Promise.race([
+        current.page.screenshot({ encoding: 'binary', type: 'jpeg', quality: 70 }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+      ]);
+      if (!closed) {
+        res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`);
+        res.write(jpeg);
+        res.write('\r\n');
+      }
+    } catch (e) {
+      // Page mid-navigation or a slow frame - just skip it, the next one
+      // will usually succeed.
+    }
+    if (!closed) setTimeout(pushFrame, 150);
+  };
+
+  pushFrame();
 });
 
 // Health check
