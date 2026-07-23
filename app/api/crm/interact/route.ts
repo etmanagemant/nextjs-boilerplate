@@ -3,11 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 /**
- * Send interaction to Puppeteer VPS server (click, type, scroll, navigate)
- * POST /api/crm/interact
- * 
- * Forwards to VPS server
- * Returns: New screenshot after action
+ * Forward a click / keypress / scroll / navigate / reload to a model's live
+ * VPS browser session (used by both the login viewer and the chatter live view).
+ * POST /api/crm/interact  Body: { modelId, action, data }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -15,61 +13,41 @@ export async function POST(request: NextRequest) {
     const { modelId, action, data } = body;
 
     if (!modelId || !action) {
-      return NextResponse.json(
-        { error: "Missing modelId or action" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing modelId or action" }, { status: 400 });
     }
-
-    console.log(`[INTERACT] Action: ${action} for model: ${modelId}`);
 
     const vpsUrl = process.env.VPS_API_URL;
     if (!vpsUrl) {
-      console.error("[INTERACT] ❌ VPS_API_URL not configured");
-      return NextResponse.json(
-        { error: "VPS not configured" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "VPS_API_URL not configured" }, { status: 500 });
     }
 
-    const vpsEndpoint = `${vpsUrl}/interact`;
-
-    console.log("[INTERACT] Calling VPS:", vpsEndpoint);
-
-    // Forward to VPS server
-    const response = await fetch(vpsEndpoint, {
+    const response = await fetch(`${vpsUrl}/interact`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        modelId,
-        action,
-        data: data || {},
-      }),
+      body: JSON.stringify({ modelId, action, data: data || {} }),
     });
 
+    if (response.status === 404) {
+      return NextResponse.json({ error: "No active session for this model" }, { status: 404 });
+    }
     if (!response.ok) {
       throw new Error(`VPS returned ${response.status}`);
     }
 
     const result = await response.json();
 
-    console.log("[INTERACT] ✅ Action completed on VPS");
-
-    return NextResponse.json(
-      {
-        status: "success",
-        action: action,
-        screenshot: result.screenshot,
-        modelId: modelId,
-        timestamp: new Date().toISOString(),
-      },
-      { status: 200 }
-    );
+    return NextResponse.json({
+      status: "success",
+      action,
+      screenshot: result.screenshot,
+      isLoggedIn: result.isLoggedIn,
+      pageUrl: result.pageUrl,
+      pageTitle: result.pageTitle,
+      modelId,
+      timestamp: new Date().toISOString(),
+    });
   } catch (err: any) {
-    console.error("[INTERACT] ❌ Error:", err?.message);
-    return NextResponse.json(
-      { error: err?.message || "Interaction failed" },
-      { status: 500 }
-    );
+    console.error("[INTERACT] Error:", err?.message);
+    return NextResponse.json({ error: err?.message || "Interaction failed" }, { status: 500 });
   }
 }

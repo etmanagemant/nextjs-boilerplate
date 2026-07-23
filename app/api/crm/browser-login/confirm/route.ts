@@ -1,129 +1,75 @@
-import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { NextRequest, NextResponse } from "next/server";
+import { getRequestAdmin } from "@/lib/crmAdmin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 export const runtime = "nodejs";
 
-async function validateAdmin(req: NextRequest) {
-  try {
-    const supabase = createSupabaseAdminClient();
-    const authHeader = req.headers.get("authorization");
-    
-    if (!authHeader) return false;
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data, error } = await supabase.auth.getUser(token);
-
-    if (error || !data?.user) return false;
-
-    const user = data.user;
-    if (
-      user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
-      user.email === "etmanagement@gmail.com" ||
-      user.email === "etmanagemant@gmail.com"
-    ) {
-      return true;
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    
-    return profile?.role === "admin";
-  } catch (err) {
-    console.error("[validateAdmin] Error:", err);
-    return false;
-  }
-}
-
+/**
+ * Admin clicked "Creator verbinden" after the live view showed a successful
+ * login. Pull the cookies from the still-running VPS browser and persist
+ * them to Supabase. The VPS browser is intentionally left running - it keeps
+ * serving as the live view for chatters afterwards.
+ * POST /api/crm/browser-login/confirm  Body: { modelId }
+ */
 export async function POST(req: NextRequest) {
-  console.log("[BROWSER-LOGIN CONFIRM] Admin clicked confirmation button");
-
   try {
-    const isAdmin = await validateAdmin(req);
-    if (!isAdmin) {
-      return NextResponse.json(
-        { status: "error", error: "Unauthorized" },
-        { status: 403 }
-      );
+    const { isAdmin, supabase, user } = await getRequestAdmin();
+    if (!isAdmin || !user) {
+      return NextResponse.json({ status: "error", error: "Unauthorized" }, { status: 403 });
     }
 
-    const { modelId, sessionId } = await req.json();
-
-    if (!modelId || !sessionId) {
-      return NextResponse.json(
-        { status: "error", error: "Missing modelId or sessionId" },
-        { status: 400 }
-      );
+    const { modelId } = await req.json();
+    if (!modelId) {
+      return NextResponse.json({ status: "error", error: "Missing modelId" }, { status: 400 });
     }
 
     const vpsUrl = process.env.VPS_API_URL;
     if (!vpsUrl) {
-      return NextResponse.json(
-        { status: "error", error: "VPS not configured" },
-        { status: 500 }
-      );
+      return NextResponse.json({ status: "error", error: "VPS_API_URL not configured" }, { status: 500 });
     }
 
-    console.log(`[BROWSER-LOGIN CONFIRM] Saving session ${sessionId} for model ${modelId}`);
-
-    // Call VPS /save-session to persist cookies
-    const vpsResponse = await fetch(`${vpsUrl}/save-session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId }),
-    });
-
-    if (!vpsResponse.ok) {
-      const error = await vpsResponse.text();
-      console.error(`[BROWSER-LOGIN CONFIRM] VPS error: ${vpsResponse.status}`);
-      throw new Error(`VPS error: ${vpsResponse.status}`);
+    const cookiesResponse = await fetch(`${vpsUrl}/cookies?modelId=${encodeURIComponent(modelId)}`);
+    if (!cookiesResponse.ok) {
+      const text = await cookiesResponse.text();
+      throw new Error(`VPS error ${cookiesResponse.status}: ${text}`);
     }
 
-    const vpsSaveData = await vpsResponse.json();
-    console.log(`[BROWSER-LOGIN CONFIRM] ✅ VPS saved cookies: ${vpsSaveData.cookieCount} cookies`);
+    const { cookies } = await cookiesResponse.json();
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      return NextResponse.json({ status: "error", error: "No cookies found - login not detected yet" }, { status: 400 });
+    }
 
-    // Save session to Supabase
-    const supabase = createSupabaseAdminClient();
-    const { data: upsertData, error: upsertError } = await supabase
-      .from("crm_model_sessions")
-      .upsert(
-        {
-          model_id: modelId,
-          is_active: true,
-          last_verified_at: new Date().toISOString(),
-          auth_cookies: {
-            vps_server: vpsUrl,
-            session_id: sessionId,
-            created_at: new Date().toISOString(),
-            verification_status: "verified",
-            cookie_count: vpsSaveData.cookieCount,
-          },
-        },
-        { onConflict: "model_id" }
-      );
+    // Store as a flat { name: value } map - the same shape send-message-to-onlyfans
+    // and the manual session injector already use.
+    const cookieMap: Record<string, string> = {};
+    for (const c of cookies) {
+      if (c?.name) cookieMap[c.name] = c.value;
+    }
+
+    const { error: upsertError } = await supabase.from("crm_model_sessions").upsert(
+      {
+        model_id: modelId,
+        is_active: true,
+        auth_cookies: cookieMap,
+        last_verified_at: new Date().toISOString(),
+        created_by: user.id,
+      },
+      { onConflict: "model_id" }
+    );
 
     if (upsertError) {
-      console.error("[BROWSER-LOGIN CONFIRM] Supabase error:", upsertError.message);
-      throw upsertError;
+      throw new Error(`Database error: ${upsertError.message}`);
     }
-
-    console.log(`[BROWSER-LOGIN CONFIRM] ✅ Session saved to Supabase for model ${modelId}`);
 
     return NextResponse.json({
       status: "success",
       modelId,
       message: "Model connected successfully!",
-      cookieCount: vpsSaveData.cookieCount,
-    }, { status: 200 });
+      cookieCount: cookies.length,
+    });
   } catch (error: any) {
     console.error("[BROWSER-LOGIN CONFIRM] Error:", error.message);
-    return NextResponse.json(
-      { status: "error", error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ status: "error", error: error.message }, { status: 500 });
   }
 }

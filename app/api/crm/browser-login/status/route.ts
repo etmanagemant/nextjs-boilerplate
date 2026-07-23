@@ -1,115 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { getRequestAdmin } from "@/lib/crmAdmin";
 
-export const dynamic = "force-dynamic"; // Required for server auth
-export const maxDuration = 30; // Status checks should be fast
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-// 🔐 SECURITY: Validate admin access on server
-async function validateAdmin(req: NextRequest) {
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) return false;
-
-    if (
-      user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
-      user.email === "etmanagement@gmail.com" ||
-      user.email === "etmanagemant@gmail.com"
-    ) {
-      return true;
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    return profile?.role === "admin";
-  } catch (err) {
-    console.error("Admin validation error:", err);
-    return false;
-  }
-}
-
+/**
+ * Poll whether the admin has finished logging in inside the live browser.
+ * GET /api/crm/browser-login/status?modelId=xxx
+ */
 export async function GET(req: NextRequest) {
   try {
-    // 🔐 SECURITY: Validate admin
-    const isAdmin = await validateAdmin(req);
+    const { isAdmin } = await getRequestAdmin();
     if (!isAdmin) {
-      return NextResponse.json(
-        { error: "Unauthorized - Admin access required" },
-        { status: 403 }
-      );
+      return NextResponse.json({ status: "error", error: "Unauthorized" }, { status: 403 });
     }
 
-    // Extract modelId from query params
     const modelId = req.nextUrl.searchParams.get("modelId");
-
-    if (!modelId || typeof modelId !== "string") {
-      return NextResponse.json(
-        { error: "Missing or invalid modelId parameter" },
-        { status: 400 }
-      );
+    if (!modelId) {
+      return NextResponse.json({ status: "error", error: "Missing modelId" }, { status: 400 });
     }
 
-    console.log(`📊 Checking browser status for model: ${modelId}`);
-
-    const supabase = await createClient();
-
-    // Query the session to check auth_cookies
-    const { data: session, error } = await supabase
-      .from("crm_model_sessions")
-      .select("id, model_id, is_active, auth_cookies, last_verified_at")
-      .eq("model_id", modelId)
-      .maybeSingle();
-
-    if (error) {
-      console.error("Supabase error:", error);
-      return NextResponse.json(
-        {
-          authenticated: false,
-          status: "error",
-          message: error.message,
-        },
-        { status: 500 }
-      );
+    const vpsUrl = process.env.VPS_API_URL;
+    if (!vpsUrl) {
+      return NextResponse.json({ status: "error", error: "VPS_API_URL not configured" }, { status: 500 });
     }
 
-    // Check if session exists and has valid VPS auth_cookies
-    const isAuthenticated =
-      session &&
-      session.is_active &&
-      session.auth_cookies &&
-      typeof session.auth_cookies === 'object' &&
-      Object.keys(session.auth_cookies).length > 0;
+    const response = await fetch(`${vpsUrl}/status?modelId=${encodeURIComponent(modelId)}`);
+    if (!response.ok) {
+      throw new Error(`VPS error ${response.status}`);
+    }
 
-    return NextResponse.json(
-      {
-        authenticated: isAuthenticated,
-        status: isAuthenticated ? "authenticated" : "pending",
-        modelId,
-        sessionId: session?.id || null,
-        cookieCount: isAuthenticated
-          ? session?.auth_cookies?.cookie_count || 0
-          : 0,
-        lastVerified: session?.last_verified_at || null,
-        timestamp: new Date().toISOString(),
-      },
-      { status: 200 }
-    );
-  } catch (err: any) {
-    console.error("🔴 API Error:", err);
-
-    return NextResponse.json(
-      {
-        authenticated: false,
-        status: "error",
-        error: err?.message || "Status check failed",
-        timestamp: new Date().toISOString(),
-      },
-      { status: 500 }
-    );
+    const vpsData = await response.json();
+    return NextResponse.json({ status: "success", ...vpsData });
+  } catch (error: any) {
+    console.error("[BROWSER-LOGIN STATUS] Error:", error.message);
+    return NextResponse.json({ status: "error", error: error.message }, { status: 500 });
   }
 }

@@ -2,6 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 
+async function interact(modelId: string, action: string, data: Record<string, unknown>) {
+  const response = await fetch("/api/crm/interact", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modelId, action, data }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Interact failed (${response.status})`);
+  }
+  return response.json();
+}
+
 interface OnlyFansViewerProps {
   modelId: string;
   modelName?: string;
@@ -71,39 +84,17 @@ export function OnlyFansViewer({
 
     const initializeAndPoll = async () => {
       try {
-        // Step 1: Try to navigate to OnlyFans (may fail for existing sessions)
-        console.log("[VIEWER] Attempting to navigate to OnlyFans...");
-        const navigateResponse = await fetch("/api/crm/interact", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            modelId,
-            action: "navigate",
-            data: { url: "https://onlyfans.com", delay: 1000 },
-          }),
-        });
-
-        if (navigateResponse.ok) {
-          console.log("[VIEWER] ✅ Navigation successful");
-        } else {
-          const errorData = await navigateResponse.json();
-          console.warn("[VIEWER] ⚠️ Navigation failed:", errorData.error);
-          console.log("[VIEWER] 🔄 Will try screenshot anyway (session may already be loaded)");
-          // Don't throw - continue to screenshot attempt
-        }
-
-        console.log("[VIEWER] Starting screenshot polling...");
-
-        // Step 2: Fetch initial screenshot (works even if navigate failed)
+        // The screenshot route transparently restores the session from saved
+        // cookies if the VPS browser isn't running anymore, so we can just
+        // start polling directly.
         await fetchScreenshot();
 
-        // Step 3: Start polling every 200ms
         if (screenshotIntervalRef.current) {
           clearInterval(screenshotIntervalRef.current);
         }
         screenshotIntervalRef.current = setInterval(() => {
           fetchScreenshot();
-        }, 200);
+        }, 600);
       } catch (err: any) {
         console.error("[VIEWER] Initialization error:", err);
         setError(err.message || "Failed to initialize OnlyFans viewer");
@@ -132,38 +123,14 @@ export function OnlyFansViewer({
 
     const initializeAndPoll = async () => {
       try {
-        // Step 1: Try to navigate to OnlyFans (may fail for existing sessions)
-        console.log("[VIEWER] Retrying... attempting to navigate to OnlyFans...");
-        const navigateResponse = await fetch("/api/crm/interact", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            modelId,
-            action: "navigate",
-            data: { url: "https://onlyfans.com", delay: 1000 },
-          }),
-        });
-
-        if (navigateResponse.ok) {
-          console.log("[VIEWER] ✅ Navigation successful on retry");
-        } else {
-          const errorData = await navigateResponse.json();
-          console.warn("[VIEWER] ⚠️ Navigation failed on retry:", errorData.error);
-          console.log("[VIEWER] 🔄 Will try screenshot anyway (session may already be loaded)");
-        }
-
-        console.log("[VIEWER] Starting screenshot polling on retry...");
-
-        // Step 2: Fetch initial screenshot (works even if navigate failed)
         await fetchScreenshot();
 
-        // Step 3: Start polling every 200ms
         if (screenshotIntervalRef.current) {
           clearInterval(screenshotIntervalRef.current);
         }
         screenshotIntervalRef.current = setInterval(() => {
           fetchScreenshot();
-        }, 200);
+        }, 600);
       } catch (err: any) {
         console.error("[VIEWER] Retry error:", err);
         setError(err.message || "Failed to initialize OnlyFans viewer");
@@ -216,34 +183,24 @@ export function OnlyFansViewer({
     }
   };
 
-  // Handle canvas click
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle canvas click - scale from displayed CSS size to actual screenshot pixels
   const handleCanvasClick = async (
     event: React.MouseEvent<HTMLCanvasElement>
   ) => {
     if (!canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-
-    console.log(`[VIEWER] Click at ${x}, ${y}`);
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
 
     try {
-      const response = await fetch("/api/crm/interact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          modelId,
-          action: "click",
-          data: { x, y, delay: 200 },
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
+      const data = await interact(modelId, "click", { x, y });
+      if (data.screenshot) {
         setLastScreenshot(data.screenshot);
-
-        // Draw updated screenshot
         const img = new Image();
         img.onload = () => {
           const ctx = canvasRef.current?.getContext("2d");
@@ -258,20 +215,22 @@ export function OnlyFansViewer({
     } catch (err) {
       console.error("[VIEWER] Click error:", err);
     }
+
+    hiddenInputRef.current?.focus();
   };
 
-  // Handle keyboard input
-  const handleKeyDown = async (event: KeyboardEvent) => {
-    // Only intercept typing in input fields
-    if (
-      event.target instanceof HTMLInputElement ||
-      event.target instanceof HTMLTextAreaElement
-    ) {
-      return;
-    }
+  // Forward keystrokes typed into the hidden input to whatever is focused on the live page
+  const handleHiddenInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const text = event.target.value;
+    event.target.value = "";
+    if (text) interact(modelId, "keypress", { text }).catch((err) => console.error("[VIEWER] Type error:", err));
+  };
 
-    // For now, skip keyboard handling in canvas
-    // We'll implement this for message input specifically
+  const handleHiddenKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" || event.key === "Tab" || event.key === "Backspace") {
+      event.preventDefault();
+      interact(modelId, "key", { key: event.key }).catch((err) => console.error("[VIEWER] Key error:", err));
+    }
   };
 
   // Wrapper element (can be modal, embedded, or standalone)
@@ -415,6 +374,16 @@ export function OnlyFansViewer({
         onClick={handleCanvasClick}
         className="w-full h-full object-contain cursor-pointer border-t border-[#D4AF37]/20"
         style={{ maxHeight: "100%" }}
+      />
+
+      {/* Invisible input that captures keystrokes and forwards them to the live page */}
+      <input
+        ref={hiddenInputRef}
+        type="text"
+        onChange={handleHiddenInput}
+        onKeyDown={handleHiddenKeyDown}
+        className="absolute -left-[9999px] w-1 h-1 opacity-0"
+        autoComplete="off"
       />
     </div>
   );

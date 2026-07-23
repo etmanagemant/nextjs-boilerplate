@@ -1,80 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { getRequestAdmin } from "@/lib/crmAdmin";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Disconnect a model: mark the session inactive in Supabase AND close the
+ * live browser on the VPS so it stops eating RAM.
+ * POST /api/crm/browser-login/disconnect  Body: { modelId }
+ */
 export async function POST(req: NextRequest) {
-  console.log("[DISCONNECT] User clicked disconnect");
-
   try {
-    const body = await req.json();
-    const { modelId, sessionId } = body;
-
-    if (!modelId || !sessionId) {
-      return NextResponse.json(
-        { status: "error", error: "Missing modelId or sessionId" },
-        { status: 400 }
-      );
+    const { isAdmin, supabase } = await getRequestAdmin();
+    if (!isAdmin) {
+      return NextResponse.json({ status: "error", error: "Unauthorized" }, { status: 403 });
     }
 
-    const supabase = await createClient();
-
-    // Get current session
-    const { data: session, error: sessionError } = await supabase
-      .from("crm_model_sessions")
-      .select("*")
-      .eq("model_id", modelId)
-      .eq("id", sessionId)
-      .maybeSingle();
-
-    if (sessionError || !session) {
-      console.error("[DISCONNECT] No session found");
-      return NextResponse.json(
-        { status: "error", error: "Session not found" },
-        { status: 404 }
-      );
+    const { modelId } = await req.json();
+    if (!modelId) {
+      return NextResponse.json({ status: "error", error: "Missing modelId" }, { status: 400 });
     }
-
-    // ✅ DISCONNECT: Set is_active = false
-    console.log("[DISCONNECT] Disconnecting session for:", modelId);
 
     const { error: updateError } = await supabase
       .from("crm_model_sessions")
       .update({
         is_active: false,
         last_verified_at: new Date().toISOString(),
-        auth_cookies: {
-          ...(session.auth_cookies || {}),
-          disconnected_at: new Date().toISOString(),
-          disconnected_reason: "user_initiated",
-        },
       })
-      .eq("model_id", modelId)
-      .eq("id", sessionId);
+      .eq("model_id", modelId);
 
     if (updateError) {
       console.error("[DISCONNECT] Update failed:", updateError.message);
-      return NextResponse.json(
-        { status: "error", error: "Failed to disconnect session" },
-        { status: 500 }
-      );
+      return NextResponse.json({ status: "error", error: "Failed to disconnect session" }, { status: 500 });
     }
 
-    console.log("[DISCONNECT] ✅ Session disconnected");
-    return NextResponse.json(
-      {
-        status: "success",
-        disconnected: true,
-        message: "Session disconnected successfully",
-        modelId,
-      },
-      { status: 200 }
-    );
+    const vpsUrl = process.env.VPS_API_URL;
+    if (vpsUrl) {
+      try {
+        await fetch(`${vpsUrl}/disconnect`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ modelId }),
+        });
+      } catch (vpsErr: any) {
+        // Not fatal - DB state already reflects "disconnected"
+        console.warn("[DISCONNECT] VPS cleanup failed:", vpsErr.message);
+      }
+    }
+
+    return NextResponse.json({ status: "success", disconnected: true, modelId });
   } catch (err: any) {
     console.error("[DISCONNECT] Error:", err?.message);
-    return NextResponse.json(
-      { status: "error", error: err?.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ status: "error", error: err?.message }, { status: 500 });
   }
 }

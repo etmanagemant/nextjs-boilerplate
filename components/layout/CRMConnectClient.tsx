@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 import { ModelCardSkeleton, ScriptLibrarySkeleton } from "./CRMSkeletonLoaders";
-import ConnectCreatorPanel from "./ConnectCreatorPanel";
 import ScriptLibraryManager from "./ScriptLibraryManager";
-import ManualSessionInjectorComponent from "./ManualSessionInjectorComponent";
+import BrowserLoginStreamComponent from "./BrowserLoginStreamComponent";
 
 interface Model {
   id: string;
@@ -62,11 +61,7 @@ export default function CRMConnectClient({
   const [scripts, setScripts] = useState<Script[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [isLoadingScripts, setIsLoadingScripts] = useState(true);
-  const [selectedModel, setSelectedModel] = useState<Model | null>(null);
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [isSessionInjectorOpen, setIsSessionInjectorOpen] = useState(false);
-  const [selectedModelForSessionInjector, setSelectedModelForSessionInjector] =
-    useState<Model | null>(null);
+  const [modelBeingConnected, setModelBeingConnected] = useState<Model | null>(null);
 
   const supabase = createClient();
 
@@ -114,17 +109,12 @@ export default function CRMConnectClient({
     }
   };
 
-  const handleDisconnectSession = async (modelId: string, sessionId?: string) => {
-    if (!sessionId) {
-      console.error("No session ID available for disconnect");
-      return;
-    }
-
+  const handleDisconnectSession = async (modelId: string) => {
     try {
       const response = await fetch("/api/crm/browser-login/disconnect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId, sessionId }),
+        body: JSON.stringify({ modelId }),
       });
 
       if (!response.ok) {
@@ -139,28 +129,12 @@ export default function CRMConnectClient({
     }
   };
 
-  const handleOpenPanel = (model: Model) => {
-    setSelectedModel(model);
-    setIsPanelOpen(true);
-  };
-
-  const handleClosePanel = () => {
-    setIsPanelOpen(false);
-    setSelectedModel(null);
-  };
-
-  const handleConnectionSuccess = () => {
-    fetchSessions();
-  };
-
   const handleOpenBrowserLogin = (model: Model) => {
-    setSelectedModelForSessionInjector(model);
-    setIsSessionInjectorOpen(true);
+    setModelBeingConnected(model);
   };
 
   const handleCloseBrowserLogin = () => {
-    setIsSessionInjectorOpen(false);
-    setSelectedModelForSessionInjector(null);
+    setModelBeingConnected(null);
   };
 
   const handleBrowserConnectionSuccess = () => {
@@ -269,27 +243,19 @@ export default function CRMConnectClient({
 
                     {/* Action Buttons */}
                     <div className="space-y-2">
-                      {!isConnected && (
-                        <button
-                          onClick={() => handleOpenBrowserLogin(model)}
-                          className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black hover:shadow-lg hover:shadow-[#D4AF37]/40"
-                        >
-                          <span>🔑</span> Session-Key
-                        </button>
-                      )}
                       {isConnected ? (
                         <button
-                          onClick={() => handleDisconnectSession(model.id, session?.id)}
+                          onClick={() => handleDisconnectSession(model.id)}
                           className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-red-600/40 text-red-300 hover:bg-red-600/60 hover:shadow-lg hover:shadow-red-600/40"
                         >
                           <span>🔴</span> Disconnect
                         </button>
                       ) : (
                         <button
-                          onClick={() => handleOpenPanel(model)}
-                          className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-[#D4AF37]/20 text-[#D4AF37] hover:bg-[#D4AF37]/40"
+                          onClick={() => handleOpenBrowserLogin(model)}
+                          className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black hover:shadow-lg hover:shadow-[#D4AF37]/40"
                         >
-                          <span>🔗</span> Manuell
+                          <span>🌐</span> Model verbinden
                         </button>
                       )}
                     </div>
@@ -380,22 +346,11 @@ export default function CRMConnectClient({
         </div>
       </section>
 
-      {/* Connect Creator Panel */}
-      {selectedModel && (
-        <ConnectCreatorPanel
-          modelId={selectedModel.id}
-          modelName={selectedModel.name}
-          isOpen={isPanelOpen}
-          onClose={handleClosePanel}
-          onSuccess={handleConnectionSuccess}
-        />
-      )}
-
-      {/* Browser Login Stream Component */}
-      {isSessionInjectorOpen && selectedModelForSessionInjector && (
-        <ManualSessionInjectorComponent
-          modelId={selectedModelForSessionInjector.id}
-          modelName={selectedModelForSessionInjector.name}
+      {/* Live Browser Login */}
+      {modelBeingConnected && (
+        <BrowserLoginStreamComponent
+          modelId={modelBeingConnected.id}
+          modelName={modelBeingConnected.name}
           onSuccess={handleBrowserConnectionSuccess}
           onClose={handleCloseBrowserLogin}
         />

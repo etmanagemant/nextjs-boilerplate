@@ -1,22 +1,14 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
-const fs = require('fs');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
 
 // ============================================================================
 // PROCESS HARDENING - Global Exception Shield
 // ============================================================================
-
-// Intercept unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('🛡️ SHIELD: Unhandled Rejection intercepted');
-  console.error('🛡️ Promise:', promise);
   console.error('🛡️ Reason:', reason);
-  console.error('🛡️ Stack:', reason instanceof Error ? reason.stack : 'No stack trace');
 });
 
-// Intercept uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('🛡️ SHIELD: Uncaught Exception intercepted');
   console.error('🛡️ Error:', error.message);
@@ -25,32 +17,55 @@ process.on('uncaughtException', (error) => {
 });
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
-// CORS middleware - allow requests from Vercel app
+// CORS middleware - allow requests from the Vercel app
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
 
-const sessions = {};
-const COOKIES_DIR = '/tmp/puppeteer-cookies';
+// ============================================================================
+// PERSISTENT PER-MODEL SESSIONS
+// One long-lived headful browser per connected model, reused for both the
+// initial login handshake AND the ongoing live view — no more relaunching
+// Chromium on every single poll.
+// ============================================================================
 
-// Ensure cookies directory exists
-if (!fs.existsSync(COOKIES_DIR)) {
-  fs.mkdirSync(COOKIES_DIR, { recursive: true });
+const modelSessions = {}; // modelId -> { browser, page, lastActivity, createdAt }
+const IDLE_TIMEOUT_MS = 20 * 60 * 1000; // close a session after 20 min of no requests
+// Your Vultr box (ETMANAGEMENT, 80.240.30.188) has 1GB RAM - a single headful
+// Chromium session already uses 300-500MB, so default to ONE at a time.
+// Bump via MAX_CONCURRENT_SESSIONS env var if you upgrade the VPS.
+const MAX_CONCURRENT_SESSIONS = Number(process.env.MAX_CONCURRENT_SESSIONS || 1);
+
+async function closeSession(modelId, reason = 'manual') {
+  const session = modelSessions[modelId];
+  if (!session) return;
+  delete modelSessions[modelId];
+  try {
+    await session.browser.close();
+    console.log(`[SESSION] Closed session for ${modelId} (${reason})`);
+  } catch (e) {
+    console.warn(`[SESSION] Error closing session for ${modelId}:`, e.message);
+  }
 }
 
-// Headful browser initialization (ANTI-CAPTCHA MODE)
-async function initBrowser(sessionId) {
+async function enforceSessionCap(excludeModelId) {
+  const entries = Object.entries(modelSessions).filter(([id]) => id !== excludeModelId);
+  if (entries.length < MAX_CONCURRENT_SESSIONS) return;
+  entries.sort((a, b) => a[1].lastActivity - b[1].lastActivity);
+  const [oldestModelId] = entries[0];
+  await closeSession(oldestModelId, 'session cap reached, evicted least recently used');
+}
+
+async function launchBrowser(modelId) {
   return puppeteer.launch({
     headless: false,
-    executablePath: '/snap/bin/chromium',
+    executablePath: process.env.CHROMIUM_PATH || '/snap/bin/chromium',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -62,621 +77,281 @@ async function initBrowser(sessionId) {
       '--disable-default-apps',
       '--disable-extensions',
       '--disable-blink-features=AutomationControlled',
-      `--user-data-dir=/tmp/chromium-${sessionId}`,
+      `--user-data-dir=/tmp/chromium-${modelId}`,
     ],
   });
 }
 
-// Init session - create isolated browser per model
-app.post('/init-session', async (req, res) => {
+// Get an existing live session, or open a fresh one navigated to the login page
+async function getOrCreateSession(modelId) {
+  const existing = modelSessions[modelId];
+  if (existing) {
+    existing.lastActivity = Date.now();
+    return existing;
+  }
+
+  await enforceSessionCap(modelId);
+
+  const browser = await launchBrowser(modelId);
+  const page = await browser.newPage();
+
+  try {
+    await page.goto('https://www.onlyfans.com/login', {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000,
+    });
+  } catch (navErr) {
+    console.warn(`[SESSION] Initial navigation warning for ${modelId}: ${navErr.message}`);
+  }
+
+  const session = { browser, page, lastActivity: Date.now(), createdAt: new Date() };
+  modelSessions[modelId] = session;
+  return session;
+}
+
+// Re-launch a session from previously saved cookies (used when the chatter
+// live-view is opened but no live browser is currently running for the model)
+async function restoreSession(modelId, cookies) {
+  await closeSession(modelId, 'restoring from saved cookies');
+  await enforceSessionCap(modelId);
+
+  const browser = await launchBrowser(modelId);
+  const page = await browser.newPage();
+
+  try {
+    await page.setCookie(...cookies);
+  } catch (e) {
+    console.warn(`[RESTORE] Cookie set error for ${modelId}:`, e.message);
+  }
+
+  try {
+    await page.goto('https://www.onlyfans.com', {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000,
+    });
+  } catch (navErr) {
+    console.warn(`[RESTORE] Navigation warning for ${modelId}: ${navErr.message}`);
+  }
+
+  const session = { browser, page, lastActivity: Date.now(), createdAt: new Date() };
+  modelSessions[modelId] = session;
+  return session;
+}
+
+async function getLoginState(page) {
+  let pageUrl = 'unknown';
+  let pageTitle = 'Unknown';
+  let cookies = [];
+
+  try { pageUrl = page.url(); } catch (e) { /* ignore */ }
+  try { pageTitle = await page.title(); } catch (e) { /* ignore */ }
+  try { cookies = await page.cookies(); } catch (e) { /* ignore */ }
+
+  const sessCookie = cookies.find((c) => c.name === 'sess');
+  const isLoggedIn = !!sessCookie?.value && !pageUrl.includes('/login');
+
+  return { isLoggedIn, cookieCount: cookies.length, pageUrl, pageTitle };
+}
+
+async function takeScreenshot(page) {
+  try {
+    return await Promise.race([
+      page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Screenshot timeout')), 8000)),
+    ]);
+  } catch (e) {
+    console.warn('[SCREENSHOT] Quality 80 failed:', e.message);
+    try {
+      return await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 60 });
+    } catch (e2) {
+      console.warn('[SCREENSHOT] Quality 60 failed:', e2.message);
+      return null;
+    }
+  }
+}
+
+// Idle sweep - free RAM on the $5 VPS from abandoned sessions
+setInterval(() => {
+  const now = Date.now();
+  for (const [modelId, session] of Object.entries(modelSessions)) {
+    if (now - session.lastActivity > IDLE_TIMEOUT_MS) {
+      closeSession(modelId, 'idle timeout');
+    }
+  }
+}, 5 * 60 * 1000);
+
+// ============================================================================
+// ROUTES
+// ============================================================================
+
+// Open (or reuse) a live browser for a model and go to the OnlyFans login page.
+// Called when the admin clicks "Model verbinden".
+app.post('/connect', async (req, res) => {
   try {
     const { modelId } = req.body;
-    if (!modelId) {
-      return res.status(400).json({ error: 'Missing modelId' });
-    }
+    if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
 
-    // Close any existing session for this model
-    for (const [sid, session] of Object.entries(sessions)) {
-      if (session.modelId === modelId) {
-        try {
-          await session.browser.close();
-          delete sessions[sid];
-          console.log(`[INIT] Closed old session for model ${modelId}`);
-        } catch (e) {
-          console.error(`[INIT] Error closing old session: ${e.message}`);
-        }
-      }
-    }
+    const session = await getOrCreateSession(modelId);
+    const state = await getLoginState(session.page);
 
-    const sessionId = uuidv4();
-    
-    let browser, page;
-    try {
-      browser = await initBrowser(sessionId);
-      page = await browser.newPage();
-    } catch (browserErr) {
-      console.error('[INIT-SESSION] Browser init error:', browserErr.message);
-      return res.status(200).json({
-        success: false,
-        error: `Browser initialization failed: ${browserErr.message}`,
-        sessionId: null,
-      });
-    }
-
-    sessions[sessionId] = {
-      browser,
-      page,
-      modelId,
-      createdAt: new Date(),
-      isLoggedIn: false,
-      cookieCount: 0,
-    };
-
-    // Navigate to OnlyFans login page with error handling
-    try {
-      await page.goto('https://www.onlyfans.com/login', {
-        waitUntil: 'domcontentloaded',
-        timeout: 15000,
-      });
-    } catch (navErr) {
-      console.warn(`[INIT] Navigation warning: ${navErr.message}`);
-      // Continue anyway - page might still be usable
-    }
-
-    res.json({
-      status: 'success',
-      sessionId,
-      modelId,
-      message: 'Browser session initialized, admin can now login at OnlyFans',
-    });
+    res.json({ status: 'success', modelId, ...state });
   } catch (error) {
-    console.error('[ERROR] /init-session caught exception:', error.message);
-    console.error('[ERROR] Stack:', error.stack);
-    // Return graceful error response instead of crashing
-    res.status(200).json({
-      success: false,
-      error: error.message,
-      sessionId: null,
-      stack: error.stack,
-    });
+    console.error('[CONNECT] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
   }
 });
 
-// Verify session - check for login cookies
-app.get('/verify-session', async (req, res) => {
-  try {
-    const { sessionId } = req.query;
-    if (!sessionId) {
-      return res.status(400).json({ error: 'Missing sessionId' });
-    }
-
-    const session = sessions[sessionId];
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
-
-    let pageUrl, pageTitle, cookies, sessCookie, isLoggedIn;
-
-    try {
-      pageUrl = session.page.url();
-    } catch (e) {
-      console.warn('[VERIFY] Could not get page URL:', e.message);
-      pageUrl = 'unknown';
-    }
-
-    try {
-      pageTitle = await session.page.title();
-    } catch (e) {
-      console.warn('[VERIFY] Could not get page title:', e.message);
-      pageTitle = 'unknown';
-    }
-
-    try {
-      cookies = await session.page.cookies();
-    } catch (e) {
-      console.warn('[VERIFY] Could not get cookies:', e.message);
-      cookies = [];
-    }
-
-    // Strict validation: Login is only successful if:
-    // 1. Page URL is exactly 'https://www.onlyfans.com' (not /login)
-    // 2. Cookie named 'sess' exists and is populated
-    try {
-      sessCookie = cookies.find((c) => c.name === 'sess');
-      isLoggedIn = pageUrl === 'https://www.onlyfans.com' && !!sessCookie?.value;
-    } catch (e) {
-      console.warn('[VERIFY] Cookie validation error:', e.message);
-      isLoggedIn = false;
-    }
-
-    session.isLoggedIn = isLoggedIn;
-    session.cookieCount = isLoggedIn ? cookies.length : 0;
-
-    res.json({
-      isLoggedIn,
-      cookieCount: isLoggedIn ? cookies.length : 0,
-      pageUrl,
-      pageTitle,
-      message: isLoggedIn ? '✅ Login verified (sess cookie found)!' : '⏳ Waiting for login...',
-    });
-  } catch (error) {
-    console.error('[ERROR] /verify-session caught exception:', error.message);
-    console.error('[ERROR] Stack:', error.stack);
-    // Return graceful error response
-    res.status(200).json({
-      isLoggedIn: false,
-      error: error.message,
-      message: 'Verification error - retrying...',
-    });
-  }
-});
-
-// Save session - persist cookies to disk
-app.post('/save-session', async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    if (!sessionId) {
-      return res.status(400).json({ error: 'Missing sessionId' });
-    }
-
-    const session = sessions[sessionId];
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
-
-    let cookies;
-    try {
-      cookies = await session.page.cookies();
-    } catch (cookieErr) {
-      console.warn('[SAVE] Error getting cookies:', cookieErr.message);
-      cookies = [];
-    }
-
-    const cookiePath = path.join(COOKIES_DIR, `${session.modelId}.json`);
-
-    try {
-      fs.writeFileSync(
-        cookiePath,
-        JSON.stringify(
-          {
-            modelId: session.modelId,
-            sessionId,
-            cookies,
-            createdAt: session.createdAt,
-            savedAt: new Date(),
-          },
-          null,
-          2
-        )
-      );
-    } catch (writeErr) {
-      console.error('[SAVE] Error writing cookies file:', writeErr.message);
-      return res.status(200).json({
-        success: false,
-        error: `Failed to save cookies: ${writeErr.message}`,
-      });
-    }
-
-    // Close browser
-    try {
-      await session.browser.close();
-    } catch (closeErr) {
-      console.warn('[SAVE] Error closing browser:', closeErr.message);
-      // Continue anyway
-    }
-
-    delete sessions[sessionId];
-
-    res.json({
-      status: 'success',
-      modelId: session.modelId,
-      cookieCount: cookies.length,
-      message: 'Session saved and browser closed',
-    });
-  } catch (error) {
-    console.error('[ERROR] /save-session caught exception:', error.message);
-    console.error('[ERROR] Stack:', error.stack);
-    // Return graceful error response
-    res.status(200).json({
-      success: false,
-      error: error.message,
-      stack: error.stack,
-    });
-  }
-});
-
-// Screenshot - load saved cookies and capture page
-app.get('/screenshot', async (req, res) => {
+// Poll login status of a model's live session
+app.get('/status', async (req, res) => {
   try {
     const { modelId } = req.query;
-    if (!modelId) {
-      return res.status(400).json({ error: 'Missing modelId' });
-    }
+    if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
 
-    const cookiePath = path.join(COOKIES_DIR, `${modelId}.json`);
-    if (!fs.existsSync(cookiePath)) {
-      return res.status(404).json({ error: 'No saved session for model' });
-    }
+    const session = modelSessions[modelId];
+    if (!session) return res.json({ hasSession: false, isLoggedIn: false });
 
-    let savedData;
-    try {
-      savedData = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'));
-    } catch (parseErr) {
-      console.error('[SCREENSHOT] Cookie file parse error:', parseErr.message);
-      return res.status(200).json({
-        success: false,
-        error: `Failed to parse cookie file: ${parseErr.message}`,
-      });
-    }
-
-    const screenshotSessionId = uuidv4();
-    let browser, page;
-
-    try {
-      browser = await initBrowser(screenshotSessionId);
-      page = await browser.newPage();
-    } catch (browserErr) {
-      console.error('[SCREENSHOT] Browser init error:', browserErr.message);
-      return res.status(200).json({
-        success: false,
-        error: `Browser init failed: ${browserErr.message}`,
-      });
-    }
-
-    try {
-      // Load cookies
-      await page.setCookie(...savedData.cookies);
-    } catch (setCookieErr) {
-      console.warn('[SCREENSHOT] Cookie set error:', setCookieErr.message);
-      // Continue anyway
-    }
-
-    // Navigate to OnlyFans
-    try {
-      await page.goto('https://www.onlyfans.com', {
-        waitUntil: 'domcontentloaded',
-        timeout: 15000,
-      });
-    } catch (navErr) {
-      console.warn(`[SCREENSHOT] Navigation warning: ${navErr.message}`);
-    }
-
-    // Take screenshot with error handling
-    let screenshot = null;
-    try {
-      screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 });
-    } catch (screenshotErr) {
-      console.warn(`[SCREENSHOT] Quality 80 failed: ${screenshotErr.message}`);
-      try {
-        screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 60 });
-      } catch (fallbackErr) {
-        console.warn(`[SCREENSHOT] Quality 60 failed: ${fallbackErr.message}`);
-        screenshot = null;
-      }
-    }
-
-    let pageUrl = 'unknown', pageTitle = 'Unknown';
-    try {
-      pageUrl = page.url();
-      pageTitle = await page.title();
-    } catch (e) {
-      console.warn('[SCREENSHOT] Could not get page info:', e.message);
-    }
-
-    try {
-      await browser.close();
-    } catch (closeErr) {
-      console.warn('[SCREENSHOT] Browser close error:', closeErr.message);
-    }
-
-    res.json({
-      status: 'success',
-      modelId,
-      screenshot,
-      pageUrl,
-      pageTitle,
-      hasScreenshot: !!screenshot,
-    });
+    session.lastActivity = Date.now();
+    const state = await getLoginState(session.page);
+    res.json({ hasSession: true, ...state });
   } catch (error) {
-    console.error('[ERROR] /screenshot caught exception:', error.message);
-    console.error('[ERROR] Stack:', error.stack);
-    res.status(200).json({
-      status: 'error',
-      error: error.message,
-      screenshot: null,
-    });
+    console.error('[STATUS] Error:', error.message);
+    res.status(200).json({ hasSession: false, isLoggedIn: false, error: error.message });
   }
 });
 
-// Interact - execute browser actions on saved session
-app.post('/interact', async (req, res) => {
+// Live screenshot of a model's session (login flow OR ongoing chatter view)
+app.get('/frame', async (req, res) => {
   try {
-    const { modelId, action, selector, value } = req.body;
+    const { modelId } = req.query;
+    if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+
+    const session = modelSessions[modelId];
+    if (!session) return res.json({ hasSession: false, screenshot: null });
+
+    session.lastActivity = Date.now();
+    const screenshot = await takeScreenshot(session.page);
+    const state = await getLoginState(session.page);
+
+    res.json({ hasSession: true, screenshot, hasScreenshot: !!screenshot, ...state });
+  } catch (error) {
+    console.error('[FRAME] Error:', error.message);
+    res.status(200).json({ hasSession: false, screenshot: null, error: error.message });
+  }
+});
+
+// Forward a click / keypress / scroll / navigate / reload to the live session,
+// then return a fresh frame. Click focuses a field, keypress types into
+// whatever is currently focused - no selector guessing needed.
+app.post('/interact', async (req, res) => {
+  const { modelId, action, data } = req.body || {};
+
+  try {
     if (!modelId || !action) {
       return res.status(400).json({ error: 'Missing modelId or action' });
     }
 
-    const cookiePath = path.join(COOKIES_DIR, `${modelId}.json`);
-    if (!fs.existsSync(cookiePath)) {
-      return res.status(404).json({ error: 'No saved session for model' });
-    }
+    const session = modelSessions[modelId];
+    if (!session) return res.status(404).json({ error: 'No active session for this model' });
 
-    let savedData;
-    try {
-      savedData = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'));
-    } catch (parseErr) {
-      console.error('[INTERACT] Cookie file parse error:', parseErr.message);
-      return res.status(200).json({
-        success: false,
-        error: `Failed to parse cookie file: ${parseErr.message}`,
-      });
-    }
+    session.lastActivity = Date.now();
+    const { page } = session;
 
-    const interactSessionId = uuidv4();
-    let browser, page;
-
-    try {
-      browser = await initBrowser(interactSessionId);
-      page = await browser.newPage();
-    } catch (browserErr) {
-      console.error('[INTERACT] Browser init error:', browserErr.message);
-      return res.status(200).json({
-        success: false,
-        error: `Browser init failed: ${browserErr.message}`,
-      });
-    }
-
-    try {
-      // Load cookies
-      await page.setCookie(...savedData.cookies);
-    } catch (setCookieErr) {
-      console.warn('[INTERACT] Cookie set error:', setCookieErr.message);
-    }
-
-    try {
-      await page.goto('https://www.onlyfans.com', {
-        waitUntil: 'domcontentloaded',
-        timeout: 15000,
-      });
-    } catch (navErr) {
-      console.warn(`[INTERACT] Navigation warning: ${navErr.message}`);
-    }
-
-    let result = 'Unknown';
+    let result = 'ok';
     try {
       switch (action) {
         case 'click':
-          await page.click(selector);
-          result = 'Clicked';
+          await page.mouse.click(data?.x || 0, data?.y || 0);
+          result = 'clicked';
           break;
-        case 'type':
-          await page.type(selector, value, { delay: 50 });
-          result = 'Typed';
+        case 'keypress':
+          await page.keyboard.type(String(data?.text ?? ''), { delay: 30 });
+          result = 'typed';
+          break;
+        case 'key':
+          await page.keyboard.press(data?.key || 'Enter');
+          result = 'key-pressed';
           break;
         case 'navigate':
-          await page.goto(value, { waitUntil: 'domcontentloaded', timeout: 15000 });
-          result = 'Navigated';
+          await page.goto(data?.url || 'https://www.onlyfans.com', {
+            waitUntil: 'domcontentloaded',
+            timeout: 15000,
+          });
+          result = 'navigated';
           break;
         case 'scroll':
-          await page.evaluate((v) => window.scrollBy(0, v), value || 500);
-          result = 'Scrolled';
+          await page.evaluate((v) => window.scrollBy(0, v), data?.amount || 500);
+          result = 'scrolled';
           break;
         case 'reload':
-          await page.reload({ waitUntil: 'domcontentloaded' });
-          result = 'Reloaded';
+          await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
+          result = 'reloaded';
           break;
         default:
-          result = 'Unknown action';
+          result = 'unknown action';
       }
     } catch (actionErr) {
-      console.warn(`[INTERACT] Action error (${action}): ${actionErr.message}`);
-      result = `Action error: ${actionErr.message}`;
+      console.warn(`[INTERACT] Action error (${action}):`, actionErr.message);
+      result = `action error: ${actionErr.message}`;
     }
 
-    // Take screenshot with error handling
-    let screenshot = null;
-    try {
-      screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 });
-    } catch (screenshotErr) {
-      console.warn(`[INTERACT] Quality 80 failed: ${screenshotErr.message}`);
-      try {
-        screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 60 });
-      } catch (fallbackErr) {
-        console.warn(`[INTERACT] Quality 60 failed: ${fallbackErr.message}`);
-        screenshot = null;
-      }
-    }
+    const screenshot = await takeScreenshot(page);
+    const state = await getLoginState(page);
 
-    let pageUrl = 'unknown', pageTitle = 'Unknown';
-    try {
-      pageUrl = page.url();
-      pageTitle = await page.title();
-    } catch (e) {
-      console.warn('[INTERACT] Could not get page info:', e.message);
-    }
-
-    try {
-      await browser.close();
-    } catch (closeErr) {
-      console.warn('[INTERACT] Browser close error:', closeErr.message);
-    }
-
-    res.json({
-      status: 'success',
-      action,
-      result,
-      screenshot,
-      pageUrl,
-      pageTitle,
-      hasScreenshot: !!screenshot,
-    });
+    res.json({ status: 'success', action, result, screenshot, hasScreenshot: !!screenshot, ...state });
   } catch (error) {
-    console.error('[ERROR] /interact caught exception:', error.message);
-    console.error('[ERROR] Stack:', error.stack);
-    res.status(200).json({
-      status: 'error',
-      action: req.body.action,
-      error: error.message,
-      screenshot: null,
-    });
+    console.error('[INTERACT] Fatal error:', error.message);
+    res.status(200).json({ status: 'error', action, error: error.message, screenshot: null });
   }
 });
 
-// Stream endpoint - serves HTML with live screenshot streaming
-app.get('/stream', async (req, res) => {
+// Return raw cookies from a live session, so Next.js can persist them to Supabase
+app.get('/cookies', async (req, res) => {
   try {
-    const { sessionId } = req.query;
-    if (!sessionId) {
-      return res.status(400).json({ error: 'Missing sessionId' });
-    }
+    const { modelId } = req.query;
+    if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
 
-    // Verify session exists
-    const session = sessions[sessionId];
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
+    const session = modelSessions[modelId];
+    if (!session) return res.status(404).json({ error: 'No active session for this model' });
 
-    // Return HTML page with JavaScript that polls for screenshots
-    const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <title>OnlyFans Browser Stream</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #1a1a1a; color: #D4AF37; font-family: 'Courier New', monospace; }
-    #container { width: 100%; height: 100vh; display: flex; flex-direction: column; }
-    #stream { flex: 1; background: #000; display: flex; align-items: center; justify-content: center; }
-    #screenshot { max-width: 100%; max-height: 100%; object-fit: contain; }
-    #status { padding: 12px 16px; background: #0a0a0a; border-top: 2px solid #D4AF37; font-size: 12px; }
-    .loading { opacity: 0.5; }
-  </style>
-</head>
-<body>
-  <div id="container">
-    <div id="stream">
-      <div id="screenshot" class="loading">Connecting...</div>
-    </div>
-    <div id="status">🔴 Waiting for first screenshot...</div>
-  </div>
-  
-  <script>
-    const sessionId = '${sessionId}';
-    let frameCount = 0;
-    let lastUpdateTime = Date.now();
-    
-    async function captureFrame() {
-      try {
-        const response = await fetch(`http://80.240.30.188:3000/stream-frame?sessionId=${sessionId}`, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' }
-        });
-        
-        if (!response.ok) {
-          document.getElementById('status').textContent = '❌ Stream error: ' + response.status;
-          return;
-        }
-        
-        const data = await response.json();
-        
-        if (data.screenshot) {
-          const img = document.getElementById('screenshot');
-          img.src = 'data:image/png;base64,' + data.screenshot;
-          img.classList.remove('loading');
-          
-          frameCount++;
-          const now = Date.now();
-          const fps = (frameCount / ((now - lastUpdateTime) / 1000)).toFixed(1);
-          
-          document.getElementById('status').textContent = 
-            \`🟢 Live (fps: \${fps}) | Page: \${data.pageTitle || 'Loading'}\`;
-        }
-      } catch (err) {
-        document.getElementById('status').textContent = '❌ Error: ' + err.message;
-      }
-      
-      // Capture next frame
-      setTimeout(captureFrame, 500); // 2 FPS = 500ms between frames
-    }
-    
-    captureFrame();
-  </script>
-</body>
-</html>
-    `;
-
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(html);
+    session.lastActivity = Date.now();
+    const cookies = await session.page.cookies();
+    res.json({ status: 'success', modelId, cookies, cookieCount: cookies.length });
   } catch (error) {
-    console.error('[ERROR] /stream:', error.message);
+    console.error('[COOKIES] Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Stream frame endpoint - returns screenshot of current session
-app.get('/stream-frame', async (req, res) => {
+// Re-launch a session from cookies saved earlier (used when the live browser
+// already got closed by the idle timeout but the chatter wants to view it)
+app.post('/restore', async (req, res) => {
   try {
-    const { sessionId } = req.query;
-    if (!sessionId) {
-      return res.status(400).json({ error: 'Missing sessionId' });
+    const { modelId, cookies } = req.body || {};
+    if (!modelId || !Array.isArray(cookies)) {
+      return res.status(400).json({ error: 'Missing modelId or cookies array' });
     }
 
-    const session = sessions[sessionId];
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
+    const session = await restoreSession(modelId, cookies);
+    const state = await getLoginState(session.page);
 
-    // Attempt screenshot with comprehensive error handling
-    let screenshot = null;
-    try {
-      screenshot = await Promise.race([
-        session.page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Screenshot timeout')), 8000))
-      ]);
-    } catch (screenshotErr) {
-      console.warn(`[STREAM-FRAME] Quality 80 failed: ${screenshotErr.message}`);
-      try {
-        screenshot = await Promise.race([
-          session.page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 60 }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Screenshot timeout')), 5000))
-        ]);
-      } catch (fallbackErr) {
-        console.warn(`[STREAM-FRAME] Quality 60 failed: ${fallbackErr.message}`);
-        screenshot = null;
-      }
-    }
-
-    let pageTitle = 'Unknown', pageUrl = 'unknown';
-    
-    try {
-      pageTitle = await session.page.title();
-    } catch (e) {
-      console.warn('[STREAM-FRAME] Title error:', e.message);
-    }
-
-    try {
-      pageUrl = session.page.url();
-    } catch (e) {
-      console.warn('[STREAM-FRAME] URL error:', e.message);
-    }
-
-    res.json({
-      screenshot,
-      pageTitle,
-      pageUrl,
-      isLoggedIn: session.isLoggedIn,
-      cookieCount: session.cookieCount,
-      hasScreenshot: !!screenshot,
-    });
+    res.json({ status: 'success', modelId, ...state });
   } catch (error) {
-    console.error('[ERROR] /stream-frame caught exception:', error.message);
-    console.error('[ERROR] Stack:', error.stack);
-    // Return graceful response instead of 500
-    res.status(200).json({
-      screenshot: null,
-      error: error.message,
-      hasScreenshot: false,
-    });
+    console.error('[RESTORE] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// Close a model's live browser and free the RAM
+app.post('/disconnect', async (req, res) => {
+  try {
+    const { modelId } = req.body || {};
+    if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+
+    await closeSession(modelId, 'disconnect requested');
+    res.json({ status: 'success', modelId });
+  } catch (error) {
+    console.error('[DISCONNECT] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
   }
 });
 
@@ -684,7 +359,8 @@ app.get('/stream-frame', async (req, res) => {
 app.get('/health', (req, res) => {
   res.json({
     status: 'running',
-    activeSessions: Object.keys(sessions).length,
+    activeSessions: Object.keys(modelSessions).length,
+    maxConcurrentSessions: MAX_CONCURRENT_SESSIONS,
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
