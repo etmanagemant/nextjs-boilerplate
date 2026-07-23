@@ -67,7 +67,7 @@ export function OnlyFansViewer({
           }
           setIsLoading(false);
         };
-        img.src = data.screenshot;
+        img.src = `data:image/jpeg;base64,${data.screenshot}`;
       }
     } catch (err: any) {
       console.error("[VIEWER] Screenshot error:", err);
@@ -175,7 +175,7 @@ export function OnlyFansViewer({
           }
           setIsLoading(false);
         };
-        img.src = data.screenshot;
+        img.src = `data:image/jpeg;base64,${data.screenshot}`;
       }
     } catch (err: any) {
       setError(err.message);
@@ -210,7 +210,7 @@ export function OnlyFansViewer({
             ctx.drawImage(img, 0, 0);
           }
         };
-        img.src = data.screenshot;
+        img.src = `data:image/jpeg;base64,${data.screenshot}`;
       }
     } catch (err) {
       console.error("[VIEWER] Click error:", err);
