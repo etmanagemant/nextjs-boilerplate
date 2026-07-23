@@ -61,17 +61,21 @@ function profileDir(modelId) {
   return `/tmp/chromium-${modelId}`;
 }
 
-// Auto dark-mode: invert the whole page, then invert media back so photos/
-// video keep their real colors. Registered once per page via
-// evaluateOnNewDocument so it re-applies on every navigation, including
-// OnlyFans' internal SPA routing, without us having to re-inject manually.
+// Auto dark-mode with a gold tint: invert the whole page (white -> black),
+// then push the result warm/gold with sepia+saturate. Media gets the base
+// invert+hue-rotate counter-filter so photos/video stay close to their real
+// colors (they still pick up a slight warm cast from the outer page filter,
+// which is an acceptable trade-off for a fully CSS-only, selector-free
+// approach that doesn't depend on OnlyFans' own unstable class names).
+// Registered once per page via evaluateOnNewDocument so it re-applies on
+// every navigation, including OnlyFans' internal SPA routing.
 const DARK_MODE_SCRIPT = `
 (function() {
   function inject() {
     if (document.getElementById('__crm_dark_mode__')) return;
     var style = document.createElement('style');
     style.id = '__crm_dark_mode__';
-    style.textContent = 'html { filter: invert(1) hue-rotate(180deg) !important; background: #000 !important; } ' +
+    style.textContent = 'html { filter: invert(1) hue-rotate(180deg) saturate(1.4) sepia(0.35) !important; background: #0A0A0A !important; } ' +
       'img, video, picture, svg, canvas, iframe { filter: invert(1) hue-rotate(180deg) !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
@@ -172,6 +176,7 @@ async function getOrCreateSession(modelId) {
 
   const browser = await launchBrowser(modelId);
   const page = await browser.newPage();
+  await page.setViewport({ width: 1920, height: 1080 });
   await enableDarkMode(page);
 
   try {
@@ -198,6 +203,7 @@ async function restoreSession(modelId, cookies) {
 
   const browser = await launchBrowser(modelId);
   const page = await browser.newPage();
+  await page.setViewport({ width: 1920, height: 1080 });
   await enableDarkMode(page);
 
   try {

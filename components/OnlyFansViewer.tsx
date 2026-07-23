@@ -21,18 +21,22 @@ interface OnlyFansViewerProps {
   onClose: () => void;
   isModal?: boolean;
   isEmbedded?: boolean;
+  emojis?: string[];
 }
+
+const DEFAULT_EMOJIS = ["😊", "😂", "🔥", "❤️", "😍", "👏", "🎉", "😘", "🥵", "💦", "😉", "🙈"];
 
 /**
  * OnlyFansViewer - Modal component for viewing OnlyFans streams
  * Can be used as a modal overlay or embedded viewer
  */
-export function OnlyFansViewer({ 
-  modelId, 
-  modelName = "OnlyFans", 
-  onClose, 
+export function OnlyFansViewer({
+  modelId,
+  modelName = "OnlyFans",
+  onClose,
   isModal = false,
-  isEmbedded = true
+  isEmbedded = true,
+  emojis = DEFAULT_EMOJIS,
 }: OnlyFansViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -245,6 +249,12 @@ export function OnlyFansViewer({
     }
   };
 
+  // Inserts an emoji into whatever field is currently focused on the live
+  // OnlyFans page - click into the message box first, then tap an emoji here.
+  const handleEmojiClick = (emoji: string) => {
+    interact(modelId, "keypress", { text: emoji }).catch((err) => console.error("[VIEWER] Emoji error:", err));
+  };
+
   // Wrapper element (can be modal, embedded, or standalone)
   const viewerContent = (
     <div className="relative w-full h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] rounded-lg overflow-hidden border border-[#D4AF37]/10">
@@ -424,6 +434,23 @@ export function OnlyFansViewer({
         className="absolute -left-[9999px] w-1 h-1 opacity-0"
         autoComplete="off"
       />
+
+      {/* Smiley bar overlay - floats over the live OnlyFans message box.
+          Click into the chat field first, then tap an emoji to insert it. */}
+      {!isLoading && !error && !sessionExpired && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-[92%] overflow-x-auto flex gap-1.5 px-3 py-2 rounded-full bg-black/80 border border-[#D4AF37]/40 backdrop-blur-sm shadow-2xl">
+          {emojis.map((emoji, i) => (
+            <button
+              key={i}
+              onClick={() => handleEmojiClick(emoji)}
+              className="text-lg leading-none flex-shrink-0 hover:scale-125 transition-transform cursor-pointer"
+              title="In OnlyFans-Chat einfügen"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 
