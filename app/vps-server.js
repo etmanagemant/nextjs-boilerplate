@@ -61,6 +61,33 @@ function profileDir(modelId) {
   return `/tmp/chromium-${modelId}`;
 }
 
+// Auto dark-mode: invert the whole page, then invert media back so photos/
+// video keep their real colors. Registered once per page via
+// evaluateOnNewDocument so it re-applies on every navigation, including
+// OnlyFans' internal SPA routing, without us having to re-inject manually.
+const DARK_MODE_SCRIPT = `
+(function() {
+  function inject() {
+    if (document.getElementById('__crm_dark_mode__')) return;
+    var style = document.createElement('style');
+    style.id = '__crm_dark_mode__';
+    style.textContent = 'html { filter: invert(1) hue-rotate(180deg) !important; background: #000 !important; } ' +
+      'img, video, picture, svg, canvas, iframe { filter: invert(1) hue-rotate(180deg) !important; }';
+    (document.head || document.documentElement).appendChild(style);
+  }
+  if (document.head) inject();
+  else document.addEventListener('DOMContentLoaded', inject);
+})();
+`;
+
+async function enableDarkMode(page) {
+  try {
+    await page.evaluateOnNewDocument(DARK_MODE_SCRIPT);
+  } catch (e) {
+    console.warn('[DARK-MODE] Could not register:', e.message);
+  }
+}
+
 // Wipe the on-disk Chrome profile (cookies, cache, local storage) so a fresh
 // login never inherits a previous session for the same model.
 async function wipeProfileDir(modelId) {
@@ -131,6 +158,7 @@ async function getOrCreateSession(modelId) {
 
   const browser = await launchBrowser(modelId);
   const page = await browser.newPage();
+  await enableDarkMode(page);
 
   try {
     await page.goto('https://www.onlyfans.com/login', {
@@ -154,6 +182,7 @@ async function restoreSession(modelId, cookies) {
 
   const browser = await launchBrowser(modelId);
   const page = await browser.newPage();
+  await enableDarkMode(page);
 
   try {
     await page.setCookie(...cookies);

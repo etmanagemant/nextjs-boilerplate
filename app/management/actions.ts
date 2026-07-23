@@ -52,6 +52,16 @@ export async function updateModelName(formData: FormData) {
   }
 }
 
+export async function updateModelAvatar(formData: FormData) {
+  const id = formData.get("id");
+  const avatarUrl = (formData.get("avatar_url") as string || "").trim();
+  if (id) {
+    const supabaseServer = await createClient();
+    await supabaseServer.from("models").update({ avatar_url: avatarUrl || null }).eq("id", id);
+    revalidatePath("/management");
+  }
+}
+
 export async function deleteMitarbeiter(formData: FormData) {
   const userId = formData.get("user_id");
   if (userId) {

@@ -52,15 +52,17 @@ export default async function CRMInboxPage() {
       const modelIds = crm_models.map((m: any) => m.model_id);
       const { data: modelDetails } = await supabase
         .from("models")
-        .select("id, name")
+        .select("id, name, avatar_url")
         .in("id", modelIds);
 
       // Create a map for quick lookup
       const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
+      const avatarMap = new Map(modelDetails?.map((m: any) => [m.id, m.avatar_url]) || []);
 
       connectedModels = crm_models.map((m: any) => ({
         id: m.model_id,
         name: nameMap.get(m.model_id) || m.model_id, // Use name if found, else use id
+        avatar_url: avatarMap.get(m.model_id) || null,
       }));
       console.log("✅ Loaded models from crm_model_sessions:", connectedModels);
     } else {
@@ -68,7 +70,7 @@ export default async function CRMInboxPage() {
       console.log("⚠️ crm_model_sessions empty, loading from old models table...");
       const { data: fallbackModels } = await supabase
         .from("models")
-        .select("id, name, platform_type")
+        .select("id, name, platform_type, avatar_url")
         .eq("platform_type", "onlyfans")
         .order("name", { ascending: true });
 
@@ -77,6 +79,7 @@ export default async function CRMInboxPage() {
         connectedModels = fallbackModels.map((m: any) => ({
           id: m.id,
           name: m.name || m.id,
+          avatar_url: m.avatar_url || null,
         }));
       }
     }

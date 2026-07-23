@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabaseClient";
 interface ConnectedModel {
   id: string;
   name: string;
+  avatar_url?: string | null;
 }
 
 interface WorkspaceSidebarProps {
@@ -51,17 +52,19 @@ export default function WorkspaceSidebar({
         if (sessions && sessions.length > 0) {
           const modelIds = sessions.map((s: any) => s.model_id);
 
-          // Lookup names from models table
+          // Lookup names + avatars from models table
           const { data: modelDetails } = await supabase
             .from("models")
-            .select("id, name")
+            .select("id, name, avatar_url")
             .in("id", modelIds);
 
           const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
+          const avatarMap = new Map(modelDetails?.map((m: any) => [m.id, m.avatar_url]) || []);
 
           const models = sessions.map((s: any) => ({
             id: s.model_id,
             name: nameMap.get(s.model_id) || s.model_id,
+            avatar_url: avatarMap.get(s.model_id) || null,
           }));
 
           setAutoFetchedModels(models);
@@ -261,7 +264,16 @@ export default function WorkspaceSidebar({
                     title={`${model.name} - Left-click: Select / Open | Right-click: Menu`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-lg flex-shrink-0">👤</span>
+                      {model.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={model.avatar_url}
+                          alt={model.name}
+                          className="w-6 h-6 rounded-full object-cover border border-[#D4AF37]/40 flex-shrink-0"
+                        />
+                      ) : (
+                        <span className="text-lg flex-shrink-0">👤</span>
+                      )}
                       {!isCollapsed && <span className="truncate">{model.name}</span>}
                     </div>
                   </button>

@@ -7,23 +7,45 @@ interface Model {
   id: string;
   name: string;
   platform_type?: string;
+  avatar_url?: string | null;
 }
 
 interface ModelsManagementClientProps {
   models: Model[];
   onDeleteClick: (formData: FormData) => Promise<void>;
   onNameChange: (formData: FormData) => Promise<void>;
+  onAvatarChange: (formData: FormData) => Promise<void>;
 }
 
 export default function ModelsManagementClient({
   models,
   onDeleteClick,
   onNameChange,
+  onAvatarChange,
 }: ModelsManagementClientProps) {
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editingAvatarId, setEditingAvatarId] = useState<string | null>(null);
+  const [editingAvatarUrl, setEditingAvatarUrl] = useState("");
+
+  const handleAvatarStart = (modelId: string, currentUrl?: string | null) => {
+    setEditingAvatarId(modelId);
+    setEditingAvatarUrl(currentUrl || "");
+  };
+
+  const handleAvatarSubmit = async (modelId: string) => {
+    const formData = new FormData();
+    formData.append("id", modelId);
+    formData.append("avatar_url", editingAvatarUrl.trim());
+    try {
+      await onAvatarChange(formData);
+    } finally {
+      setEditingAvatarId(null);
+      setEditingAvatarUrl("");
+    }
+  };
 
   const handleEditStart = (modelId: string, modelName: string) => {
     setEditingId(modelId);
@@ -79,6 +101,44 @@ export default function ModelsManagementClient({
             className="flex justify-between items-center p-3 border border-[#AA7C11]/20 rounded-md bg-[#050505]/40 hover:border-[#D4AF37]/50 transition"
           >
             <div className="flex items-center gap-3 flex-1">
+              {model.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={model.avatar_url}
+                  alt={model.name}
+                  className="w-8 h-8 rounded-full object-cover border border-[#D4AF37]/40 flex-shrink-0"
+                />
+              ) : (
+                <span className="w-8 h-8 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/40 flex items-center justify-center text-sm flex-shrink-0">👤</span>
+              )}
+              {editingAvatarId === model.id ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleAvatarSubmit(model.id);
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    type="text"
+                    value={editingAvatarUrl}
+                    onChange={(e) => setEditingAvatarUrl(e.target.value)}
+                    autoFocus
+                    placeholder="Bild-URL (OnlyFans Profilbild)"
+                    className="w-48 px-2 py-1 border border-[#AA7C11]/30 rounded-md text-xs text-white bg-[#050505] focus:border-[#D4AF37] outline-none"
+                  />
+                  <button type="submit" className="text-[11px] bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer">OK</button>
+                  <button type="button" onClick={() => setEditingAvatarId(null)} className="text-[11px] bg-slate-600 text-white px-2 py-1 rounded font-bold hover:bg-slate-700 transition cursor-pointer">✕</button>
+                </form>
+              ) : (
+                <button
+                  onClick={() => handleAvatarStart(model.id, model.avatar_url)}
+                  className="text-[11px] bg-[#D4AF37]/10 text-[#D4AF37] px-2 py-1 rounded font-bold hover:bg-[#D4AF37]/20 transition cursor-pointer"
+                  title="Profilbild setzen"
+                >
+                  🖼️
+                </button>
+              )}
               {editingId === model.id ? (
                 <form
                   onSubmit={(e) => {

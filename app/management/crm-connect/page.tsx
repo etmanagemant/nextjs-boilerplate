@@ -173,12 +173,14 @@ export default async function CRMConnectPage() {
     const activeModelIds = activeModels.map((m: any) => m.model_id);
     const { data: modelDetails } = await supabase
       .from("models")
-      .select("id, name")
+      .select("id, name, avatar_url")
       .in("id", activeModelIds);
     const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
+    const avatarMap = new Map(modelDetails?.map((m: any) => [m.id, m.avatar_url]) || []);
     sidebarModels = activeModels.map((m: any) => ({
       id: m.model_id,
       name: nameMap.get(m.model_id) || m.model_id,
+      avatar_url: avatarMap.get(m.model_id) || null,
     }));
   }
 

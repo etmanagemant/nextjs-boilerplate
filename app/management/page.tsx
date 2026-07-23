@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel, deleteMitarbeiter, updateMitarbeiterCompensation, updateModelName } from "./actions";
+import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel, deleteMitarbeiter, updateMitarbeiterCompensation, updateModelName, updateModelAvatar } from "./actions";
 import { revalidatePath } from "next/cache";
 // 🟢 IMPORTE EXAKT BEIBEHALTEN
 import CreateShiftForm from "@/components/layout/CreateShiftForm"; 
@@ -28,7 +28,7 @@ export default async function ManagementPage() {
 
   // 🛡️ ERWEITERTES SELECT: Zieht provision_rate + hourly_rate mit aus der Datenbank heraus!
   const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name, provision_rate, hourly_rate");
-  const { data: modelsListe } = await supabase.from("models").select("id, name, platform_type").order("name", { ascending: true });
+  const { data: modelsListe } = await supabase.from("models").select("id, name, platform_type, avatar_url").order("name", { ascending: true });
   const { data: alleSchichten } = await supabase.from("shift_assignments").select("*");
 
   const sichereProfile = profilListe || [];
@@ -160,10 +160,11 @@ export default async function ManagementPage() {
           <button type="submit" className="bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black px-4 py-2 rounded-md text-sm font-bold hover:from-[#E5C158] transition cursor-pointer">Model hinzufügen</button>
         </form>
         
-        <ModelsManagementClient 
+        <ModelsManagementClient
           models={sichereModels}
           onDeleteClick={deleteModel}
           onNameChange={updateModelName}
+          onAvatarChange={updateModelAvatar}
         />
       </section>
     </main>
