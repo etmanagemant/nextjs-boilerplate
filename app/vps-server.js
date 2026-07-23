@@ -61,6 +61,24 @@ function profileDir(modelId) {
   return `/tmp/chromium-${modelId}`;
 }
 
+// Concurrent /connect or /restore calls for the same model (e.g. the chatter
+// screenshot poll firing again before the previous restore finished) used to
+// each launch their own Chrome against the same --user-data-dir, which
+// Chrome refuses ("browser is already running for <dir>") and which alone
+// was enough to overload this VPS. Callers for the same modelId now share
+// one in-flight launch instead of racing.
+const pendingLaunches = {};
+function withModelLock(modelId, fn) {
+  if (pendingLaunches[modelId]) return pendingLaunches[modelId];
+  const p = Promise.resolve()
+    .then(fn)
+    .finally(() => {
+      delete pendingLaunches[modelId];
+    });
+  pendingLaunches[modelId] = p;
+  return p;
+}
+
 // Auto dark-mode with a gold tint: invert the whole page (white -> black),
 // then push the result warm/gold with sepia+saturate. Media gets the base
 // invert+hue-rotate counter-filter so photos/video stay close to their real
@@ -176,7 +194,10 @@ async function getOrCreateSession(modelId) {
 
   const browser = await launchBrowser(modelId);
   const page = await browser.newPage();
-  await page.setViewport({ width: 1920, height: 1080 });
+  // 1920x1080 briefly overloaded this 1-vCPU/1GB VPS (load average 15+,
+  // heavy swapping) since Chrome renders it entirely in software with
+  // --disable-gpu. 1280x800 is the safe ceiling until the VPS is upgraded.
+  await page.setViewport({ width: 1280, height: 800 });
   await enableDarkMode(page);
 
   try {
@@ -198,12 +219,23 @@ async function getOrCreateSession(modelId) {
 // Re-launch a session from previously saved cookies (used when the chatter
 // live-view is opened but no live browser is currently running for the model)
 async function restoreSession(modelId, cookies) {
+  // A previous call (queued behind the same lock) may have already restored
+  // this model - reuse it instead of tearing down a working session.
+  const existing = modelSessions[modelId];
+  if (existing) {
+    existing.lastActivity = Date.now();
+    return existing;
+  }
+
   await closeSession(modelId, 'restoring from saved cookies', true);
   await enforceSessionCap(modelId);
 
   const browser = await launchBrowser(modelId);
   const page = await browser.newPage();
-  await page.setViewport({ width: 1920, height: 1080 });
+  // 1920x1080 briefly overloaded this 1-vCPU/1GB VPS (load average 15+,
+  // heavy swapping) since Chrome renders it entirely in software with
+  // --disable-gpu. 1280x800 is the safe ceiling until the VPS is upgraded.
+  await page.setViewport({ width: 1280, height: 800 });
   await enableDarkMode(page);
 
   try {
@@ -282,7 +314,7 @@ app.post('/connect', async (req, res) => {
     const { modelId } = req.body;
     if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
 
-    const session = await getOrCreateSession(modelId);
+    const session = await withModelLock(modelId, () => getOrCreateSession(modelId));
     const state = await getLoginState(session.page);
 
     res.json({ status: 'success', modelId, ...state });
@@ -422,7 +454,7 @@ app.post('/restore', async (req, res) => {
       return res.status(400).json({ error: 'Missing modelId or cookies array' });
     }
 
-    const session = await restoreSession(modelId, cookies);
+    const session = await withModelLock(modelId, () => restoreSession(modelId, cookies));
     const state = await getLoginState(session.page);
 
     res.json({ status: 'success', modelId, ...state });
