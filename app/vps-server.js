@@ -1,5 +1,7 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
+const fs = require('fs/promises');
+const path = require('path');
 
 // ============================================================================
 // PROCESS HARDENING - Global Exception Shield
@@ -55,15 +57,33 @@ const IDLE_TIMEOUT_MS = 20 * 60 * 1000; // close a session after 20 min of no re
 // Bump via MAX_CONCURRENT_SESSIONS env var if you upgrade the VPS.
 const MAX_CONCURRENT_SESSIONS = Number(process.env.MAX_CONCURRENT_SESSIONS || 1);
 
-async function closeSession(modelId, reason = 'manual') {
-  const session = modelSessions[modelId];
-  if (!session) return;
-  delete modelSessions[modelId];
+function profileDir(modelId) {
+  return `/tmp/chromium-${modelId}`;
+}
+
+// Wipe the on-disk Chrome profile (cookies, cache, local storage) so a fresh
+// login never inherits a previous session for the same model.
+async function wipeProfileDir(modelId) {
   try {
-    await session.browser.close();
-    console.log(`[SESSION] Closed session for ${modelId} (${reason})`);
+    await fs.rm(profileDir(modelId), { recursive: true, force: true });
   } catch (e) {
-    console.warn(`[SESSION] Error closing session for ${modelId}:`, e.message);
+    console.warn(`[SESSION] Could not wipe profile dir for ${modelId}:`, e.message);
+  }
+}
+
+async function closeSession(modelId, reason = 'manual', wipeProfile = false) {
+  const session = modelSessions[modelId];
+  if (session) {
+    delete modelSessions[modelId];
+    try {
+      await session.browser.close();
+      console.log(`[SESSION] Closed session for ${modelId} (${reason})`);
+    } catch (e) {
+      console.warn(`[SESSION] Error closing session for ${modelId}:`, e.message);
+    }
+  }
+  if (wipeProfile) {
+    await wipeProfileDir(modelId);
   }
 }
 
@@ -106,6 +126,8 @@ async function getOrCreateSession(modelId) {
   }
 
   await enforceSessionCap(modelId);
+  // Fresh login handshake - never inherit a previous session's cookies for this model
+  await wipeProfileDir(modelId);
 
   const browser = await launchBrowser(modelId);
   const page = await browser.newPage();
@@ -127,7 +149,7 @@ async function getOrCreateSession(modelId) {
 // Re-launch a session from previously saved cookies (used when the chatter
 // live-view is opened but no live browser is currently running for the model)
 async function restoreSession(modelId, cookies) {
-  await closeSession(modelId, 'restoring from saved cookies');
+  await closeSession(modelId, 'restoring from saved cookies', true);
   await enforceSessionCap(modelId);
 
   const browser = await launchBrowser(modelId);
@@ -356,13 +378,14 @@ app.post('/restore', async (req, res) => {
   }
 });
 
-// Close a model's live browser and free the RAM
+// Close a model's live browser, free the RAM, and wipe its on-disk profile
+// so cookies from this login never survive into the next connect.
 app.post('/disconnect', async (req, res) => {
   try {
     const { modelId } = req.body || {};
     if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
 
-    await closeSession(modelId, 'disconnect requested');
+    await closeSession(modelId, 'disconnect requested', true);
     res.json({ status: 'success', modelId });
   } catch (error) {
     console.error('[DISCONNECT] Error:', error.message);

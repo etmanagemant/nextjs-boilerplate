@@ -37,6 +37,8 @@ export function OnlyFansViewer({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastScreenshot, setLastScreenshot] = useState<string | null>(null);
   const screenshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -52,6 +54,16 @@ export function OnlyFansViewer({
       }
 
       const data = await response.json();
+
+      if (data.sessionExpired) {
+        setSessionExpired(true);
+        setIsLoading(false);
+        if (screenshotIntervalRef.current) {
+          clearInterval(screenshotIntervalRef.current);
+        }
+        return;
+      }
+
       setLastScreenshot(data.screenshot);
       setError(null);
 
@@ -94,7 +106,7 @@ export function OnlyFansViewer({
         }
         screenshotIntervalRef.current = setInterval(() => {
           fetchScreenshot();
-        }, 600);
+        }, 400);
       } catch (err: any) {
         console.error("[VIEWER] Initialization error:", err);
         setError(err.message || "Failed to initialize OnlyFans viewer");
@@ -130,7 +142,7 @@ export function OnlyFansViewer({
         }
         screenshotIntervalRef.current = setInterval(() => {
           fetchScreenshot();
-        }, 600);
+        }, 400);
       } catch (err: any) {
         console.error("[VIEWER] Retry error:", err);
         setError(err.message || "Failed to initialize OnlyFans viewer");
@@ -244,6 +256,13 @@ export function OnlyFansViewer({
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => setIsFullscreen((v) => !v)}
+            className="px-4 py-2 bg-gradient-to-b from-[#D4AF37]/60 to-[#AA7C11]/60 hover:from-[#D4AF37]/80 hover:to-[#AA7C11]/80 text-black font-bold rounded-lg text-sm transition shadow-lg"
+            title={isFullscreen ? "Verkleinern" : "Vollbild"}
+          >
+            {isFullscreen ? "🗗 Verkleinern" : "⛶ Vollbild"}
+          </button>
+          <button
             onClick={fetchScreenshot}
             className="px-4 py-2 bg-gradient-to-b from-[#D4AF37]/80 to-[#AA7C11]/80 hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/30"
             title="Refresh screenshot"
@@ -280,8 +299,28 @@ export function OnlyFansViewer({
         </div>
       )}
 
+      {/* Session Expired - OnlyFans invalidated the login (e.g. platform update) */}
+      {sessionExpired && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/80 to-[#0A0A0A]/90 z-20 backdrop-blur-sm p-4">
+          <div className="bg-gradient-to-br from-[#2D1A0A] to-[#1A0F05] border-2 border-[#D4AF37]/40 rounded-xl p-6 text-[#F3E5AB] max-w-md shadow-2xl text-center">
+            <div className="text-4xl mb-3">🔒</div>
+            <p className="font-black mb-2 text-lg text-[#D4AF37] uppercase tracking-wider">Session abgelaufen</p>
+            <p className="text-sm text-slate-300 mb-5">
+              OnlyFans hat diese Session ungültig gemacht (z. B. durch ein Update oder erzwungenen Logout).
+              Das Model muss neu verbunden werden.
+            </p>
+            <a
+              href="/management/crm-connect"
+              className="inline-block px-5 py-3 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/40"
+            >
+              🔗 Zum Connection Hub
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Error State - Enhanced styling */}
-      {error && (
+      {error && !sessionExpired && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/80 to-[#0A0A0A]/90 z-10 backdrop-blur-sm p-4">
           <div className="bg-gradient-to-br from-[#2D1A0A] to-[#1A0F05] border-2 border-[#D4AF37]/40 rounded-xl p-6 text-[#F3E5AB] max-w-2xl shadow-2xl">
             <p className="font-black mb-3 text-lg text-[#D4AF37] uppercase tracking-wider">⚠️ OnlyFans Stream Fehler</p>
@@ -387,6 +426,16 @@ export function OnlyFansViewer({
       />
     </div>
   );
+
+  // Fullscreen overrides modal/embedded layout - covers the whole viewport
+  // regardless of whatever column width the parent gave this component.
+  if (isFullscreen) {
+    return (
+      <div className="fixed inset-0 bg-black z-50">
+        {viewerContent}
+      </div>
+    );
+  }
 
   // If modal mode, wrap in backdrop
   if (isModal) {

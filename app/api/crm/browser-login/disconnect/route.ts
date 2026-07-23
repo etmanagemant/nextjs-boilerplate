@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAdmin } from "@/lib/crmAdmin";
-import { vpsFetch } from "@/lib/vpsClient";
+import { disconnectModelSession } from "@/lib/crmSession";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Disconnect a model: mark the session inactive in Supabase AND close the
- * live browser on the VPS so it stops eating RAM.
+ * Disconnect a model: clears the stored cookies in Supabase and closes the
+ * live browser on the VPS (which also wipes its on-disk Chrome profile), so
+ * reconnecting never inherits the previous login's data.
  * POST /api/crm/browser-login/disconnect  Body: { modelId }
  */
 export async function POST(req: NextRequest) {
@@ -21,27 +22,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "error", error: "Missing modelId" }, { status: 400 });
     }
 
-    const { error: updateError } = await supabase
-      .from("crm_model_sessions")
-      .update({
-        is_active: false,
-        last_verified_at: new Date().toISOString(),
-      })
-      .eq("model_id", modelId);
-
-    if (updateError) {
-      console.error("[DISCONNECT] Update failed:", updateError.message);
+    const { error } = await disconnectModelSession(supabase, modelId);
+    if (error) {
+      console.error("[DISCONNECT] Update failed:", error.message);
       return NextResponse.json({ status: "error", error: "Failed to disconnect session" }, { status: 500 });
-    }
-
-    try {
-      await vpsFetch("/disconnect", {
-        method: "POST",
-        body: JSON.stringify({ modelId }),
-      });
-    } catch (vpsErr: any) {
-      // Not fatal - DB state already reflects "disconnected"
-      console.warn("[DISCONNECT] VPS cleanup failed:", vpsErr.message);
     }
 
     return NextResponse.json({ status: "success", disconnected: true, modelId });
