@@ -220,11 +220,46 @@ export default function CRMInboxClient({
                 userFullName={undefined}
               />
             </div>
+          ) : selectedOnlyFansModel && !selectedFanId ? (
+            // ONLYFANS FOCUS MODE - no native chat selected yet, so the real,
+            // populated conversations live entirely inside the live OnlyFans
+            // view. It gets the majority of the screen; the native widgets
+            // stay reachable as slim side columns instead of disappearing.
+            <>
+              <div className="w-48 flex-shrink-0 border-r border-[#D4AF37]/20">
+                <ChatListColumn
+                  fans={fans}
+                  selectedFanId={selectedFanId}
+                  onSelectFan={handleSelectFan}
+                  isLoading={isLoadingFans}
+                />
+              </div>
+
+              <div className="flex-1 min-w-0 overflow-hidden bg-black">
+                <OnlyFansViewer
+                  modelId={selectedOnlyFansModel}
+                  modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}
+                  isEmbedded={true}
+                  isModal={false}
+                  onClose={() => setSelectedOnlyFansModel(null)}
+                />
+              </div>
+
+              <div className="w-72 flex-shrink-0 border-l border-[#D4AF37]/20">
+                <SalesCockpitColumn
+                  fanMetadata={fanMetadata}
+                  scripts={scripts}
+                  selectedScript={selectedScript}
+                  onSelectScript={setSelectedScript}
+                  onNotesChange={handleUpdateNotes}
+                  isSavingNotes={isSavingNotes}
+                />
+              </div>
+            </>
           ) : (
-            // CHAT MODE - chat list / thread / sales cockpit stay visible at all
-            // times (smiley bar, script library, etc.) - OnlyFans live view is
-            // an additional column, never a replacement for them. Use the
-            // viewer's own "Vollbild" button for a fully immersive OF view.
+            // NATIVE CHAT MODE - a fan conversation is selected, so the CRM's
+            // own inbox (with the emoji bar and script library) is the focus.
+            // OnlyFans, if open, stays as a reference column alongside it.
             <>
               {/* Column 1: Chat List */}
               <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-r border-[#D4AF37]/20 transition-all duration-200`}>
@@ -236,24 +271,18 @@ export default function CRMInboxClient({
                 />
               </div>
 
-              {/* Column 2: Chat Thread (or a hint while no fan is selected yet) */}
+              {/* Column 2: Chat Thread */}
               <div className={`${selectedOnlyFansModel ? 'w-2/5' : 'w-1/2'} transition-all duration-200`}>
-                {selectedFanId ? (
-                  <ChatThreadColumn
-                    messages={messages}
-                    currentMessage={currentMessage}
-                    onMessageChange={setCurrentMessage}
-                    onSendMessage={handleSendMessage}
-                    emojis={emojis}
-                    selectedEmoji={selectedScript ? "✓" : undefined}
-                    isLoading={isLoadingMessages}
-                    isSending={isSending}
-                  />
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center bg-[#0A0A0A] border-r border-[#D4AF37]/20 p-6 text-center">
-                    <p className="text-slate-400 text-sm">Wähle links einen Fan aus, um den Chat zu öffnen.</p>
-                  </div>
-                )}
+                <ChatThreadColumn
+                  messages={messages}
+                  currentMessage={currentMessage}
+                  onMessageChange={setCurrentMessage}
+                  onSendMessage={handleSendMessage}
+                  emojis={emojis}
+                  selectedEmoji={selectedScript ? "✓" : undefined}
+                  isLoading={isLoadingMessages}
+                  isSending={isSending}
+                />
               </div>
 
               {/* Column 3: Sales Cockpit */}
