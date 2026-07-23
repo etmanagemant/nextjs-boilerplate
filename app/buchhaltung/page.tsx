@@ -1,16 +1,15 @@
-import { createClient } from "@/utils/supabase/server";
+import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import { updateAgencySettings } from "@/app/abrechnung/actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function BuchhaltungPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getCurrentUser();
 
   // Harte Absicherung: Chatter fliegen sofort raus!
   if (!user) { redirect("/login"); }
-  const { data: adminCheck } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+  const adminCheck = await getCurrentProfile(user.id);
   if (user.email !== "etmanagement@gmail.com" && adminCheck?.role !== "admin") { redirect("/"); }
 
   // Daten parallel laden

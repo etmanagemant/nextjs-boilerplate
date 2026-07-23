@@ -1,5 +1,6 @@
 import "./globals.css";
-import { createClient } from "@/utils/supabase/server";
+import Link from "next/link";
+import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 
 export const metadata = {
   title: "ET Management",
@@ -11,19 +12,18 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getCurrentUser();
 
-  let role = "chatter"; 
+  let role = "chatter";
   if (user) {
     if (
-      user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || 
-      user.email === "etmanagement@gmail.com" || 
+      user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
+      user.email === "etmanagement@gmail.com" ||
       user.email === "etmanagemant@gmail.com"
     ) {
       role = "admin";
     } else {
-      const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+      const profile = await getCurrentProfile(user.id);
       if (profile && profile.role === "moderator") {
         role = "moderator";
       } else if (profile && profile.role === "admin") {
@@ -40,28 +40,28 @@ export default async function RootLayout({
             
             {/* LEFT SIDE - Start, Dashboard, OnlyFans, Stechuhr, Abrechnung */}
             <nav className="flex items-center gap-0.5 flex-nowrap z-10 flex-1 min-w-0">
-              <a href="/" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Start</a>
-              <a href="/dashboard" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Dashboard</a>
-              <a href="/crm-inbox" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap"><span>🔮</span> OnlyFans</a>
+              <Link href="/" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Start</Link>
+              <Link href="/dashboard" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Dashboard</Link>
+              <Link href="/crm-inbox" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap"><span>🔮</span> OnlyFans</Link>
 
               {role === "admin" && (
                 <>
-                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
-                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</a>
+                  <Link href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Stechuhr</Link>
+                  <Link href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</Link>
                 </>
               )}
 
               {role === "moderator" && (
                 <>
-                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
-                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</a>
+                  <Link href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Stechuhr</Link>
+                  <Link href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</Link>
                 </>
               )}
 
               {role !== "admin" && role !== "moderator" && (
                 <>
-                  <a href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Stechuhr</a>
-                  <a href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</a>
+                  <Link href="/chatter" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Stechuhr</Link>
+                  <Link href="/abrechnung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Abrechnung</Link>
                 </>
               )}
             </nav>
@@ -77,10 +77,10 @@ export default async function RootLayout({
             <nav className="flex items-center gap-0.5 flex-nowrap z-10 flex-1 justify-end min-w-0">
               {role === "admin" && (
                 <>
-                  <a href="/management" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Management</a>
-                  <a href="/massmessage" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Massmessage</a>
-                  <a href="/content-plan" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap"><span>📅</span> Plan</a>
-                  <a href="/buchhaltung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Buchhaltung</a>
+                  <Link href="/management" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Management</Link>
+                  <Link href="/massmessage" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap">Massmessage</Link>
+                  <Link href="/content-plan" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md whitespace-nowrap"><span>📅</span> Plan</Link>
+                  <Link href="/buchhaltung" className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2.5 text-sm font-bold text-black shadow-md border border-amber-400/20 whitespace-nowrap">Buchhaltung</Link>
                 </>
               )}
             </nav>

@@ -1,5 +1,6 @@
-import { createClient } from "@/utils/supabase/server";
+import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import ContentPlanClient from "@/components/layout/ContentPlanClient";
 // import ContentUploader from "@/components/layout/ContentUploader";
 import {
@@ -16,8 +17,7 @@ export default async function ContentPlanPage({
   searchParams: Promise<{ model?: string }>;
 }) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user } = await getCurrentUser();
 
     // ========================================
     // ADMIN-ONLY CHECK
@@ -33,11 +33,7 @@ export default async function ContentPlanPage({
     ) {
       isAdmin = true;
     } else {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const profile = await getCurrentProfile(user.id);
       if (profile && profile.role === "admin") isAdmin = true;
     }
 
@@ -48,9 +44,11 @@ export default async function ContentPlanPage({
     // ========================================
     // DATA FETCHING
     // ========================================
-    const params = await searchParams;
-    const models = await getModels();
-    const communities = await getContentCommunities();
+    const [params, models, communities] = await Promise.all([
+      searchParams,
+      getModels(),
+      getContentCommunities(),
+    ]);
 
     // Default to first model or use URL param
     const selectedModelId = params.model || (models.length > 0 ? models[0].id : "");
@@ -157,9 +155,9 @@ export default async function ContentPlanPage({
             <summary className="cursor-pointer font-bold">Vollständiger Error</summary>
             <pre className="mt-2 overflow-auto whitespace-pre-wrap">{JSON.stringify(error, null, 2)}</pre>
           </details>
-          <a href="/" className="inline-block bg-[#D4AF37] text-black px-4 py-2 rounded font-bold hover:bg-[#E5C158] mt-4">
+          <Link href="/" className="inline-block bg-[#D4AF37] text-black px-4 py-2 rounded font-bold hover:bg-[#E5C158] mt-4">
             Zur Startseite
-          </a>
+          </Link>
         </div>
       </main>
     );

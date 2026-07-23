@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "../../lib/supabaseClient";
 
 export default function DashboardPage() {
@@ -302,7 +303,7 @@ export default function DashboardPage() {
       {/* 🖥️ CRM ADMIN PANEL - MODEL VERBINDUNG & SETTINGS */}
       {isAdmin && (
         <section className="mb-8">
-          <a href="/management/crm-connect" className="group block">
+          <Link href="/management/crm-connect" className="group block">
             <div className="bg-gradient-to-br from-[#1a1a1a] to-black p-6 rounded-xl border-2 border-[#D4AF37]/40 shadow-2xl hover:border-[#D4AF37]/80 hover:shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all duration-300 transform hover:scale-102">
               <div className="flex items-center justify-between">
                 <div>
@@ -315,14 +316,14 @@ export default function DashboardPage() {
                 Zum Admin-Panel <span>→</span>
               </div>
             </div>
-          </a>
+          </Link>
         </section>
       )}
 
       {/* 💬 CRM LIVE INBOX - CHATTER & MODERATOR */}
       {(currentUserRole === "chatter" || currentUserRole === "moderator" || isAdmin) && (
         <section className="mb-8">
-          <a href="/crm-inbox" className="group block">
+          <Link href="/crm-inbox" className="group block">
             <div className="bg-gradient-to-br from-amber-900/30 to-black p-8 rounded-xl border-2 border-[#D4AF37]/60 shadow-2xl hover:border-[#F3E5AB]/80 hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-300 transform hover:scale-105">
               <div className="flex items-center justify-between">
                 <div>
@@ -340,7 +341,7 @@ export default function DashboardPage() {
                 Zur Chat-Zentrale öffnen <span>→</span>
               </div>
             </div>
-          </a>
+          </Link>
         </section>
       )}
 

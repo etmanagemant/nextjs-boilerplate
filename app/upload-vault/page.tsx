@@ -1,39 +1,32 @@
-import { createClient } from "@/utils/supabase/server";
+import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import UploadVaultClient from "@/components/layout/UploadVaultClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function UploadVaultPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getCurrentUser();
 
   if (!user) {
     redirect("/login");
   }
 
-  // Get user role
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, full_name")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // Get user role, media, and connected models in parallel
+  const [profile, { data: media }, { data: crm_models }] = await Promise.all([
+    getCurrentProfile(user.id),
+    supabase
+      .from("crm_vault_media")
+      .select("*")
+      .eq("chatter_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("crm_model_sessions")
+      .select("model_id")
+      .eq("is_active", true)
+      .order("model_id", { ascending: true }),
+  ]);
 
   const userRole = profile?.role || "guest";
-
-  // Fetch media for this user from crm_vault_media
-  const { data: media } = await supabase
-    .from("crm_vault_media")
-    .select("*")
-    .eq("chatter_id", user.id)
-    .order("created_at", { ascending: false });
-
-  // 📊 Fetch connected models for sidebar navigation
-  const { data: crm_models } = await supabase
-    .from("crm_model_sessions")
-    .select("model_id")
-    .eq("is_active", true)
-    .order("model_id", { ascending: true });
 
   let connectedModels: any[] = [];
   if (crm_models && crm_models.length > 0) {

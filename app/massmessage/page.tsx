@@ -1,4 +1,4 @@
-import { createClient } from "@/utils/supabase/server";
+import { getCurrentUser } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import MassMessageListClient from "@/components/layout/MassMessageListClient";
 
@@ -13,8 +13,7 @@ type ArchivNachricht = {
 };
 
 export default async function MassMessagesPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getCurrentUser();
 
   if (!user) { redirect("/login"); }
 

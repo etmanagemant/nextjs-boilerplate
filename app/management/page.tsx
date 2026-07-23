@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel, deleteMitarbeiter, updateMitarbeiterCompensation, updateModelName, updateModelAvatar } from "./actions";
 import { revalidatePath } from "next/cache";
@@ -11,25 +12,26 @@ import ModelsManagementClient from "@/components/layout/ModelsManagementClient";
 export const dynamic = "force-dynamic";
 
 export default async function ManagementPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getCurrentUser();
 
   if (!user) { redirect("/login"); }
-  
+
   let isAdmin = false;
   if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
     isAdmin = true;
   } else {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+    const profile = await getCurrentProfile(user.id);
     if (profile && profile.role === "admin") isAdmin = true;
   }
 
   if (!isAdmin) { redirect("/"); }
 
   // 🛡️ ERWEITERTES SELECT: Zieht provision_rate + hourly_rate mit aus der Datenbank heraus!
-  const { data: profilListe } = await supabase.from("profiles").select("user_id, role, email, full_name, provision_rate, hourly_rate");
-  const { data: modelsListe } = await supabase.from("models").select("id, name, platform_type, avatar_url").order("name", { ascending: true });
-  const { data: alleSchichten } = await supabase.from("shift_assignments").select("*");
+  const [{ data: profilListe }, { data: modelsListe }, { data: alleSchichten }] = await Promise.all([
+    supabase.from("profiles").select("user_id, role, email, full_name, provision_rate, hourly_rate"),
+    supabase.from("models").select("id, name, platform_type, avatar_url").order("name", { ascending: true }),
+    supabase.from("shift_assignments").select("*"),
+  ]);
 
   const sichereProfile = profilListe || [];
   const sichereModels = modelsListe || [];

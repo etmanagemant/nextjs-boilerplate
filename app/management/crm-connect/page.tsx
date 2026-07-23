@@ -1,4 +1,4 @@
-import { createClient } from "@/utils/supabase/server";
+import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import CRMConnectClient from "@/components/layout/CRMConnectClient";
 
@@ -17,8 +17,7 @@ interface Chatter {
 }
 
 export default async function CRMConnectPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getCurrentUser();
 
   // 🔐 SECURITY: Redirect if not authenticated
   if (!user) {
@@ -33,12 +32,7 @@ export default async function CRMConnectPage() {
   ) {
     isAdmin = true;
   } else {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
+    const profile = await getCurrentProfile(user.id);
     if (profile?.role === "admin") {
       isAdmin = true;
     }
@@ -49,64 +43,48 @@ export default async function CRMConnectPage() {
   }
 
   // 📊 FETCH DATA
-  // First: Migrate old models to crm_model_sessions if not already there
+  // Migrate any OnlyFans models that don't have a crm_model_sessions row yet.
+  // This used to loop per-model with 2 sequential queries each (up to 2N
+  // round-trips on every single page visit); now it's a fixed handful of
+  // queries no matter how many models exist.
   try {
-    const { data: oldModels, error: oldModelsError } = await supabase
-      .from("models")
-      .select("id, name, platform_type")
-      .eq("platform_type", "onlyfans");
+    const [{ data: oldModels, error: oldModelsError }, { data: existingSessions }] = await Promise.all([
+      supabase.from("models").select("id, name, platform_type").eq("platform_type", "onlyfans"),
+      supabase.from("crm_model_sessions").select("model_id"),
+    ]);
 
     if (oldModelsError) {
       console.error("Error fetching old models:", oldModelsError);
     }
 
-    if (oldModels && oldModels.length > 0) {
-      console.log(`Found ${oldModels.length} models to migrate:`, oldModels);
-      
-      for (const oldModel of oldModels) {
-        // Check if already in crm_model_sessions
-        const { data: existing, error: checkError } = await supabase
-          .from("crm_model_sessions")
-          .select("model_id")
-          .eq("model_id", oldModel.id)
-          .maybeSingle();
+    const existingIds = new Set((existingSessions || []).map((s: any) => s.model_id));
+    const missing = (oldModels || []).filter((m: any) => !existingIds.has(m.id));
 
-        if (checkError) {
-          console.error(`Error checking model ${oldModel.id}:`, checkError);
-          continue;
-        }
-
-        // If not exists, create it
-        if (!existing) {
-          const { error: insertError } = await supabase.from("crm_model_sessions").insert({
-            model_id: oldModel.id,
-            is_active: false, // Not yet connected
-            auth_cookies: null,
-            last_verified_at: new Date().toISOString(),
-            last_synced_at: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-
-          if (insertError) {
-            console.error(`Error inserting model ${oldModel.id}:`, insertError);
-          } else {
-            console.log(`Migrated model: ${oldModel.id}`);
-          }
-        } else {
-          console.log(`Model ${oldModel.id} already exists`);
-        }
-      }
+    if (missing.length > 0) {
+      const now = new Date().toISOString();
+      const { error: insertError } = await supabase.from("crm_model_sessions").insert(
+        missing.map((m: any) => ({
+          model_id: m.id,
+          is_active: false,
+          auth_cookies: null,
+          last_verified_at: now,
+          last_synced_at: null,
+          created_at: now,
+          updated_at: now,
+        }))
+      );
+      if (insertError) console.error("Error migrating models:", insertError);
     }
   } catch (err) {
     console.error("Migration error:", err);
   }
 
-  // Now fetch from crm_model_sessions (both active and inactive)
-  const { data: connectedModels, error: fetchError } = await supabase
-    .from("crm_model_sessions")
-    .select("model_id")
-    .order("model_id", { ascending: true });
+  // Now fetch from crm_model_sessions (both active and inactive) and the
+  // chatter list in parallel - they don't depend on each other.
+  const [{ data: connectedModels, error: fetchError }, { data: chatters }] = await Promise.all([
+    supabase.from("crm_model_sessions").select("model_id, is_active").order("model_id", { ascending: true }),
+    supabase.from("profiles").select("user_id, full_name, role").in("role", ["chatter", "moderator"]).order("full_name", { ascending: true }),
+  ]);
 
   if (fetchError) {
     console.error("Error fetching models:", fetchError);
@@ -119,9 +97,12 @@ export default async function CRMConnectPage() {
     platform_type: "onlyfans",
   }));
 
+  // 📊 Sidebar only shows currently-active (is_active = true) sessions -
+  // derived from the same connectedModels fetch instead of a second query.
+  let sidebarModels: any[] = [];
+
   // FALLBACK: If crm_model_sessions is empty, try old models table
   if (!connectedModels || connectedModels.length === 0) {
-    console.log("crm_model_sessions empty, loading from models table as fallback...");
     const { data: fallbackModels } = await supabase
       .from("models")
       .select("id, name, platform_type")
@@ -129,7 +110,6 @@ export default async function CRMConnectPage() {
       .order("name", { ascending: true });
 
     if (fallbackModels && fallbackModels.length > 0) {
-      console.log(`Found ${fallbackModels.length} models in fallback`);
       typedModels = fallbackModels.map((m: any) => ({
         id: m.id,
         name: m.name || m.id,
@@ -137,52 +117,32 @@ export default async function CRMConnectPage() {
       }));
     }
   } else {
-    // Lookup names from models table for crm_model_sessions entries
+    // Lookup names + avatars from models table once, for all connected entries
     const modelIds = connectedModels.map((m: any) => m.model_id);
     const { data: modelDetails } = await supabase
       .from("models")
-      .select("id, name")
+      .select("id, name, avatar_url")
       .in("id", modelIds);
 
     const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
+    const avatarMap = new Map(modelDetails?.map((m: any) => [m.id, m.avatar_url]) || []);
 
     typedModels = connectedModels.map((m: any) => ({
       id: m.model_id,
       name: nameMap.get(m.model_id) || m.model_id,
       platform_type: "onlyfans",
     }));
-  }
 
-  const { data: chatters } = await supabase
-    .from("profiles")
-    .select("user_id, full_name, role")
-    .in("role", ["chatter", "moderator"])
-    .order("full_name", { ascending: true });
+    sidebarModels = connectedModels
+      .filter((m: any) => m.is_active)
+      .map((m: any) => ({
+        id: m.model_id,
+        name: nameMap.get(m.model_id) || m.model_id,
+        avatar_url: avatarMap.get(m.model_id) || null,
+      }));
+  }
 
   const typedChatters: Chatter[] = chatters || [];
-
-  // 📊 Fetch ACTIVE models for sidebar (only is_active = true)
-  const { data: activeModels } = await supabase
-    .from("crm_model_sessions")
-    .select("model_id")
-    .eq("is_active", true)
-    .order("model_id", { ascending: true });
-
-  let sidebarModels: any[] = [];
-  if (activeModels && activeModels.length > 0) {
-    const activeModelIds = activeModels.map((m: any) => m.model_id);
-    const { data: modelDetails } = await supabase
-      .from("models")
-      .select("id, name, avatar_url")
-      .in("id", activeModelIds);
-    const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
-    const avatarMap = new Map(modelDetails?.map((m: any) => [m.id, m.avatar_url]) || []);
-    sidebarModels = activeModels.map((m: any) => ({
-      id: m.model_id,
-      name: nameMap.get(m.model_id) || m.model_id,
-      avatar_url: avatarMap.get(m.model_id) || null,
-    }));
-  }
 
   return (
     <CRMConnectClient

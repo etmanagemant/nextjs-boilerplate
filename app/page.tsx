@@ -1,12 +1,11 @@
-import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import WeeklyCalendar from "@/components/layout/WeeklyCalender";
+import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 
 export const dynamic = "force-dynamic";
 
 export default async function CalendarPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getCurrentUser();
 
   if (!user) {
     redirect("/login");
@@ -17,7 +16,7 @@ export default async function CalendarPage() {
   if (user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com") {
     role = "admin";
   } else {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+    const profile = await getCurrentProfile(user.id);
     if (profile && profile.role === "admin") {
       role = "admin";
     } else if (profile && profile.role) {
@@ -25,14 +24,12 @@ export default async function CalendarPage() {
     }
   }
 
-  // 2. Schichten abrufen
-  const { data: shifts } = await supabase.from("shifts").select("*");
-  
-  // 3. Echte Models live aus der Tabelle laden!
-  const { data: models } = await supabase.from("models").select("id, name").order("name", { ascending: true });
-
-  // 4. 🔑 NEUE ERGÄNZUNG: Profile laden für Rollen-Mapping
-  const { data: profiles } = await supabase.from("profiles").select("user_id, role, full_name");
+  // 2-4. Schichten, Models und alle Profile unabhängig voneinander laden
+  const [{ data: shifts }, { data: models }, { data: profiles }] = await Promise.all([
+    supabase.from("shifts").select("*"),
+    supabase.from("models").select("id, name").order("name", { ascending: true }),
+    supabase.from("profiles").select("user_id, role, full_name"),
+  ]);
   const profileMap = new Map((profiles || []).map(p => [p.user_id, p.role || "chatter"]));
 
   return (

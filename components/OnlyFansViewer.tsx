@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 // Keystrokes/clicks used to fire as independent parallel requests, which
 // could land on the VPS out of order and garble what's typed. Chain calls
@@ -293,12 +294,12 @@ export function OnlyFansViewer({
               OnlyFans hat diese Session ungültig gemacht (z. B. durch ein Update oder erzwungenen Logout).
               Das Model muss neu verbunden werden.
             </p>
-            <a
+            <Link
               href="/management/crm-connect"
               className="inline-block px-5 py-3 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/40"
             >
               🔗 Zum Connection Hub
-            </a>
+            </Link>
           </div>
         </div>
       )}

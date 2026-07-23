@@ -1,6 +1,7 @@
-import { createClient } from "@/utils/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
+import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import CRMInboxClient from "@/components/layout/CRMInboxClient";
 import {
   fetchActiveFans,
@@ -10,8 +11,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function CRMInboxPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getCurrentUser();
 
   // 🔐 SECURITY: Redirect if not authenticated
   if (!user) {
@@ -19,11 +19,7 @@ export default async function CRMInboxPage() {
   }
 
   // 🔐 SECURITY: Allow chatter, moderator, OR admin access
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("user_id, role")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const profile = await getCurrentProfile(user.id);
 
   // Allow: chatter, moderator, admin roles. If no profile, allow (could be admin from auth)
   const userRole = profile?.role || "guest";
@@ -69,12 +65,14 @@ export default async function CRMInboxPage() {
       }));
     }
 
+    // These three don't depend on each other - fetch them together instead
+    // of waiting for each one in turn.
     const initialModelId = connectedModels[0]?.id;
-    const fans = initialModelId ? await fetchActiveFans(initialModelId) : [];
-    const scripts = await fetchScriptLibrary(user.id);
-
-    // 📅 Fetch shifts for NextShiftsWidget
-    const { data: allShifts } = await supabase.from("shifts").select("*");
+    const [fans, scripts, { data: allShifts }] = await Promise.all([
+      initialModelId ? fetchActiveFans(initialModelId) : Promise.resolve([]),
+      fetchScriptLibrary(user.id),
+      supabase.from("shifts").select("*"),
+    ]);
 
     return (
       <CRMInboxClient
@@ -97,12 +95,12 @@ export default async function CRMInboxPage() {
           <p className="text-slate-400 mb-4">
             There was a problem loading your chat interface. Please try again.
           </p>
-          <a
+          <Link
             href="/dashboard"
             className="px-4 py-2 bg-[#D4AF37]/20 text-[#D4AF37] rounded hover:bg-[#D4AF37]/30 transition"
           >
             Back to Dashboard
-          </a>
+          </Link>
         </div>
       </div>
     );
