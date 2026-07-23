@@ -1,17 +1,21 @@
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { NextRequest, NextResponse } from "next/server";
+import { vpsFetch } from "@/lib/vpsClient";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 60;
+
+const IGNORED_COOKIE_KEYS = ["vps_server", "session_id", "created_at", "verification_status", "cookie_count"];
 
 /**
  * Sync OnlyFans chats for a specific model.
  * POST /api/crm/sync-onlyfans-chats
  * Body: { modelId: string, sessionId: string }
  *
- * Uses the same flat cookie map ({ name: value }) that the login flow and
- * send-message-to-onlyfans.ts already store - fetched through Browserless,
- * independent of whether a live VPS browser is currently running.
+ * Uses the same flat cookie map ({ name: value }) the login flow stores,
+ * fetched through a short-lived headless browser on the VPS (not
+ * Browserless - its free tier is only 100 sessions/month, nowhere near
+ * enough for routine polling every model gets called for periodically).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -44,49 +48,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No auth cookies stored for this session" }, { status: 400 });
     }
 
-    const browserlessApiKey = process.env.BROWSERLESS_API_KEY;
-    if (!browserlessApiKey) {
-      return NextResponse.json({ error: "Browserless API key not configured" }, { status: 500 });
-    }
+    const cookies = Object.entries(cookieMap)
+      .filter(([name]) => !IGNORED_COOKIE_KEYS.includes(name))
+      .map(([name, value]) => ({ name, value, domain: ".onlyfans.com", path: "/" }));
 
-    const functionCode = `
-      async (page) => {
-        const cookies = ${JSON.stringify(cookieMap)};
-        for (const [name, value] of Object.entries(cookies)) {
-          try {
-            await page.setCookie({ name, value, domain: '.onlyfans.com', path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
-          } catch (e) {}
-        }
-
-        try {
-          await page.goto('https://onlyfans.com/api2/v2/inbox', { waitUntil: 'networkidle2', timeout: 30000 });
-          const content = await page.content();
-          const jsonMatch = content.match(/<pre[^>]*>([^<]+)<\\/pre>/);
-          const data = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(content);
-          return { success: true, data };
-        } catch (e) {
-          return { success: false, error: e.message };
-        }
-      }
-    `;
-
-    const browserlessResponse = await fetch(`https://chrome.browserless.io/function?token=${browserlessApiKey}`, {
+    const vpsResponse = await vpsFetch("/fetch-inbox", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: functionCode, timeout: 30000 }),
+      body: JSON.stringify({ modelId, cookies }),
     });
 
-    if (!browserlessResponse.ok) {
-      const errorText = await browserlessResponse.text();
-      return NextResponse.json({ error: "Failed to fetch OnlyFans data: " + errorText.slice(0, 200) }, { status: 500 });
+    if (!vpsResponse.ok) {
+      const errorText = await vpsResponse.text();
+      return NextResponse.json({ error: "VPS fetch-inbox failed: " + errorText.slice(0, 200) }, { status: 502 });
     }
 
-    const browserlessResult = await browserlessResponse.json();
-    if (!browserlessResult.success) {
-      return NextResponse.json({ error: browserlessResult.error || "Browserless function failed" }, { status: 502 });
+    const vpsResult = await vpsResponse.json();
+    if (vpsResult.status !== "success") {
+      return NextResponse.json({ error: vpsResult.error || "VPS fetch-inbox failed" }, { status: 502 });
     }
 
-    const inboxList = browserlessResult.data?.list || [];
+    const inboxList = vpsResult.data?.list || [];
 
     let fanCount = 0;
     let messageCount = 0;
@@ -101,13 +82,12 @@ export async function POST(request: NextRequest) {
       await supabase.from("crm_fan_metadata").upsert(
         {
           fan_id: userId.toString(),
-          chatter_id: null,
           model_id: modelId,
           username: username || `User-${userId}`,
           vip_tier: "standard",
           last_interaction: new Date().toISOString(),
         },
-        { onConflict: "model_fan_key" }
+        { onConflict: "model_id,fan_id" }
       );
 
       const messages = conversation.messages || [];

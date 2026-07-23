@@ -10,6 +10,9 @@ interface SalesCockpitColumnProps {
   onSelectScript: (script: ScriptLibrary) => void;
   onNotesChange: (notes: string) => void;
   isSavingNotes: boolean;
+  modelNotes?: string;
+  onModelNotesChange?: (notes: string) => void;
+  isSavingModelNotes?: boolean;
 }
 
 export default function SalesCockpitColumn({
@@ -19,6 +22,9 @@ export default function SalesCockpitColumn({
   onSelectScript,
   onNotesChange,
   isSavingNotes,
+  modelNotes,
+  onModelNotesChange,
+  isSavingModelNotes,
 }: SalesCockpitColumnProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -33,6 +39,25 @@ export default function SalesCockpitColumn({
 
       {/* Two Sections */}
       <div className="flex-1 overflow-y-auto flex flex-col">
+        {/* Model Notes - always the same, regardless of which fan is open */}
+        {onModelNotesChange && (
+          <div className="border-b border-[#AA7C11]/20 p-4 space-y-2 bg-[#D4AF37]/5">
+            <p className="text-xs text-[#D4AF37] uppercase tracking-widest font-bold">
+              🏢 Model Notes
+            </p>
+            <textarea
+              value={modelNotes || ""}
+              onChange={(e) => onModelNotesChange(e.target.value)}
+              placeholder="General notes about this model (visible in every fan chat)..."
+              className="w-full h-16 bg-black/60 border border-[#D4AF37]/30 rounded p-2 text-xs text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none"
+              disabled={isSavingModelNotes}
+            />
+            {isSavingModelNotes && (
+              <p className="text-xs text-slate-500">💾 Saving...</p>
+            )}
+          </div>
+        )}
+
         {/* TOP: Fan Metadata */}
         <div className="border-b border-[#AA7C11]/20 p-4 space-y-3">
           <div>

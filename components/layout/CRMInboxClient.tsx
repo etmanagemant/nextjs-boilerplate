@@ -8,6 +8,8 @@ import {
   fetchChatterEmojis,
   fetchScriptLibrary,
   fetchFanMetadata,
+  fetchModelNotes,
+  updateModelNotes,
   sendMessage,
   updateFanNotes,
   markMessagesAsRead,
@@ -75,6 +77,8 @@ export default function CRMInboxClient({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [modelNotes, setModelNotes] = useState("");
+  const [isSavingModelNotes, setIsSavingModelNotes] = useState(false);
 
   // OnlyFans Viewer - integrated as 4th column
   const [selectedOnlyFansModel, setSelectedOnlyFansModel] = useState<string | null>(null);
@@ -97,7 +101,7 @@ export default function CRMInboxClient({
     const loadFansForModel = async () => {
       setIsLoadingFans(true);
       try {
-        const fanList = await fetchActiveFans(chatterId, selectedModel);
+        const fanList = await fetchActiveFans(selectedModel);
         setFans(fanList);
         setSelectedFanId(null);
       } finally {
@@ -106,7 +110,9 @@ export default function CRMInboxClient({
     };
 
     loadFansForModel();
-  }, [selectedModel, chatterId]);
+
+    fetchModelNotes(selectedModel).then(setModelNotes);
+  }, [selectedModel]);
 
   useEffect(() => {
     if (!selectedFanId) {
@@ -118,20 +124,22 @@ export default function CRMInboxClient({
     const loadFanData = async () => {
       setIsLoadingMessages(true);
       try {
-        const msgs = await fetchChatMessages(chatterId, selectedFanId);
+        const msgs = await fetchChatMessages(selectedFanId);
         setMessages(msgs);
 
-        const metadata = await fetchFanMetadata(chatterId, selectedFanId);
-        setFanMetadata(metadata);
+        if (selectedModel) {
+          const metadata = await fetchFanMetadata(selectedModel, selectedFanId);
+          setFanMetadata(metadata);
+        }
 
-        await markMessagesAsRead(chatterId, selectedFanId);
+        await markMessagesAsRead(selectedFanId);
       } finally {
         setIsLoadingMessages(false);
       }
     };
 
     loadFanData();
-  }, [selectedFanId, chatterId]);
+  }, [selectedFanId, selectedModel]);
 
   useEffect(() => {
     if (selectedScript) {
@@ -155,7 +163,7 @@ export default function CRMInboxClient({
         setCurrentMessage("");
         setSelectedScript(null);
 
-        const msgs = await fetchChatMessages(chatterId, selectedFanId);
+        const msgs = await fetchChatMessages(selectedFanId);
         setMessages(msgs);
       }
     } finally {
@@ -164,11 +172,11 @@ export default function CRMInboxClient({
   };
 
   const handleUpdateNotes = async (notes: string) => {
-    if (!selectedFanId) return;
+    if (!selectedFanId || !selectedModel) return;
 
     setIsSavingNotes(true);
     try {
-      await updateFanNotes(chatterId, selectedFanId, notes);
+      await updateFanNotes(selectedModel, selectedFanId, notes);
       setFanMetadata((prev) => (prev ? { ...prev, notes } : null));
     } finally {
       setIsSavingNotes(false);
@@ -177,6 +185,17 @@ export default function CRMInboxClient({
 
   const handleSelectFan = (fanId: string) => {
     setSelectedFanId(fanId);
+  };
+
+  const handleUpdateModelNotes = async (notes: string) => {
+    if (!selectedModel) return;
+    setModelNotes(notes);
+    setIsSavingModelNotes(true);
+    try {
+      await updateModelNotes(selectedModel, notes);
+    } finally {
+      setIsSavingModelNotes(false);
+    }
   };
 
   return (
@@ -254,6 +273,9 @@ export default function CRMInboxClient({
                   onSelectScript={setSelectedScript}
                   onNotesChange={handleUpdateNotes}
                   isSavingNotes={isSavingNotes}
+                  modelNotes={modelNotes}
+                  onModelNotesChange={handleUpdateModelNotes}
+                  isSavingModelNotes={isSavingModelNotes}
                 />
               </div>
             </>
@@ -295,6 +317,9 @@ export default function CRMInboxClient({
                   onSelectScript={setSelectedScript}
                   onNotesChange={handleUpdateNotes}
                   isSavingNotes={isSavingNotes}
+                  modelNotes={modelNotes}
+                  onModelNotesChange={handleUpdateModelNotes}
+                  isSavingModelNotes={isSavingModelNotes}
                 />
               </div>
 

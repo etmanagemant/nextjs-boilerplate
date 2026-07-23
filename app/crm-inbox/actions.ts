@@ -5,91 +5,57 @@ import { revalidatePath } from "next/cache";
 
 // ============================================================================
 // INBOX DATA FETCHING
+//
+// Fan visibility is scoped by model_id, not by chatter_id: multiple chatters
+// rotate through the same model across shifts and need to see the same
+// shared inbox (matches the only real unique constraint in the DB, which is
+// on (model_id, fan_id) - there's no per-chatter uniqueness to key off).
+// chatter_id is still recorded on sent messages for attribution.
 // ============================================================================
 
 /**
- * Fetch all active fans for the chatter (read from messages/sessions)
- * Optionally filter by modelId if provided
+ * Fetch all fans with metadata for a given model (shared across chatters
+ * working that model, not owned by whoever happened to sync/reply first).
  */
-export async function fetchActiveFans(chatterId: string, modelId?: string) {
+export async function fetchActiveFans(modelId: string) {
   const supabase = await createClient();
 
   try {
-    // Get distinct fans from chat messages, then join metadata
-    const { data: messages, error: msgError } = await supabase
-      .from("crm_fan_messages")
-      .select("fan_id, created_at")
-      .eq("chatter_id", chatterId)
-      .order("created_at", { ascending: false });
+    const { data: metadata, error: metaError } = await supabase
+      .from("crm_fan_metadata")
+      .select("fan_id, username, lifetime_value, vip_tier, last_interaction")
+      .eq("model_id", modelId)
+      .order("last_interaction", { ascending: false });
 
-    if (msgError) throw msgError;
+    if (metaError) throw metaError;
+    if (!metadata || metadata.length === 0) return [];
 
-    // Get unique fan_ids with latest message date
-    const fanMap = new Map();
-    messages?.forEach((msg) => {
-      if (!fanMap.has(msg.fan_id) || new Date(msg.created_at) > new Date(fanMap.get(msg.fan_id))) {
-        fanMap.set(msg.fan_id, msg.created_at);
-      }
-    });
+    const fanIds = metadata.map((m) => m.fan_id);
 
-    const uniqueFanIds = Array.from(fanMap.keys());
-
-    if (uniqueFanIds.length === 0) {
-      return [];
-    }
-
-    // Get unread count per fan
     const { data: unreadData, error: unreadError } = await supabase
       .from("crm_fan_messages")
       .select("fan_id")
-      .eq("chatter_id", chatterId)
+      .in("fan_id", fanIds)
+      .eq("sender", "fan")
       .eq("is_read", false);
 
     if (unreadError) throw unreadError;
 
-    const unreadMap = new Map();
+    const unreadMap = new Map<string, number>();
     unreadData?.forEach((msg) => {
       unreadMap.set(msg.fan_id, (unreadMap.get(msg.fan_id) || 0) + 1);
     });
 
-    // Get fan metadata - optionally filtered by modelId
-    let metadataQuery = supabase
-      .from("crm_fan_metadata")
-      .select("fan_id, lifetime_value, vip_tier, model_id")
-      .in("fan_id", uniqueFanIds);
-
-    // Filter by model if modelId provided
-    if (modelId) {
-      metadataQuery = metadataQuery.eq("model_id", modelId);
-    }
-
-    const { data: metadata, error: metaError } = await metadataQuery;
-
-    if (metaError) throw metaError;
-
-    const metadataMap = new Map();
-    metadata?.forEach((meta) => {
-      metadataMap.set(meta.fan_id, meta);
-    });
-
-    // Build fan objects - only include fans that have metadata for this model (or if no modelId specified)
-    const fans = uniqueFanIds
-      .filter((fan_id) => !modelId || metadataMap.has(fan_id))
-      .map((fan_id) => {
-        const meta = metadataMap.get(fan_id) || {};
-        return {
-          id: fan_id,
-          username: `Fan-${fan_id.slice(0, 8)}`,
-          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${fan_id}`,
-          total_revenue: meta.lifetime_value || 0,
-          is_vip: meta.vip_tier ? meta.vip_tier !== "standard" : false,
-          last_message_at: fanMap.get(fan_id) || new Date().toISOString(),
-          unread_count: unreadMap.get(fan_id) || 0,
-          model_id: meta.model_id,
-        };
-      });
-
-    return fans;
+    return metadata.map((meta) => ({
+      id: meta.fan_id,
+      username: meta.username || `Fan-${meta.fan_id.slice(0, 8)}`,
+      avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${meta.fan_id}`,
+      total_revenue: meta.lifetime_value || 0,
+      is_vip: meta.vip_tier ? meta.vip_tier !== "standard" : false,
+      last_message_at: meta.last_interaction || new Date().toISOString(),
+      unread_count: unreadMap.get(meta.fan_id) || 0,
+      model_id: modelId,
+    }));
   } catch (err) {
     console.error("Error fetching active fans:", err);
     return [];
@@ -97,20 +63,16 @@ export async function fetchActiveFans(chatterId: string, modelId?: string) {
 }
 
 /**
- * Fetch chat messages for a specific fan
+ * Fetch the full conversation with a fan - shared across whichever chatter
+ * is currently handling the model, not filtered to "my own" messages.
  */
-export async function fetchChatMessages(
-  chatterId: string,
-  fanId: string,
-  limit: number = 50
-) {
+export async function fetchChatMessages(fanId: string, limit: number = 50) {
   const supabase = await createClient();
 
   try {
     const { data, error } = await supabase
       .from("crm_fan_messages")
       .select("*")
-      .eq("chatter_id", chatterId)
       .eq("fan_id", fanId)
       .order("created_at", { ascending: true })
       .limit(limit);
@@ -183,16 +145,57 @@ export async function fetchScriptLibrary(
 }
 
 /**
- * Fetch fan metadata and notes
+ * Model notes - always the same text no matter which fan chat is open
+ * (general context/instructions for that model, not fan-specific).
  */
-export async function fetchFanMetadata(chatterId: string, fanId: string) {
+export async function fetchModelNotes(modelId: string) {
+  const supabase = await createClient();
+
+  try {
+    const { data, error } = await supabase
+      .from("models")
+      .select("notes")
+      .eq("id", modelId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.notes || "";
+  } catch (err) {
+    console.error("Error fetching model notes:", err);
+    return "";
+  }
+}
+
+export async function updateModelNotes(modelId: string, notes: string) {
+  const supabase = await createClient();
+
+  try {
+    const { error } = await supabase
+      .from("models")
+      .update({ notes })
+      .eq("id", modelId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    throw new Error(
+      err instanceof Error ? err.message : "Failed to update model notes"
+    );
+  }
+}
+
+/**
+ * Fetch fan metadata and notes - scoped by (model_id, fan_id), the only
+ * unique key that actually exists on crm_fan_metadata.
+ */
+export async function fetchFanMetadata(modelId: string, fanId: string) {
   const supabase = await createClient();
 
   try {
     const { data, error } = await supabase
       .from("crm_fan_metadata")
       .select("*")
-      .eq("chatter_id", chatterId)
+      .eq("model_id", modelId)
       .eq("fan_id", fanId)
       .maybeSingle();
 
@@ -268,8 +271,8 @@ export async function sendMessage(
     })();
 
     revalidatePath("/crm-inbox");
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: "Message saved! Sending to OnlyFans...",
       localMessageId: insertedMsg.id,
       sending: true
@@ -282,10 +285,10 @@ export async function sendMessage(
 }
 
 /**
- * Update fan notes in metadata
+ * Update fan notes in metadata - scoped by (model_id, fan_id).
  */
 export async function updateFanNotes(
-  chatterId: string,
+  modelId: string,
   fanId: string,
   notes: string
 ) {
@@ -294,11 +297,11 @@ export async function updateFanNotes(
   try {
     const { error } = await supabase.from("crm_fan_metadata").upsert(
       {
-        chatter_id: chatterId,
+        model_id: modelId,
         fan_id: fanId,
         notes: notes,
       },
-      { onConflict: "chatter_id,fan_id" }
+      { onConflict: "model_id,fan_id" }
     );
 
     if (error) throw error;
@@ -311,19 +314,15 @@ export async function updateFanNotes(
 }
 
 /**
- * Mark messages as read
+ * Mark a fan's messages as read - shared inbox, not chatter-scoped.
  */
-export async function markMessagesAsRead(
-  chatterId: string,
-  fanId: string
-) {
+export async function markMessagesAsRead(fanId: string) {
   const supabase = await createClient();
 
   try {
     const { error } = await supabase
       .from("crm_fan_messages")
       .update({ is_read: true })
-      .eq("chatter_id", chatterId)
       .eq("fan_id", fanId)
       .eq("sender", "fan");
 

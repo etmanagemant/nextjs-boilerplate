@@ -303,6 +303,30 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
+// Periodic background sync - Vercel Hobby plan only allows daily cron, so
+// this VPS (already running 24/7) drives it instead. Just pings the Next.js
+// endpoint, which enumerates active models and calls back into this VPS's
+// own /fetch-inbox for each - no extra cost, no Browserless session budget
+// spent on routine polling.
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
+const CRON_SECRET = process.env.CRON_SECRET;
+const SYNC_INTERVAL_MS = Number(process.env.SYNC_INTERVAL_MS || 90 * 1000);
+
+if (APP_URL && CRON_SECRET) {
+  setInterval(async () => {
+    try {
+      const res = await fetch(`${APP_URL}/api/cron/sync-chats?secret=${CRON_SECRET}`);
+      const data = await res.json().catch(() => ({}));
+      console.log('[SYNC-LOOP]', res.status, JSON.stringify(data).slice(0, 200));
+    } catch (e) {
+      console.warn('[SYNC-LOOP] Error:', e.message);
+    }
+  }, SYNC_INTERVAL_MS);
+  console.log(`[SYNC-LOOP] Enabled, every ${SYNC_INTERVAL_MS / 1000}s`);
+} else {
+  console.warn('[SYNC-LOOP] Disabled - NEXT_PUBLIC_APP_URL or CRON_SECRET not set');
+}
+
 // ============================================================================
 // ROUTES
 // ============================================================================
@@ -476,6 +500,60 @@ app.post('/disconnect', async (req, res) => {
   } catch (error) {
     console.error('[DISCONNECT] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// Lightweight headless fetch of a model's OnlyFans inbox JSON, used by the
+// periodic background sync (Next.js /api/cron/sync-chats calls back into
+// this). Separate from the persistent headful live-view sessions - own
+// profile dir, own short-lived browser, no Xvfb/screenshot cost, and no
+// interference with whatever's running in modelSessions for that model.
+app.post('/fetch-inbox', async (req, res) => {
+  const { modelId, cookies } = req.body || {};
+  if (!modelId || !Array.isArray(cookies)) {
+    return res.status(400).json({ error: 'Missing modelId or cookies array' });
+  }
+
+  const syncProfileDir = `/tmp/sync-${modelId}`;
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath: process.env.CHROMIUM_PATH || puppeteer.executablePath(),
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        `--user-data-dir=${syncProfileDir}`,
+      ],
+    });
+
+    const page = await browser.newPage();
+    try {
+      await page.setCookie(...cookies);
+    } catch (e) {
+      console.warn(`[FETCH-INBOX] Cookie set error for ${modelId}:`, e.message);
+    }
+
+    await page.goto('https://onlyfans.com/api2/v2/inbox', {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+
+    const content = await page.content();
+    const jsonMatch = content.match(/<pre[^>]*>([^<]+)<\/pre>/);
+    const data = JSON.parse(jsonMatch ? jsonMatch[1] : content);
+
+    res.json({ status: 'success', modelId, data });
+  } catch (error) {
+    console.error(`[FETCH-INBOX] Error for ${modelId}:`, error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  } finally {
+    if (browser) {
+      try { await browser.close(); } catch (e) { /* ignore */ }
+    }
+    fs.rm(syncProfileDir, { recursive: true, force: true }).catch(() => {});
   }
 });
 
