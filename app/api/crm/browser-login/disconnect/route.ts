@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAdmin } from "@/lib/crmAdmin";
+import { vpsFetch } from "@/lib/vpsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -33,18 +34,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "error", error: "Failed to disconnect session" }, { status: 500 });
     }
 
-    const vpsUrl = process.env.VPS_API_URL;
-    if (vpsUrl) {
-      try {
-        await fetch(`${vpsUrl}/disconnect`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modelId }),
-        });
-      } catch (vpsErr: any) {
-        // Not fatal - DB state already reflects "disconnected"
-        console.warn("[DISCONNECT] VPS cleanup failed:", vpsErr.message);
-      }
+    try {
+      await vpsFetch("/disconnect", {
+        method: "POST",
+        body: JSON.stringify({ modelId }),
+      });
+    } catch (vpsErr: any) {
+      // Not fatal - DB state already reflects "disconnected"
+      console.warn("[DISCONNECT] VPS cleanup failed:", vpsErr.message);
     }
 
     return NextResponse.json({ status: "success", disconnected: true, modelId });

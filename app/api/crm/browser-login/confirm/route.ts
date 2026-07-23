@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAdmin } from "@/lib/crmAdmin";
+import { vpsFetch } from "@/lib/vpsClient";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -24,12 +25,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "error", error: "Missing modelId" }, { status: 400 });
     }
 
-    const vpsUrl = process.env.VPS_API_URL;
-    if (!vpsUrl) {
-      return NextResponse.json({ status: "error", error: "VPS_API_URL not configured" }, { status: 500 });
-    }
-
-    const cookiesResponse = await fetch(`${vpsUrl}/cookies?modelId=${encodeURIComponent(modelId)}`);
+    const cookiesResponse = await vpsFetch(`/cookies?modelId=${encodeURIComponent(modelId)}`);
     if (!cookiesResponse.ok) {
       const text = await cookiesResponse.text();
       throw new Error(`VPS error ${cookiesResponse.status}: ${text}`);

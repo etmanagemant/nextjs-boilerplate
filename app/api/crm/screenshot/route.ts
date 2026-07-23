@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
+import { vpsFetch } from "@/lib/vpsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -16,20 +17,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing modelId" }, { status: 400 });
   }
 
-  const vpsUrl = process.env.VPS_API_URL;
-  if (!vpsUrl) {
-    return NextResponse.json({ error: "VPS_API_URL not configured" }, { status: 500 });
-  }
-
   try {
-    let data = await fetchFrame(vpsUrl, modelId);
+    let data = await fetchFrame(modelId);
 
     if (!data.hasSession) {
-      const restored = await tryRestoreFromSupabase(vpsUrl, modelId);
+      const restored = await tryRestoreFromSupabase(modelId);
       if (!restored) {
         return NextResponse.json({ error: "No active session for this model" }, { status: 404 });
       }
-      data = await fetchFrame(vpsUrl, modelId);
+      data = await fetchFrame(modelId);
     }
 
     return NextResponse.json({
@@ -47,13 +43,13 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function fetchFrame(vpsUrl: string, modelId: string) {
-  const response = await fetch(`${vpsUrl}/frame?modelId=${encodeURIComponent(modelId)}`);
+async function fetchFrame(modelId: string) {
+  const response = await vpsFetch(`/frame?modelId=${encodeURIComponent(modelId)}`);
   if (!response.ok) throw new Error(`VPS returned ${response.status}`);
   return response.json();
 }
 
-async function tryRestoreFromSupabase(vpsUrl: string, modelId: string): Promise<boolean> {
+async function tryRestoreFromSupabase(modelId: string): Promise<boolean> {
   const supabase = createSupabaseAdminClient();
   const { data: session } = await supabase
     .from("crm_model_sessions")
@@ -71,9 +67,8 @@ async function tryRestoreFromSupabase(vpsUrl: string, modelId: string): Promise<
 
   if (cookies.length === 0) return false;
 
-  const response = await fetch(`${vpsUrl}/restore`, {
+  const response = await vpsFetch("/restore", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ modelId, cookies }),
   });
 

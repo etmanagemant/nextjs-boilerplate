@@ -23,8 +23,21 @@ app.use(express.json({ limit: '5mb' }));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-VPS-Secret');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+// This server has no auth of its own beyond this shared secret - anyone who
+// knows it can control every connected model's live browser. /health stays
+// open so uptime monitors can hit it without the secret.
+app.use((req, res, next) => {
+  if (req.path === '/health') return next();
+  const expected = process.env.VPS_SHARED_SECRET;
+  if (!expected) return next(); // not configured - fail open rather than lock everyone out
+  if (req.headers['x-vps-secret'] !== expected) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   next();
 });
 

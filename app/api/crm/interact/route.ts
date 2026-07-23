@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { vpsFetch } from "@/lib/vpsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -16,14 +17,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing modelId or action" }, { status: 400 });
     }
 
-    const vpsUrl = process.env.VPS_API_URL;
-    if (!vpsUrl) {
-      return NextResponse.json({ error: "VPS_API_URL not configured" }, { status: 500 });
-    }
-
-    const response = await fetch(`${vpsUrl}/interact`, {
+    const response = await vpsFetch("/interact", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ modelId, action, data: data || {} }),
     });
 
