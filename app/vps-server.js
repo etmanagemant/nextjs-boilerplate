@@ -264,12 +264,29 @@ async function restoreSession(modelId, cookies) {
 
 async function getLoginState(page) {
   let pageUrl = 'unknown';
-  let pageTitle = 'Unknown';
   let cookies = [];
+  // page.title() used to be fetched here too, but nothing on the frontend
+  // ever reads pageTitle - it was a wasted CDP round-trip on every single
+  // poll/interact call. Dropped.
+  //
+  // checkFailed distinguishes "we actually asked the page and it said
+  // logged out" from "the read itself blew up" (crashed page, closed
+  // target, mid-navigation). Both used to collapse into isLoggedIn:false,
+  // which meant a transient Puppeteer hiccup could get treated as proof
+  // OnlyFans invalidated the session and trigger a real cookie wipe.
+  let checkFailed = false;
 
-  try { pageUrl = page.url(); } catch (e) { /* ignore */ }
-  try { pageTitle = await page.title(); } catch (e) { /* ignore */ }
-  try { cookies = await page.cookies(); } catch (e) { /* ignore */ }
+  try {
+    pageUrl = page.url();
+  } catch (e) {
+    checkFailed = true;
+  }
+
+  try {
+    cookies = await page.cookies();
+  } catch (e) {
+    checkFailed = true;
+  }
 
   // OnlyFans sets a 'sess' cookie for anonymous visitors too, so that alone
   // is not proof of login. 'auth_id' is only set once actually authenticated.
@@ -277,7 +294,7 @@ async function getLoginState(page) {
   const authIdCookie = cookies.find((c) => c.name === 'auth_id');
   const isLoggedIn = !!sessCookie?.value && !!authIdCookie?.value && !pageUrl.includes('/login');
 
-  return { isLoggedIn, cookieCount: cookies.length, pageUrl, pageTitle };
+  return { isLoggedIn, cookieCount: cookies.length, pageUrl, checkFailed };
 }
 
 async function takeScreenshot(page) {
@@ -380,8 +397,13 @@ app.get('/frame', async (req, res) => {
     if (!session) return res.json({ hasSession: false, screenshot: null });
 
     session.lastActivity = Date.now();
-    const screenshot = await takeScreenshot(session.page);
-    const state = await getLoginState(session.page);
+    // These don't depend on each other - running them one after another was
+    // adding the full screenshot-encode time on top of the login-state
+    // check time on every single poll.
+    const [screenshot, state] = await Promise.all([
+      takeScreenshot(session.page),
+      getLoginState(session.page),
+    ]);
 
     res.json({ hasSession: true, screenshot, hasScreenshot: !!screenshot, ...state });
   } catch (error) {
@@ -445,8 +467,10 @@ app.post('/interact', async (req, res) => {
       result = `action error: ${actionErr.message}`;
     }
 
-    const screenshot = await takeScreenshot(page);
-    const state = await getLoginState(page);
+    const [screenshot, state] = await Promise.all([
+      takeScreenshot(page),
+      getLoginState(page),
+    ]);
 
     res.json({ status: 'success', action, result, screenshot, hasScreenshot: !!screenshot, ...state });
   } catch (error) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { mapClickToCanvasCoords } from "@/lib/canvasClick";
 
 // Keystrokes/clicks used to fire as independent parallel requests, which
 // could land on the VPS out of order and garble what's typed. Chain calls
@@ -211,17 +212,20 @@ export function OnlyFansViewer({
 
   const hiddenInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle canvas click - scale from displayed CSS size to actual screenshot pixels
+  // Handle canvas click - map from displayed CSS position to actual
+  // screenshot pixels, accounting for object-contain letterboxing (see
+  // lib/canvasClick.ts for why this can't just be a straight width ratio).
   const handleCanvasClick = async (
     event: React.MouseEvent<HTMLCanvasElement>
   ) => {
     if (!canvasRef.current) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = canvasRef.current.width / rect.width;
-    const scaleY = canvasRef.current.height / rect.height;
-    const x = (event.clientX - rect.left) * scaleX;
-    const y = (event.clientY - rect.top) * scaleY;
+    const mapped = mapClickToCanvasCoords(event.clientX, event.clientY, canvasRef.current);
+    if (!mapped) {
+      hiddenInputRef.current?.focus();
+      return;
+    }
+    const { x, y } = mapped;
 
     const seq = ++frameSeqRef.current;
     try {
@@ -269,6 +273,44 @@ export function OnlyFansViewer({
       .then((data) => data.screenshot && drawScreenshot(data.screenshot, seq))
       .catch((err) => console.error("[VIEWER] Emoji error:", err));
   };
+
+  // There was no way to scroll the live page at all before this - a mouse
+  // wheel over the canvas did nothing (it's just a static image), so any
+  // list longer than one screen (fan list, category list, chat history) was
+  // completely unreachable, and clicks based on a scroll position the real
+  // page was never actually at would land on the wrong row. Uses a native
+  // (non-passive) listener because React's synthetic onWheel is passive by
+  // default and can't preventDefault to stop the CRM page itself from
+  // scrolling instead of the embedded view. Wheel events fire dozens of
+  // times per gesture, so accumulate and send at most once per 80ms.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let accumulated = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      accumulated += event.deltaY;
+      if (timer) return;
+      timer = setTimeout(() => {
+        const amount = accumulated;
+        accumulated = 0;
+        timer = null;
+        const seq = ++frameSeqRef.current;
+        interact(modelId, "scroll", { amount })
+          .then((data) => data.screenshot && drawScreenshot(data.screenshot, seq))
+          .catch((err) => console.error("[VIEWER] Scroll error:", err));
+      }, 80);
+    };
+
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", onWheel);
+      if (timer) clearTimeout(timer);
+    };
+  }, [modelId]);
 
   // Wrapper element (can be modal, embedded, or standalone)
   const viewerContent = (

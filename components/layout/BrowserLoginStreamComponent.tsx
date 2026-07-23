@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { mapClickToCanvasCoords } from "@/lib/canvasClick";
 
 interface BrowserLoginStreamComponentProps {
   modelId: string;
@@ -131,14 +132,17 @@ export default function BrowserLoginStreamComponent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelId]);
 
+  // Maps CSS click position to actual screenshot pixels, accounting for
+  // object-contain letterboxing (see lib/canvasClick.ts) - without this a
+  // click could land offset from the checkbox/button you actually clicked.
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = canvasRef.current.width / rect.width;
-    const scaleY = canvasRef.current.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-    interact("click", { x, y });
+    const mapped = mapClickToCanvasCoords(e.clientX, e.clientY, canvasRef.current);
+    if (!mapped) {
+      hiddenInputRef.current?.focus();
+      return;
+    }
+    interact("click", mapped);
     hiddenInputRef.current?.focus();
   };
 
@@ -155,6 +159,39 @@ export default function BrowserLoginStreamComponent({
       interact("key", { key: e.key });
     }
   };
+
+  // Without this, a mouse wheel over the canvas did nothing - any part of
+  // the login/CAPTCHA page below the fold (or a CAPTCHA checkbox that needs
+  // scrolling into view) was unreachable. Native (non-passive) listener
+  // because React's synthetic onWheel can't preventDefault the CRM page's
+  // own scroll. Wheel events fire many times per gesture, so accumulate and
+  // send at most once per 80ms.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let accumulated = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      accumulated += e.deltaY;
+      if (timer) return;
+      timer = setTimeout(() => {
+        const amount = accumulated;
+        accumulated = 0;
+        timer = null;
+        interact("scroll", { amount });
+      }, 80);
+    };
+
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", onWheel);
+      if (timer) clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelId]);
 
   const handleConfirm = async () => {
     setPhase("confirming");

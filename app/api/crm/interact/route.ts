@@ -37,7 +37,6 @@ export async function POST(request: NextRequest) {
       screenshot: result.screenshot,
       isLoggedIn: result.isLoggedIn,
       pageUrl: result.pageUrl,
-      pageTitle: result.pageTitle,
       modelId,
       timestamp: new Date().toISOString(),
     });

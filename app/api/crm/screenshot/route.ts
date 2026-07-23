@@ -59,11 +59,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Only a session that was previously a *confirmed, working* connection,
-    // and that we definitely got a real (logged-out) page for, counts as
-    // "expired" here - a fresh login-in-progress session is expected to show
-    // isLoggedIn:false until the admin actually logs in.
-    if (wasAlreadyConnected && !data.isLoggedIn && !confirmedRecently) {
+    if (data.isLoggedIn) {
+      // Rolling confirmation: keep the grace window fresh for as long as the
+      // session is genuinely working, not just for the first 2 minutes after
+      // connect. Without this, a single flaky read hours into a session had
+      // nothing recent to fall back on and could trigger a real disconnect.
+      // Only write when it's actually gone stale (>60s) - this route is
+      // polled every 400ms, and Supabase doesn't need sub-second freshness.
+      const needsRefresh =
+        !dbSession?.last_verified_at || Date.now() - new Date(dbSession.last_verified_at).getTime() > 60 * 1000;
+      if (needsRefresh) {
+        supabase
+          .from("crm_model_sessions")
+          .update({ last_verified_at: new Date().toISOString() })
+          .eq("model_id", modelId)
+          .then(() => {}, () => {});
+      }
+    } else if (wasAlreadyConnected && !data.checkFailed && !confirmedRecently) {
+      // Only a session that was previously a *confirmed, working* connection,
+      // where the VPS check itself actually succeeded (not a crashed/closed
+      // page read) and definitely found a real logged-out page, counts as
+      // "expired" here - a fresh login-in-progress session is expected to
+      // show isLoggedIn:false until the admin actually logs in, and a failed
+      // read (checkFailed) means we don't actually know the real state.
       await disconnectModelSession(supabase, modelId, "session invalidated (OnlyFans logged it out)");
       return NextResponse.json({
         status: "session_expired",
@@ -78,7 +96,6 @@ export async function GET(request: NextRequest) {
       screenshot: data.screenshot,
       isLoggedIn: data.isLoggedIn,
       pageUrl: data.pageUrl,
-      pageTitle: data.pageTitle,
       modelId,
       timestamp: new Date().toISOString(),
     });
