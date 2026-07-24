@@ -42,18 +42,25 @@ export function OnlyFansViewer({
   const noSessionSyncedRef = useRef(false);
   const unmountedRef = useRef(false);
 
-  // "Does a live browser exist for this model at all" - VNC itself has no
-  // concept of that, and if there's genuinely no session, opening a VNC
-  // connection would just fail with a generic error instead of a clear
-  // "please reconnect" prompt. Keeps retrying every few seconds instead of
-  // checking once: a chatter can easily open CRM Inbox before the admin has
-  // finished connecting, and without a retry this would otherwise show
-  // "not connected" forever even once a real session exists moments later.
+  // Assigns (or reuses) this user's own independent chatter slot for this
+  // model - its own Chrome window on its own virtual display, so two
+  // chatters working the same model at once don't share one cursor/scroll
+  // position. The VPS has no concept of "logged in yet" here either (and
+  // no slot to assign) until a live model session exists at all, so this
+  // doubles as the "is anything connected" check and keeps retrying every
+  // few seconds instead of checking once: a chatter can easily open CRM
+  // Inbox before the admin has finished connecting via the Connection Hub,
+  // and without a retry this would otherwise show "not connected" forever
+  // even once a real session exists moments later.
   const waitForSession = async (): Promise<void> => {
-    const statusRes = await fetch(`/api/crm/browser-login/status?modelId=${encodeURIComponent(modelId)}`);
-    const statusData = statusRes.ok ? await statusRes.json() : {};
+    const slotRes = await fetch("/api/crm/chatter-slot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modelId }),
+    });
+    const slotData = slotRes.ok ? await slotRes.json() : {};
 
-    if (!statusData.hasSession) {
+    if (slotData.status !== "success" || !slotData.wsUrl) {
       // The VPS browser can disappear for reasons that have nothing to do
       // with the admin explicitly disconnecting (a VPS deploy/restart, a
       // crash, the idle timeout) - Supabase's is_active flag has no way to
@@ -81,17 +88,12 @@ export function OnlyFansViewer({
     }
 
     noSessionSyncedRef.current = false;
-    await connectVnc();
+    await connectVnc(slotData.wsUrl, slotData.password);
   };
 
-  const connectVnc = async (): Promise<void> => {
-    const [RFB, vncInfoRes] = await Promise.all([
-      loadRFB(),
-      fetch("/api/crm/browser-login/vnc-info"),
-    ]);
-    if (!vncInfoRes.ok) throw new Error("VNC-Verbindung konnte nicht eingerichtet werden");
-    const { wsUrl, password } = await vncInfoRes.json();
-    if (!wsUrl || !vncContainerRef.current) throw new Error("VNC-Verbindung konnte nicht eingerichtet werden");
+  const connectVnc = async (wsUrl: string, password: string): Promise<void> => {
+    const RFB = await loadRFB();
+    if (!vncContainerRef.current) throw new Error("VNC-Verbindung konnte nicht eingerichtet werden");
 
     vncContainerRef.current.innerHTML = "";
     const rfb = new RFB(vncContainerRef.current, wsUrl, { credentials: { password } });

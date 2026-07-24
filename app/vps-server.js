@@ -223,6 +223,245 @@ async function launchBrowser(modelId, display) {
   }
 }
 
+// ============================================================================
+// CHATTER SLOT POOL
+// Independent, per-(user, model) browser windows so multiple chatters can
+// work different fan conversations on the same (or different) models at
+// the same time, instead of everyone sharing one cursor/scroll position on
+// display :1. Each slot is its own virtual display with its own
+// Xvfb + x11vnc + websockify trio (spawned on demand, not always running),
+// showing a Chrome window that starts from a COPY of the model's existing
+// profile directory - a real on-disk duplicate (cookies, localStorage,
+// IndexedDB, service workers, everything), not just the cookies. Chrome
+// refuses to run two processes against the same --user-data-dir at once
+// (a "browser already running" lock), so the main session on :1 and every
+// slot each need their own copy; a full filesystem copy of an already-
+// authenticated profile preserves far more of what a consistency check
+// might look at than the old cookie-only clone (which OnlyFans reliably
+// rejected) ever did.
+// ============================================================================
+
+const { spawn } = require('child_process');
+const net = require('net');
+
+const CHATTER_SLOTS = [
+  { id: 1, display: ':2', vncPort: 5902, wsPort: 6082 },
+  { id: 2, display: ':3', vncPort: 5903, wsPort: 6083 },
+  { id: 3, display: ':4', vncPort: 5904, wsPort: 6084 },
+  { id: 4, display: ':5', vncPort: 5905, wsPort: 6085 },
+].map((slot) => ({
+  ...slot,
+  assignedTo: null, // `${userId}:${modelId}` while occupied
+  modelId: null,
+  lastActivity: 0,
+  xvfbProc: null,
+  x11vncProc: null,
+  websockifyProc: null,
+  browser: null,
+  page: null,
+  infraReady: null,
+}));
+
+const CHATTER_SLOT_IDLE_MS = 20 * 60 * 1000; // free a slot after 20 min unused
+
+function slotProfileDir(slot, modelId) {
+  return `/tmp/chromium-slot${slot.id}-${modelId}`;
+}
+
+function waitForPort(port, timeoutMs = 8000) {
+  const start = Date.now();
+  return new Promise((resolve, reject) => {
+    const tryConnect = () => {
+      const socket = net.createConnection({ port, host: '127.0.0.1' }, () => {
+        socket.end();
+        resolve();
+      });
+      socket.on('error', () => {
+        socket.destroy();
+        if (Date.now() - start > timeoutMs) return reject(new Error(`Timed out waiting for port ${port}`));
+        setTimeout(tryConnect, 200);
+      });
+    };
+    tryConnect();
+  });
+}
+
+// Starts (or confirms already running) this slot's own Xvfb + x11vnc +
+// websockify trio. Idempotent and safe to call on every assignment - only
+// actually spawns a process if the previous one isn't alive anymore.
+async function ensureSlotInfra(slot) {
+  if (slot.infraReady) {
+    try {
+      await slot.infraReady;
+      return;
+    } catch (e) {
+      slot.infraReady = null; // let this call retry from scratch below
+    }
+  }
+
+  slot.infraReady = (async () => {
+    if (!slot.xvfbProc || slot.xvfbProc.exitCode !== null) {
+      slot.xvfbProc = spawn('/usr/bin/Xvfb', [slot.display, '-screen', '0', '1366x768x24', '-nolisten', 'tcp'], { stdio: 'ignore' });
+      slot.xvfbProc.on('exit', (code) => console.warn(`[SLOT ${slot.id}] Xvfb exited (${code})`));
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    // x11vnc resets the X11 keymap on its own restart regardless of what
+    // ran before - reapplying here every time is the same fix already
+    // needed for the login display's "@" keyboard issue.
+    spawn('/usr/bin/setxkbmap', ['de'], { env: { ...process.env, DISPLAY: slot.display }, stdio: 'ignore' });
+
+    if (!slot.x11vncProc || slot.x11vncProc.exitCode !== null) {
+      slot.x11vncProc = spawn('/usr/bin/x11vnc', [
+        '-display', slot.display,
+        '-rfbport', String(slot.vncPort),
+        '-rfbauth', '/root/.vnc/login_passwd',
+        '-forever', '-shared', '-noxdamage', '-localhost', '-quiet', '-xkb', '-add_keysyms',
+      ], { stdio: 'ignore' });
+      slot.x11vncProc.on('exit', (code) => console.warn(`[SLOT ${slot.id}] x11vnc exited (${code})`));
+      await new Promise((r) => setTimeout(r, 300));
+      spawn('/usr/bin/setxkbmap', ['de'], { env: { ...process.env, DISPLAY: slot.display }, stdio: 'ignore' });
+    }
+
+    if (!slot.websockifyProc || slot.websockifyProc.exitCode !== null) {
+      slot.websockifyProc = spawn('/usr/bin/websockify', [String(slot.wsPort), `localhost:${slot.vncPort}`], { stdio: 'ignore' });
+      slot.websockifyProc.on('exit', (code) => console.warn(`[SLOT ${slot.id}] websockify exited (${code})`));
+    }
+
+    await waitForPort(slot.wsPort);
+  })();
+
+  await slot.infraReady;
+}
+
+// Launches (or reuses) this slot's Chrome window for the given model,
+// starting from a fresh filesystem copy of that model's live profile.
+async function ensureSlotBrowser(slot, modelId) {
+  if (slot.browser && slot.browser.isConnected() && slot.modelId === modelId) {
+    return slot.page;
+  }
+  if (slot.browser) {
+    try {
+      await slot.browser.close();
+    } catch (e) {
+      /* ignore */
+    }
+    slot.browser = null;
+    slot.page = null;
+  }
+
+  const dest = slotProfileDir(slot, modelId);
+  await fs.rm(dest, { recursive: true, force: true }).catch(() => {});
+  await fs.cp(profileDir(modelId), dest, { recursive: true });
+  // Chrome's singleton-instance lock files (symlinks encoding the ORIGINAL
+  // process's hostname:PID, or a socket path) get copied right along with
+  // everything else, and Chrome checks whether that specific PID is still
+  // alive before deciding whether "another process" already owns this
+  // profile - since the main session's browser is (by design) still
+  // running, the copy's own Chrome would see these stale locks and refuse
+  // to start entirely ("profile appears to be in use"). Stripping them
+  // lets the new process create its own fresh locks in the copied dir.
+  await Promise.all(
+    ['SingletonLock', 'SingletonSocket', 'SingletonCookie'].map((f) =>
+      fs.rm(path.join(dest, f), { force: true }).catch(() => {})
+    )
+  );
+
+  const browser = await puppeteer.launch({
+    headless: false,
+    executablePath: process.env.CHROMIUM_PATH || puppeteer.executablePath(),
+    env: { ...process.env, DISPLAY: slot.display },
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-sync',
+      '--no-first-run',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--disable-extensions',
+      '--disable-blink-features=AutomationControlled',
+      '--lang=de-DE',
+      '--window-size=1366,768',
+      '--window-position=0,0',
+      `--user-data-dir=${dest}`,
+    ],
+  });
+
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1366, height: 768 });
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9' });
+  await enableDarkMode(page);
+  try {
+    await page.goto('https://onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
+  } catch (e) {
+    console.warn(`[SLOT ${slot.id}] Navigation warning:`, e.message);
+  }
+
+  slot.browser = browser;
+  slot.page = page;
+  slot.modelId = modelId;
+  return page;
+}
+
+async function releaseSlot(slot, reason) {
+  console.log(`[SLOT ${slot.id}] Releasing (${reason}), was ${slot.assignedTo}`);
+  if (slot.browser) {
+    try {
+      await slot.browser.close();
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  if (slot.modelId) {
+    await fs.rm(slotProfileDir(slot, slot.modelId), { recursive: true, force: true }).catch(() => {});
+  }
+  slot.browser = null;
+  slot.page = null;
+  slot.assignedTo = null;
+  slot.modelId = null;
+}
+
+// Idle sweep - a chatter who closed the tab without it ever telling the
+// server shouldn't keep an extra Chrome window (and its own Xvfb/x11vnc/
+// websockify trio) running indefinitely.
+setInterval(() => {
+  const now = Date.now();
+  for (const slot of CHATTER_SLOTS) {
+    if (slot.assignedTo && now - slot.lastActivity > CHATTER_SLOT_IDLE_MS) {
+      releaseSlot(slot, 'idle timeout').catch((e) => console.warn(`[SLOT ${slot.id}] Release error:`, e.message));
+    }
+  }
+}, 2 * 60 * 1000);
+
+async function assignSlot(userId, modelId) {
+  if (!modelSessions[modelId]) {
+    const err = new Error('NO_MODEL_SESSION');
+    err.code = 'NO_MODEL_SESSION';
+    throw err;
+  }
+
+  const key = `${userId}:${modelId}`;
+  let slot = CHATTER_SLOTS.find((s) => s.assignedTo === key);
+  if (!slot) {
+    slot = CHATTER_SLOTS.find((s) => !s.assignedTo);
+    if (!slot) {
+      // All slots busy - reclaim the least-recently-used one rather than
+      // refusing outright. A short training session bumping an idle one is
+      // a better outcome than a hard error, given the pool is intentionally
+      // small (bounded by the VPS's RAM, not by how many chatters exist).
+      slot = CHATTER_SLOTS.slice().sort((a, b) => a.lastActivity - b.lastActivity)[0];
+      if (slot.assignedTo) await releaseSlot(slot, 'reassigned to a different chatter/model');
+    }
+    slot.assignedTo = key;
+  }
+
+  await ensureSlotInfra(slot);
+  await ensureSlotBrowser(slot, modelId);
+  slot.lastActivity = Date.now();
+  return slot;
+}
+
 // Get an existing live session, or open a fresh one navigated to the login page
 async function getOrCreateSession(modelId) {
   const existing = modelSessions[modelId];
@@ -676,12 +915,36 @@ app.get('/vnc-info', (req, res) => {
   res.json({ status: 'success', password });
 });
 
+// Assign (or reuse) an independent chatter slot for this (userId, modelId)
+// pair - its own Chrome window, own virtual display, own VNC connection,
+// so multiple chatters can work different fan conversations on the same or
+// different models at the same time instead of sharing one cursor/scroll
+// position. Reuses the same VNC password every slot shares (see /vnc-info)
+// - the path alone (from wsPath below) is what routes a given client to the
+// right slot.
+app.post('/chatter-slot', async (req, res) => {
+  try {
+    const { userId, modelId } = req.body || {};
+    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
+
+    const slot = await withModelLock(`slot:${userId}:${modelId}`, () => assignSlot(userId, modelId));
+    res.json({ status: 'success', slotId: slot.id, wsPath: `/vnc-chatter-${slot.id}/websockify` });
+  } catch (error) {
+    if (error.code === 'NO_MODEL_SESSION') {
+      return res.json({ status: 'no_session', modelId: req.body?.modelId });
+    }
+    console.error('[CHATTER-SLOT] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'running',
     activeSessions: Object.keys(modelSessions).length,
     maxConcurrentSessions: MAX_CONCURRENT_SESSIONS,
+    chatterSlots: CHATTER_SLOTS.map((s) => ({ id: s.id, assignedTo: s.assignedTo, modelId: s.modelId })),
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
@@ -701,8 +964,24 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 // out the full stop timeout and SIGKILL us (which used to take ~90s and
 // left the next start racing Xvfb).
 async function shutdown(signal) {
-  console.log(`[SERVER] ${signal} received, closing ${Object.keys(modelSessions).length} session(s)...`);
+  const activeSlots = CHATTER_SLOTS.filter((s) => s.assignedTo);
+  console.log(`[SERVER] ${signal} received, closing ${Object.keys(modelSessions).length} session(s) and ${activeSlots.length} chatter slot(s)...`);
   await Promise.all(Object.keys(modelSessions).map((modelId) => closeSession(modelId, `shutdown (${signal})`)));
+  await Promise.all(activeSlots.map((slot) => releaseSlot(slot, `shutdown (${signal})`)));
+  // The slot Xvfb/x11vnc/websockify processes are spawned by this process
+  // directly (not systemd units) - they'd otherwise survive as orphans
+  // across a redeploy/restart, quietly piling up on every deploy.
+  for (const slot of CHATTER_SLOTS) {
+    for (const proc of [slot.xvfbProc, slot.x11vncProc, slot.websockifyProc]) {
+      if (proc && proc.exitCode === null) {
+        try {
+          proc.kill();
+        } catch (e) {
+          /* ignore */
+        }
+      }
+    }
+  }
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5000).unref();
 }
