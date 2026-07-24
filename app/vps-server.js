@@ -474,6 +474,13 @@ app.post('/interact', async (req, res) => {
     if (!session) return res.status(404).json({ error: 'No active session for this model' });
 
     session.lastActivity = Date.now();
+    // Tells the continuous /stream capture loop (if one is running for this
+    // model) to back off while a real click/keypress is being executed -
+    // both were hitting the same Puppeteer page/CDP connection at once on a
+    // single CPU core, which queued the actual keystroke behind however
+    // many pending stream-frame captures, turning "type a character" into
+    // a many-second wait. See the check in the /stream loop below.
+    session.interactionPending = true;
     const { page } = session;
 
     let result = 'ok';
@@ -512,6 +519,8 @@ app.post('/interact', async (req, res) => {
     } catch (actionErr) {
       console.warn(`[INTERACT] Action error (${action}):`, actionErr.message);
       result = `action error: ${actionErr.message}`;
+    } finally {
+      session.interactionPending = false;
     }
 
     const [screenshot, state] = await Promise.all([
@@ -743,6 +752,13 @@ app.get('/stream', (req, res) => {
     const current = modelSessions[modelId];
     if (!current) {
       return res.end();
+    }
+    // A click/keypress is being executed against this same page right now -
+    // don't contend with it for the CDP connection on a single CPU core.
+    // Back off and check again shortly instead of queuing up behind it.
+    if (current.interactionPending) {
+      if (!closed) setTimeout(pushFrame, 50);
+      return;
     }
     current.lastActivity = Date.now();
     try {

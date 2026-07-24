@@ -78,7 +78,7 @@ export default async function RootLayout({
                 width={633}
                 height={611}
                 priority
-                className="h-12 w-auto"
+                className="h-14 w-auto"
               />
             </div>
 
