@@ -31,16 +31,22 @@ export async function POST(req: NextRequest) {
       throw new Error(`VPS error ${cookiesResponse.status}: ${text}`);
     }
 
-    const { cookies } = await cookiesResponse.json();
+    const { cookies, localStorageData } = await cookiesResponse.json();
     if (!Array.isArray(cookies) || cookies.length === 0) {
       return NextResponse.json({ status: "error", error: "No cookies found - login not detected yet" }, { status: 400 });
     }
 
     // Store as a flat { name: value } map - the same shape send-message-to-onlyfans
-    // and the manual session injector already use.
+    // and the manual session injector already use. localStorage rides along
+    // under a reserved key (see IGNORED_COOKIE_KEYS in screenshot/route.ts,
+    // which already strips non-cookie metadata keys like this one back out
+    // before using this map to restore actual cookies).
     const cookieMap: Record<string, string> = {};
     for (const c of cookies) {
       if (c?.name) cookieMap[c.name] = c.value;
+    }
+    if (localStorageData) {
+      cookieMap["local_storage"] = localStorageData;
     }
 
     const { error: upsertError } = await supabase.from("crm_model_sessions").upsert(

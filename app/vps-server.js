@@ -237,7 +237,7 @@ async function getOrCreateSession(modelId) {
 
 // Re-launch a session from previously saved cookies (used when the chatter
 // live-view is opened but no live browser is currently running for the model)
-async function restoreSession(modelId, cookies) {
+async function restoreSession(modelId, cookies, localStorageData) {
   // A previous call (queued behind the same lock) may have already restored
   // this model - reuse it instead of tearing down a working session.
   const existing = modelSessions[modelId];
@@ -272,6 +272,29 @@ async function restoreSession(modelId, cookies) {
     });
   } catch (navErr) {
     console.warn(`[RESTORE] Navigation warning for ${modelId}: ${navErr.message}`);
+  }
+
+  // Some sites keep auth-relevant tokens in localStorage, not just cookies -
+  // restore it too. Needs the page already navigated to the right origin
+  // first (localStorage is origin-scoped), then reloaded so the site's own
+  // init logic actually picks up the restored values, same as a normal
+  // page load would.
+  if (localStorageData) {
+    try {
+      await page.evaluate((dataStr) => {
+        const data = JSON.parse(dataStr);
+        for (const [key, value] of Object.entries(data)) {
+          try {
+            localStorage.setItem(key, value);
+          } catch (e) {
+            /* ignore individual key failures */
+          }
+        }
+      }, localStorageData);
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
+    } catch (e) {
+      console.warn(`[RESTORE] localStorage restore error for ${modelId}:`, e.message);
+    }
   }
 
   const session = { browser, page, lastActivity: Date.now(), createdAt: new Date() };
@@ -496,7 +519,8 @@ app.post('/interact', async (req, res) => {
   }
 });
 
-// Return raw cookies from a live session, so Next.js can persist them to Supabase
+// Return raw cookies (+ localStorage) from a live session, so Next.js can
+// persist them to Supabase on "Creator verbinden".
 app.get('/cookies', async (req, res) => {
   try {
     const { modelId } = req.query;
@@ -507,7 +531,24 @@ app.get('/cookies', async (req, res) => {
 
     session.lastActivity = Date.now();
     const cookies = await session.page.cookies();
-    res.json({ status: 'success', modelId, cookies, cookieCount: cookies.length });
+
+    // Some sites keep auth-relevant tokens in localStorage alongside
+    // cookies, not just in cookies - grab it too so a future restore has
+    // everything that might matter, not just the cookie jar.
+    let localStorageData = null;
+    try {
+      localStorageData = await session.page.evaluate(() => {
+        try {
+          return JSON.stringify(localStorage);
+        } catch (e) {
+          return null;
+        }
+      });
+    } catch (e) {
+      console.warn(`[COOKIES] Could not read localStorage for ${modelId}:`, e.message);
+    }
+
+    res.json({ status: 'success', modelId, cookies, cookieCount: cookies.length, localStorageData });
   } catch (error) {
     console.error('[COOKIES] Error:', error.message);
     res.status(500).json({ error: error.message });
@@ -518,12 +559,12 @@ app.get('/cookies', async (req, res) => {
 // already got closed by the idle timeout but the chatter wants to view it)
 app.post('/restore', async (req, res) => {
   try {
-    const { modelId, cookies } = req.body || {};
+    const { modelId, cookies, localStorageData } = req.body || {};
     if (!modelId || !Array.isArray(cookies)) {
       return res.status(400).json({ error: 'Missing modelId or cookies array' });
     }
 
-    const session = await withModelLock(modelId, () => restoreSession(modelId, cookies));
+    const session = await withModelLock(modelId, () => restoreSession(modelId, cookies, localStorageData));
     const state = await getLoginState(session.page);
 
     res.json({ status: 'success', modelId, ...state });

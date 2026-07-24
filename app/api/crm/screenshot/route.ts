@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/getCurrentUser";
 
 export const dynamic = "force-dynamic";
 
-const IGNORED_COOKIE_KEYS = ["vps_server", "session_id", "created_at", "verification_status", "cookie_count"];
+const IGNORED_COOKIE_KEYS = ["vps_server", "session_id", "created_at", "verification_status", "cookie_count", "local_storage"];
 
 /**
  * Live screenshot from the persistent VPS browser session for a model.
@@ -132,7 +132,7 @@ async function tryRestoreFromSupabase(modelId: string, authCookies: unknown): Pr
 
   const response = await vpsFetch("/restore", {
     method: "POST",
-    body: JSON.stringify({ modelId, cookies }),
+    body: JSON.stringify({ modelId, cookies, localStorageData: cookieMap["local_storage"] || null }),
   });
 
   if (!response.ok) return false;
