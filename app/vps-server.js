@@ -407,8 +407,8 @@ async function ensureSlotBrowser(slot, modelId) {
       '--window-size=1280,800',
       '--window-position=0,0',
       `--user-data-dir=${dest}`,
-      // TEST: app mode - no address bar/back-forward toolbar/tab strip,
-      // just the raw page content filling the window.
+      // App mode - no address bar/back-forward toolbar/tab strip, just the
+      // raw page content filling the window.
       '--app=https://onlyfans.com/my/chats',
     ],
   });
@@ -420,6 +420,27 @@ async function ensureSlotBrowser(slot, modelId) {
   await page.setViewport({ width: 1280, height: 800 });
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9' });
   await enableDarkMode(page);
+
+  // The filesystem copy above can still be stale even when the main
+  // session is genuinely logged in: Chrome writes its cookie database to
+  // disk on its own schedule, not instantly on every change, so a copy
+  // taken between a real login and Chrome's next flush captures pre-login
+  // files despite the live browser already being authenticated. Confirmed
+  // directly - a freshly-created slot still showed the login page while
+  // modelSessions[modelId] reported isLoggedIn:true. Overlaying the LIVE
+  // cookies (read via CDP, always accurate, never stale) on top of
+  // whatever the file copy captured makes the auth state correct
+  // regardless of Chrome's own disk-flush timing.
+  const mainSession = modelSessions[modelId];
+  if (mainSession) {
+    try {
+      const liveCookies = await mainSession.page.cookies();
+      if (liveCookies.length) await page.setCookie(...liveCookies);
+    } catch (e) {
+      console.warn(`[SLOT ${slot.id}] Live cookie overlay failed:`, e.message);
+    }
+  }
+
   try {
     await page.goto('https://onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
   } catch (e) {
