@@ -247,7 +247,7 @@ export function OnlyFansViewer({
       // the side touching the Fan CRM panel, and a border there read as a
       // seam between "the real site" and "our overlay" instead of one
       // integrated view. The other 3 sides keep their frame.
-      className="relative h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] overflow-hidden mx-auto border-t border-l border-b border-[#C9A86A]/10 rounded-l-lg"
+      className="relative h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] overflow-hidden border-t border-l border-b border-[#C9A86A]/10 rounded-l-lg"
       style={{ aspectRatio: "1280 / 800" }}
     >
       {phase === "connecting" && (
@@ -376,7 +376,7 @@ export function OnlyFansViewer({
   // it against the plain message list or while still connecting would just
   // be an empty, meaningless panel.
   const viewerContent = (
-    <div className="relative w-full h-full flex items-stretch justify-center overflow-hidden bg-[#0A0A0A]">
+    <div className="relative w-full h-full flex items-stretch justify-start overflow-hidden bg-[#0A0A0A]">
       {videoArea}
       {/* Reserved at the same width whether or not a fan chat is open - a
           bare gray gap next to the video read as broken/accidental; a

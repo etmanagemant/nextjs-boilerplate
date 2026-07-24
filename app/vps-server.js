@@ -317,12 +317,26 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
   }
 
   function logIfLocallySent(el) {
+    // Fixes a race that showed up specifically when typing several
+    // messages quickly: OnlyFans inserts the bubble's DOM node before its
+    // text content is fully rendered, so the very first MutationObserver
+    // callback for a brand-new bubble could see empty text. The old code
+    // marked the bubble "logged" regardless, permanently giving up on it -
+    // once marked, it's never re-checked, so it silently never got sent to
+    // the log and never got a label. Now only bubbles outside the send
+    // window (definitely not ours) get marked immediately; ones with no
+    // text yet are left unmarked so a later mutation (once the text
+    // actually renders) retries them.
     if (el.dataset.etmLogged) return;
-    el.dataset.etmLogged = '1';
-    if (Date.now() > recentSendUntil) return;
-    var fanId = getFanId();
+    if (Date.now() > recentSendUntil) {
+      el.dataset.etmLogged = '1';
+      return;
+    }
     var text = getBubbleText(el);
-    if (!fanId || !text || !API_BASE) return;
+    if (!text) return;
+    el.dataset.etmLogged = '1';
+    var fanId = getFanId();
+    if (!fanId || !API_BASE) return;
     fetch(API_BASE + '/api/crm/log-sent-message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
