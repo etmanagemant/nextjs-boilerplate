@@ -224,11 +224,11 @@ const NAV_SCRIPT_TEMPLATE = `
   // the account happens to be set to.
   var HIDDEN_LABELS = ROLE === 'admin'
     ? []
-    : ['home', 'queue', 'statements', 'my profile', 'more', 'statistics', 'new post',
-       'start', 'warteschlange', 'aussagen', 'mein profil', 'mehr', 'statistiken', 'neuer beitrag'];
+    : ['home', 'queue', 'statements', 'my profile', 'more', 'statistics', 'new post', 'referrals', 'settings',
+       'start', 'warteschlange', 'aussagen', 'mein profil', 'mehr', 'statistiken', 'neuer beitrag', 'meine empfehlungen', 'einstellungen'];
   var ICON_ONLY_LABELS = ROLE === 'admin'
-    ? ['home', 'notifications', 'messages', 'collections', 'vault', 'queue', 'statements', 'statistics', 'my profile', 'more', 'help and support',
-       'start', 'benachrichtigungen', 'nachrichten', 'sammlungen', 'tresor', 'warteschlange', 'aussagen', 'statistiken', 'mein profil', 'mehr', 'hilfe und support', 'hilfe & support']
+    ? ['home', 'notifications', 'messages', 'collections', 'vault', 'queue', 'statements', 'statistics', 'my profile', 'more', 'help and support', 'referrals', 'settings',
+       'start', 'benachrichtigungen', 'nachrichten', 'sammlungen', 'tresor', 'warteschlange', 'aussagen', 'statistiken', 'mein profil', 'mehr', 'hilfe und support', 'hilfe & support', 'meine empfehlungen', 'einstellungen']
     : ['notifications', 'messages', 'collections', 'vault', 'help and support',
        'benachrichtigungen', 'nachrichten', 'sammlungen', 'tresor', 'hilfe und support', 'hilfe & support'];
 
