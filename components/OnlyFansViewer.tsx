@@ -38,32 +38,53 @@ export function OnlyFansViewer({
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<any>(null);
+  const noSessionPollRef = useRef<NodeJS.Timeout | null>(null);
+  const noSessionSyncedRef = useRef(false);
+  const unmountedRef = useRef(false);
 
-  const connectVnc = async (): Promise<void> => {
-    // "Does a live browser exist for this model at all" - VNC itself has no
-    // concept of that, and if there's genuinely no session, opening a VNC
-    // connection would just fail with a generic error instead of a clear
-    // "please reconnect" prompt.
+  // "Does a live browser exist for this model at all" - VNC itself has no
+  // concept of that, and if there's genuinely no session, opening a VNC
+  // connection would just fail with a generic error instead of a clear
+  // "please reconnect" prompt. Keeps retrying every few seconds instead of
+  // checking once: a chatter can easily open CRM Inbox before the admin has
+  // finished connecting, and without a retry this would otherwise show
+  // "not connected" forever even once a real session exists moments later.
+  const waitForSession = async (): Promise<void> => {
     const statusRes = await fetch(`/api/crm/browser-login/status?modelId=${encodeURIComponent(modelId)}`);
     const statusData = statusRes.ok ? await statusRes.json() : {};
+
     if (!statusData.hasSession) {
       // The VPS browser can disappear for reasons that have nothing to do
       // with the admin explicitly disconnecting (a VPS deploy/restart, a
       // crash, the idle timeout) - Supabase's is_active flag has no way to
       // learn that on its own, so without this the Connection Hub keeps
       // showing "verbunden" for a model that's actually completely dead.
-      // Best-effort: this view just noticed the mismatch, so it's the one
-      // fixing it, but a failure here shouldn't block showing the correct
-      // "not connected" prompt either way.
-      fetch("/api/crm/browser-login/disconnect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId }),
-      }).catch(() => {});
+      // Only fire once per no-session streak, not on every retry tick.
+      if (!noSessionSyncedRef.current) {
+        noSessionSyncedRef.current = true;
+        fetch("/api/crm/browser-login/disconnect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ modelId }),
+        }).catch(() => {});
+      }
       setPhase("no-session");
+      if (!unmountedRef.current) {
+        noSessionPollRef.current = setTimeout(() => {
+          waitForSession().catch((err) => {
+            setPhase("error");
+            setError(err.message || "Unbekannter Fehler beim Verbinden");
+          });
+        }, 4000);
+      }
       return;
     }
 
+    noSessionSyncedRef.current = false;
+    await connectVnc();
+  };
+
+  const connectVnc = async (): Promise<void> => {
     const [RFB, vncInfoRes] = await Promise.all([
       loadRFB(),
       fetch("/api/crm/browser-login/vnc-info"),
@@ -104,7 +125,7 @@ export function OnlyFansViewer({
     setPhase("connecting");
     setError("");
     try {
-      await connectVnc();
+      await waitForSession();
     } catch (err: any) {
       setPhase("error");
       setError(err.message || "Unbekannter Fehler beim Verbinden");
@@ -112,8 +133,11 @@ export function OnlyFansViewer({
   };
 
   useEffect(() => {
+    unmountedRef.current = false;
     start();
     return () => {
+      unmountedRef.current = true;
+      if (noSessionPollRef.current) clearTimeout(noSessionPollRef.current);
       if (rfbRef.current) {
         try {
           rfbRef.current.disconnect();
