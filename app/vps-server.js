@@ -341,23 +341,35 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
   }
 
   function applyLabelsFromLog() {
+    // sentLog is a *fresh* array from the server on every call (fetchLog
+    // runs every 4s), so per-entry "_used" flags never survive between
+    // calls - and logIdx starts at 0 every call too. The bug this fixes:
+    // an already-labeled bubble was being skipped via continue WITHOUT
+    // advancing logIdx past the entry it originally matched, so the next
+    // unlabeled bubble's search still started from the very beginning of
+    // the log and could re-match an earlier (wrong) entry - confirmed
+    // live: two "hallo" messages from the same sender ended up labeled
+    // with two different names. Fix: walk every bubble (labeled or not) to
+    // keep logIdx correctly positioned, only skip *creating* the label
+    // element for ones that already have it.
     var mine = document.querySelectorAll('.b-chat__message.m-from-me');
     var logIdx = 0;
     for (var i = 0; i < mine.length; i++) {
       var el = mine[i];
-      if (el.querySelector('.' + LABEL_CLASS)) continue;
+      var alreadyLabeled = !!el.querySelector('.' + LABEL_CLASS);
       var text = getBubbleText(el);
       if (!text) continue;
       for (var j = logIdx; j < sentLog.length; j++) {
-        if (!sentLog[j]._used && sentLog[j].message_text === text) {
-          sentLog[j]._used = true;
+        if (sentLog[j].message_text === text) {
           logIdx = j + 1;
-          var body = el.querySelector('.b-chat__message__body') || el;
-          var tag = document.createElement('div');
-          tag.className = LABEL_CLASS;
-          tag.textContent = 'gesendet von ' + sentLog[j].chatter_name;
-          tag.style.cssText = 'font-size:10px;opacity:0.55;text-align:right;margin-top:2px;color:inherit;';
-          body.appendChild(tag);
+          if (!alreadyLabeled) {
+            var body = el.querySelector('.b-chat__message__body') || el;
+            var tag = document.createElement('div');
+            tag.className = LABEL_CLASS;
+            tag.textContent = 'gesendet von ' + sentLog[j].chatter_name;
+            tag.style.cssText = 'font-size:10px;opacity:0.55;text-align:right;margin-top:2px;color:inherit;';
+            body.appendChild(tag);
+          }
           break;
         }
       }

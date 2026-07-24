@@ -60,10 +60,13 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
   const [preferences, setPreferences] = useState<string[]>(metadata.preferences || []);
   const [newPreference, setNewPreference] = useState("");
 
-  // Re-sync local editable state whenever a different fan's metadata comes
-  // in (switching chats in OnlyFans itself) - but not on every poll tick
-  // for the *same* fan, which would overwrite whatever the chatter is
-  // mid-typing.
+  // Re-syncs whenever the fan changes OR another chatter's save changes the
+  // actual field values - keyed on the field values themselves (not just
+  // fanId) since two chatters can have the same fan open at once and each
+  // needs to see the other's edits, not just whatever was there when they
+  // first opened this chat. Keying on primitives/a stringified array rather
+  // than the metadata object itself avoids re-firing on every ~1s poll tick
+  // when nothing actually changed (a new object is returned every time).
   useEffect(() => {
     setRealName(metadata.real_name || "");
     setLocation(metadata.location || "");
@@ -72,7 +75,15 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
     setNotes(metadata.notes || "");
     setPreferences(metadata.preferences || []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fanId]);
+  }, [
+    fanId,
+    metadata.real_name,
+    metadata.location,
+    metadata.age,
+    metadata.came_from,
+    metadata.notes,
+    JSON.stringify(metadata.preferences),
+  ]);
 
   const saveField = async (fields: Record<string, unknown>) => {
     try {
@@ -119,8 +130,8 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
   const isSpender = (metadata.lifetime_value || 0) > 0;
 
   return (
-    <div className="w-80 flex-shrink-0 h-full bg-black/40 overflow-y-auto scrollbar-hide flex flex-col">
-      <div className="sticky top-0 bg-black/60 p-4 border-b border-[#C9A86A]/20 z-10 flex items-center justify-between">
+    <div className="w-80 flex-shrink-0 h-full bg-[#0A0A0A] overflow-y-auto scrollbar-hide flex flex-col">
+      <div className="sticky top-0 bg-[#0A0A0A] p-4 border-b border-[#C9A86A]/20 z-10 flex items-center justify-between">
         <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">👤 Fan CRM</h2>
       </div>
 

@@ -397,8 +397,8 @@ export function OnlyFansViewer({
               isAdmin={isAdmin}
             />
           ) : (
-            <div className="w-80 flex-shrink-0 h-full bg-black/40 flex flex-col">
-              <div className="sticky top-0 bg-black/60 p-4 border-b border-[#C9A86A]/20">
+            <div className="w-80 flex-shrink-0 h-full bg-[#0A0A0A] flex flex-col">
+              <div className="sticky top-0 bg-[#0A0A0A] p-4 border-b border-[#C9A86A]/20">
                 <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">👤 Fan CRM</h2>
                 <p className="text-[11px] text-slate-500 mt-1">Öffne einen Fan-Chat in OnlyFans für Fan-Details.</p>
               </div>
