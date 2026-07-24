@@ -307,13 +307,26 @@ export function OnlyFansViewer({
   const viewerContent = (
     <div className="relative w-full h-full flex items-stretch justify-center overflow-hidden bg-[#0A0A0A]">
       {videoArea}
-      {phase === "live" && currentFan && (
-        <FanCrmPanel
-          modelId={modelId}
-          fanId={currentFan.fanId}
-          metadata={currentFan.metadata}
-          onSaved={pollCurrentFan}
-        />
+      {/* Reserved at the same width whether or not a fan chat is open - a
+          bare gray gap next to the video read as broken/accidental; a
+          placeholder in the same visual language reads as intentional. */}
+      {phase === "live" && (
+        <>
+          {currentFan ? (
+            <FanCrmPanel
+              modelId={modelId}
+              fanId={currentFan.fanId}
+              metadata={currentFan.metadata}
+              onSaved={pollCurrentFan}
+            />
+          ) : (
+            <div className="w-80 flex-shrink-0 h-full bg-black/40 border-l border-[#D4AF37]/20 flex items-center justify-center p-6">
+              <p className="text-xs text-slate-500 text-center">
+                👤 Öffne einen Fan-Chat in OnlyFans, um hier die Fan-Details zu sehen.
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
