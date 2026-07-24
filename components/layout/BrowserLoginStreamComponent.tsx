@@ -53,10 +53,33 @@ export default function BrowserLoginStreamComponent({
   const [phase, setPhase] = useState<"opening" | "connecting" | "live" | "confirming" | "error">("opening");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [error, setError] = useState<string>("");
+  const [pasteText, setPasteText] = useState("");
+  const [pasteStatus, setPasteStatus] = useState<"idle" | "done" | "error">("idle");
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<any>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
+
+  // The login display's X11 keymap can end up mismatched with whatever
+  // physical keyboard layout the admin's OS/browser is using (e.g. AltGr
+  // combos for "@" on a German layout), and x11vnc resets its own keymap
+  // handling on every restart regardless of what's configured server-side.
+  // Clipboard paste sidesteps all of that: the admin types into a normal
+  // local input (their own OS handles every character correctly), one
+  // click pushes it into the remote session's clipboard via the VNC
+  // protocol's native clipboard-sync feature, then a plain Ctrl+V (always
+  // transmits fine, no special keysyms involved) pastes it into the field.
+  const handlePasteToVnc = () => {
+    if (!rfbRef.current || !pasteText) return;
+    try {
+      rfbRef.current.clipboardPasteFrom(pasteText);
+      setPasteStatus("done");
+      setTimeout(() => setPasteStatus("idle"), 1500);
+    } catch (err) {
+      console.error("[LOGIN-VIEW] clipboard paste failed:", err);
+      setPasteStatus("error");
+    }
+  };
 
   // VNC has no concept of "logged in" - it's purely visual/input. This is
   // the only thing still polled for.
@@ -198,6 +221,31 @@ export default function BrowserLoginStreamComponent({
             <p className="text-xs text-slate-400 mb-2">
               Klicke in das Fenster und logge dich mit den Model-Zugangsdaten bei OnlyFans ein.
             </p>
+
+            {phase === "live" && (
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="text"
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                  placeholder="Sonderzeichen wie @ hier eingeben (mit deiner normalen Tastatur)..."
+                  className="flex-1 bg-black/50 border border-[#D4AF37]/30 rounded px-3 py-1.5 text-sm text-[#F3E5AB] placeholder:text-slate-500 focus:outline-none focus:border-[#D4AF37]"
+                />
+                <button
+                  onClick={handlePasteToVnc}
+                  disabled={!pasteText}
+                  className="py-1.5 px-3 rounded text-xs font-bold bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37]/30 disabled:opacity-40 disabled:cursor-not-allowed transition whitespace-nowrap"
+                >
+                  {pasteStatus === "done" ? "✓ Kopiert" : pasteStatus === "error" ? "✗ Fehler" : "📋 Übertragen"}
+                </button>
+              </div>
+            )}
+            {phase === "live" && pasteStatus === "done" && (
+              <p className="text-[10px] text-emerald-400 mb-2 -mt-1">
+                In Zwischenablage übertragen — klicke jetzt in das Feld im Fenster unten und drücke Strg+V zum Einfügen.
+              </p>
+            )}
+
             <div
               className="relative bg-black rounded-lg overflow-hidden border border-[#D4AF37]/30"
               style={{ height: "70vh" }}
