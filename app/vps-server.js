@@ -919,6 +919,15 @@ async function getOrCreateSession(modelId) {
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9' });
   await enableDarkMode(page);
   await setGermanLangCookie(page);
+  // This main session is what Connection Hub's own login/pre-connect stream
+  // shows (BrowserLoginStreamComponent) - previously only chatter slots got
+  // the icon-only/compact nav treatment (ensureSlotBrowser), so this exact
+  // view kept showing OnlyFans' full-width sidebar with all text labels.
+  // Treated as 'admin' (nothing hidden, just compacted) since this session
+  // isn't tied to any one chatter's role - it's the shared login/cookie
+  // source every slot copies from.
+  await reserveOverlaySpace(page);
+  await applyNavRestrictions(page, 'admin');
 
   try {
     // The direct /login route has been unreliable ("page not available") -
