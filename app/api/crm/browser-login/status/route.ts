@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAdmin } from "@/lib/crmAdmin";
+import { getCurrentUser } from "@/lib/getCurrentUser";
 import { vpsFetch } from "@/lib/vpsClient";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Poll whether the admin has finished logging in inside the live browser.
+ * Poll whether a live session exists / the admin has finished logging in.
+ * Used by both the admin-only login flow and the CRM Inbox live view
+ * (chatters) - any logged-in CRM user is enough here, the login page
+ * itself is separately admin-gated.
  * GET /api/crm/browser-login/status?modelId=xxx
  */
 export async function GET(req: NextRequest) {
   try {
-    const { isAdmin } = await getRequestAdmin();
-    if (!isAdmin) {
+    const { user } = await getCurrentUser();
+    if (!user) {
       return NextResponse.json({ status: "error", error: "Unauthorized" }, { status: 403 });
     }
 

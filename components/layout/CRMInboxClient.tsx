@@ -242,28 +242,20 @@ export default function CRMInboxClient({
           ) : selectedOnlyFansModel && !selectedFanId ? (
             // ONLYFANS FOCUS MODE - no native fan chat selected yet. Sales
             // Cockpit only makes sense once you're actually in a chat, so it
-            // stays hidden here; OnlyFans gets the space instead.
-            <>
-              <div className="w-48 flex-shrink-0 border-r border-[#D4AF37]/20">
-                <ChatListColumn
-                  fans={fans}
-                  selectedFanId={selectedFanId}
-                  onSelectFan={handleSelectFan}
-                  isLoading={isLoadingFans}
-                />
-              </div>
-
-              <div className="flex-1 min-w-0 overflow-hidden bg-black">
-                <OnlyFansViewer
-                  modelId={selectedOnlyFansModel}
-                  modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}
-                  isEmbedded={true}
-                  isModal={false}
-                  onClose={() => setSelectedOnlyFansModel(null)}
-                  emojis={emojis}
-                />
-              </div>
-            </>
+            // stays hidden here; the fan list stays hidden too until Native
+            // Chat Mode actually has synced data to show (it's real estate
+            // OnlyFans can use instead in the meantime) - OnlyFans gets the
+            // full width.
+            <div className="flex-1 min-w-0 overflow-hidden bg-black">
+              <OnlyFansViewer
+                modelId={selectedOnlyFansModel}
+                modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}
+                isEmbedded={true}
+                isModal={false}
+                onClose={() => setSelectedOnlyFansModel(null)}
+                emojis={emojis}
+              />
+            </div>
           ) : (
             // NATIVE CHAT MODE - a fan conversation is selected, so the CRM's
             // own inbox (with the emoji bar and script library) is the focus.
