@@ -131,6 +131,65 @@ async function enableDarkMode(page) {
   }
 }
 
+// Hides specific OnlyFans nav items for chatter-role slots only (never the
+// admin's own session) - matched by their visible text rather than CSS
+// classes, same "fragile but functional, no reliance on OnlyFans' own
+// unstable class names" trade-off as the dark-mode injection above. A
+// MutationObserver re-applies this as OnlyFans' own SPA re-renders the nav
+// (a one-time run wouldn't survive its internal client-side routing).
+// Statistics is hidden outright for now rather than partially - splitting
+// "mass-message stats" from "revenue stats" within that page needs to be
+// confirmed against the real DOM first.
+const CHATTER_RESTRICTIONS_SCRIPT = `
+(function() {
+  var HIDDEN_LABELS = ['home', 'queue', 'statements', 'my profile', 'more', 'statistics', 'new post'];
+  // Kept visible, but stripped down to just the icon - matches the
+  // compact left-rail look already used elsewhere in the CRM (SuperCreator
+  // reference), and frees up width the Fan CRM panel can use instead.
+  var ICON_ONLY_LABELS = ['notifications', 'messages', 'collections', 'vault'];
+
+  function norm(s) { return (s || '').trim().toLowerCase(); }
+
+  // Text-only match (case-insensitive) rather than CSS classes, same
+  // "fragile but functional" trade-off as the dark-mode injection - not
+  // reliant on OnlyFans' own unstable class names, at the cost of breaking
+  // if they ever change these exact labels.
+  function stripTrailingText(el) {
+    for (var i = el.childNodes.length - 1; i >= 0; i--) {
+      var node = el.childNodes[i];
+      if (node.nodeType === 3 && node.textContent) node.textContent = '';
+    }
+  }
+
+  function scan() {
+    var candidates = document.querySelectorAll('a, button');
+    for (var i = 0; i < candidates.length; i++) {
+      var el = candidates[i];
+      var text = norm(el.textContent);
+      if (HIDDEN_LABELS.indexOf(text) !== -1) {
+        if (el.style.display !== 'none') el.style.display = 'none';
+      } else if (ICON_ONLY_LABELS.indexOf(text) !== -1) {
+        stripTrailingText(el);
+      }
+    }
+  }
+  function start() {
+    scan();
+    new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  }
+  if (document.body) start();
+  else document.addEventListener('DOMContentLoaded', start);
+})();
+`;
+
+async function applyChatterRestrictions(page) {
+  try {
+    await page.evaluateOnNewDocument(CHATTER_RESTRICTIONS_SCRIPT);
+  } catch (e) {
+    console.warn('[CHATTER-RESTRICTIONS] Could not register:', e.message);
+  }
+}
+
 // Wipe the on-disk Chrome profile (cookies, cache, local storage) so a fresh
 // login never inherits a previous session for the same model.
 async function wipeProfileDir(modelId) {
@@ -260,6 +319,7 @@ const CHATTER_SLOTS = [
   ...slot,
   assignedTo: null, // `${userId}:${modelId}` while occupied
   modelId: null,
+  role: null,
   lastActivity: 0,
   xvfbProc: null,
   x11vncProc: null,
@@ -342,7 +402,7 @@ async function ensureSlotInfra(slot) {
 
 // Launches (or reuses) this slot's Chrome window for the given model,
 // starting from a fresh filesystem copy of that model's live profile.
-async function ensureSlotBrowser(slot, modelId) {
+async function ensureSlotBrowser(slot, modelId, role) {
   if (slot.browser && slot.browser.isConnected() && slot.modelId === modelId) {
     // A slot copied before the admin finished logging in (a chatter can
     // easily open CRM Inbox while Connection Hub is still mid-login)
@@ -420,6 +480,9 @@ async function ensureSlotBrowser(slot, modelId) {
   await page.setViewport({ width: 1280, height: 800 });
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9' });
   await enableDarkMode(page);
+  if (role !== 'admin') {
+    await applyChatterRestrictions(page);
+  }
 
   // The filesystem copy above can still be stale even when the main
   // session is genuinely logged in: Chrome writes its cookie database to
@@ -450,6 +513,7 @@ async function ensureSlotBrowser(slot, modelId) {
   slot.browser = browser;
   slot.page = page;
   slot.modelId = modelId;
+  slot.role = role;
   return page;
 }
 
@@ -469,6 +533,7 @@ async function releaseSlot(slot, reason) {
   slot.page = null;
   slot.assignedTo = null;
   slot.modelId = null;
+  slot.role = null;
 }
 
 // Idle sweep - a chatter who closed the tab without it ever telling the
@@ -483,7 +548,7 @@ setInterval(() => {
   }
 }, 2 * 60 * 1000);
 
-async function assignSlot(userId, modelId) {
+async function assignSlot(userId, modelId, role) {
   if (!modelSessions[modelId]) {
     const err = new Error('NO_MODEL_SESSION');
     err.code = 'NO_MODEL_SESSION';
@@ -506,7 +571,7 @@ async function assignSlot(userId, modelId) {
   }
 
   await ensureSlotInfra(slot);
-  await ensureSlotBrowser(slot, modelId);
+  await ensureSlotBrowser(slot, modelId, role);
   slot.lastActivity = Date.now();
   return slot;
 }
@@ -976,10 +1041,10 @@ app.get('/vnc-info', (req, res) => {
 // right slot.
 app.post('/chatter-slot', async (req, res) => {
   try {
-    const { userId, modelId } = req.body || {};
+    const { userId, modelId, role } = req.body || {};
     if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
 
-    const slot = await withModelLock(`slot:${userId}:${modelId}`, () => assignSlot(userId, modelId));
+    const slot = await withModelLock(`slot:${userId}:${modelId}`, () => assignSlot(userId, modelId, role));
     res.json({ status: 'success', slotId: slot.id, wsPath: `/vnc-chatter-${slot.id}/websockify` });
   } catch (error) {
     if (error.code === 'NO_MODEL_SESSION') {
