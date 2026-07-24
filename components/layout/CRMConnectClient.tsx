@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { ModelCardSkeleton } from "./CRMSkeletonLoaders";
 import BrowserLoginStreamComponent from "./BrowserLoginStreamComponent";
-import RoleSelect from "./RoleSelect";
+import ModelsManagementClient from "./ModelsManagementClient";
 
 interface Model {
   id: string;
@@ -31,33 +31,31 @@ interface ConnectedModel {
   name: string;
 }
 
-interface StaffProfile {
-  user_id: string;
-  role: string;
-  email: string | null;
-  full_name: string | null;
-  provision_rate: number | null;
-  hourly_rate: number | null;
+interface ManagedModel {
+  id: string;
+  name: string;
+  platform_type: string;
+  avatar_url: string | null;
 }
 
 interface CRMConnectClientProps {
   initialModels: Model[];
   initialChatters: Chatter[];
   connectedModels?: ConnectedModel[];
-  staffProfiles: StaffProfile[];
-  updateMitarbeiterRolle: (formData: FormData) => Promise<void>;
-  updateMitarbeiterName: (formData: FormData) => Promise<void>;
-  updateMitarbeiterCompensation: (formData: FormData) => Promise<void>;
-  deleteMitarbeiter: (formData: FormData) => Promise<void>;
+  managedModels: ManagedModel[];
+  addModel: (formData: FormData) => Promise<void>;
+  deleteModel: (formData: FormData) => Promise<void>;
+  updateModelName: (formData: FormData) => Promise<void>;
+  updateModelAvatar: (formData: FormData) => Promise<void>;
 }
 
 export default function CRMConnectClient({
   initialModels,
-  staffProfiles,
-  updateMitarbeiterRolle,
-  updateMitarbeiterName,
-  updateMitarbeiterCompensation,
-  deleteMitarbeiter,
+  managedModels,
+  addModel,
+  deleteModel,
+  updateModelName,
+  updateModelAvatar,
 }: CRMConnectClientProps) {
   const [models, setModels] = useState<Model[]>(initialModels);
   const [sessions, setSessions] = useState<Map<string, CreatorSession>>(
@@ -243,75 +241,21 @@ export default function CRMConnectClient({
         </div>
       </section>
 
-      {/* Mitarbeiter & Rollen modifizieren - moved here from the Management
-          page so staff/role changes live alongside the model connections
-          they affect. */}
+      {/* Models (Schichtplanung) - moved here from the Management page,
+          alongside the model connection status it's most relevant next to. */}
       <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg">
-        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Mitarbeiter & Rollen modifizieren</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
-                <th className="p-3">Name</th>
-                <th className="p-3">E-Mail</th>
-                <th className="p-3 w-[140px]">Provision %</th>
-                <th className="p-3 w-[150px]">Rolle ändern</th>
-                <th className="p-3 w-[80px] text-center">Löschen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {staffProfiles.map((p) => (
-                <tr key={p.user_id} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
-                  <td className="p-3">
-                    <form action={updateMitarbeiterName} className="flex gap-2">
-                      <input type="hidden" name="user_id" value={p.user_id} />
-                      <input type="text" name="full_name" defaultValue={p.full_name || ""} required className="bg-[#050505] border border-[#9C7A3D]/30 rounded px-2 py-1 text-sm text-white focus:border-[#C9A86A] outline-none w-full max-w-[140px]" />
-                      <button type="submit" className="text-[11px] bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer">OK</button>
-                    </form>
-                  </td>
-                  <td className="p-3 text-slate-400 font-mono text-xs">{p.email || "keine E-Mail"}</td>
+        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Models (Schichtplanung)</h2>
+        <form action={addModel} className="flex gap-3 mb-6">
+          <input type="text" name="name" placeholder="Model Name" required className="flex-1 px-3 py-2 border border-[#9C7A3D]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#C9A86A] outline-none" />
+          <button type="submit" className="bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black px-4 py-2 rounded-md text-sm font-bold hover:from-[#E5C158] transition cursor-pointer">Model hinzufügen</button>
+        </form>
 
-                  <td className="p-3">
-                    {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
-                      <form action={updateMitarbeiterCompensation} className="flex gap-1.5 items-center flex-wrap">
-                        <input type="hidden" name="user_id" value={p.user_id} />
-                        <input type="hidden" name="role" value={p.role} />
-                        {p.role === "moderator" ? (
-                          <>
-                            <input type="number" step="0.01" name="hourly_rate" defaultValue={p.hourly_rate || 0} placeholder="EUR/h" className="w-20 bg-[#050505] border border-[#9C7A3D]/30 text-white rounded p-1 text-xs text-center outline-none focus:border-[#C9A86A]" />
-                            <span className="text-[10px] text-slate-500">EUR/h</span>
-                          </>
-                        ) : (
-                          <>
-                            <input type="number" step="0.1" name="provision_rate" defaultValue={p.provision_rate || 20} placeholder="20" className="w-14 bg-[#050505] border border-[#9C7A3D]/30 text-white rounded p-1 text-xs text-center outline-none focus:border-[#C9A86A]" />
-                            <span className="text-[10px] text-slate-500">%</span>
-                          </>
-                        )}
-                        <button type="submit" className="text-[10px] bg-emerald-600 text-white font-bold px-1.5 py-1 rounded hover:bg-emerald-700 transition cursor-pointer">✓</button>
-                      </form>
-                    ) : (
-                      <span className="text-xs text-slate-500 font-mono">Admin</span>
-                    )}
-                  </td>
-
-                  <td className="p-3">
-                    <RoleSelect userId={p.user_id} defaultRole={p.role} onUpdateAction={updateMitarbeiterRolle} />
-                  </td>
-                  <td className="p-3 text-center">
-                    {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
-                      <form action={deleteMitarbeiter}>
-                        <input type="hidden" name="user_id" value={p.user_id} />
-                        <button type="submit" className="text-red-400 hover:text-red-300 text-sm font-bold transition cursor-pointer">Löschen</button>
-                      </form>
-                    ) : (
-                      <span className="text-xs text-slate-500">-</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ModelsManagementClient
+          models={managedModels}
+          onDeleteClick={deleteModel}
+          onNameChange={updateModelName}
+          onAvatarChange={updateModelAvatar}
+        />
       </section>
 
       {/* Live Browser Login */}

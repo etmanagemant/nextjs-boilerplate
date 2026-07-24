@@ -243,7 +243,11 @@ export function OnlyFansViewer({
   // Fan CRM panel below now uses instead of sitting empty.
   const videoArea = (
     <div
-      className="relative h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] overflow-hidden mx-auto"
+      // Border on 3 sides only, deliberately not the right edge - that's
+      // the side touching the Fan CRM panel, and a border there read as a
+      // seam between "the real site" and "our overlay" instead of one
+      // integrated view. The other 3 sides keep their frame.
+      className="relative h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] overflow-hidden mx-auto border-t border-l border-b border-[#C9A86A]/10 rounded-l-lg"
       style={{ aspectRatio: "1280 / 800" }}
     >
       {phase === "connecting" && (

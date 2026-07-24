@@ -1,12 +1,7 @@
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import CRMConnectClient from "@/components/layout/CRMConnectClient";
-import {
-  updateMitarbeiterRolle,
-  updateMitarbeiterName,
-  updateMitarbeiterCompensation,
-  deleteMitarbeiter,
-} from "@/app/management/actions";
+import { addModel, deleteModel, updateModelName, updateModelAvatar } from "@/app/management/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,13 +17,11 @@ interface Chatter {
   role: string;
 }
 
-interface StaffProfile {
-  user_id: string;
-  role: string;
-  email: string | null;
-  full_name: string | null;
-  provision_rate: number | null;
-  hourly_rate: number | null;
+interface ManagedModel {
+  id: string;
+  name: string;
+  platform_type: string;
+  avatar_url: string | null;
 }
 
 export default async function CRMConnectPage() {
@@ -95,12 +88,13 @@ export default async function CRMConnectPage() {
   }
 
   // Now fetch from crm_model_sessions (both active and inactive), the
-  // chatter list, and the full staff/roles table (moved here from the
-  // Management page) in parallel - none of these depend on each other.
-  const [{ data: connectedModels, error: fetchError }, { data: chatters }, { data: staffProfiles }] = await Promise.all([
+  // chatter list, and the full models table (moved here from the
+  // Management page - the "Models (Schichtplanung)" add/edit/delete
+  // widget) in parallel - none of these depend on each other.
+  const [{ data: connectedModels, error: fetchError }, { data: chatters }, { data: allModels }] = await Promise.all([
     supabase.from("crm_model_sessions").select("model_id, is_active").order("model_id", { ascending: true }),
     supabase.from("profiles").select("user_id, full_name, role").in("role", ["chatter", "moderator"]).order("full_name", { ascending: true }),
-    supabase.from("profiles").select("user_id, role, email, full_name, provision_rate, hourly_rate"),
+    supabase.from("models").select("id, name, platform_type, avatar_url").order("name", { ascending: true }),
   ]);
 
   if (fetchError) {
@@ -160,18 +154,23 @@ export default async function CRMConnectPage() {
   }
 
   const typedChatters: Chatter[] = chatters || [];
-  const typedStaffProfiles: StaffProfile[] = staffProfiles || [];
+  const typedManagedModels: ManagedModel[] = (allModels || []).map((m: any) => ({
+    id: m.id,
+    name: m.name,
+    platform_type: m.platform_type,
+    avatar_url: m.avatar_url,
+  }));
 
   return (
     <CRMConnectClient
       initialModels={typedModels}
       initialChatters={typedChatters}
       connectedModels={sidebarModels}
-      staffProfiles={typedStaffProfiles}
-      updateMitarbeiterRolle={updateMitarbeiterRolle}
-      updateMitarbeiterName={updateMitarbeiterName}
-      updateMitarbeiterCompensation={updateMitarbeiterCompensation}
-      deleteMitarbeiter={deleteMitarbeiter}
+      managedModels={typedManagedModels}
+      addModel={addModel}
+      deleteModel={deleteModel}
+      updateModelName={updateModelName}
+      updateModelAvatar={updateModelAvatar}
     />
   );
 }
