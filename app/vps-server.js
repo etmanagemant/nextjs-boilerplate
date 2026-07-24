@@ -174,6 +174,11 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
       // container down to icon width fixes that.
       '.l-sidebar, .l-sidebar__inner { width: 64px !important; overflow: hidden !important; } ' +
       '.l-sidebar__menu__item { width: 48px !important; min-width: 48px !important; padding-left: 0 !important; padding-right: 0 !important; justify-content: center !important; } ' +
+      // Same compacting as the sidebar items above, for the "New Post"
+      // button - it lives in a different class family (.l-header__menu, not
+      // .l-sidebar__menu) so needs its own matching rule rather than
+      // inheriting the one above.
+      '.m-create-post { width: 48px !important; min-width: 48px !important; padding-left: 0 !important; padding-right: 0 !important; justify-content: center !important; } ' +
       // The actual flex item reserving horizontal track space turned out to
       // be the OUTER <header class="l-header"> wrapping .l-sidebar, not
       // .l-sidebar itself - confirmed live via /debug-dom: .l-sidebar
@@ -268,12 +273,16 @@ const NAV_SCRIPT_TEMPLATE = `
     if (contactBtn && contactBtn.style.display !== 'none') contactBtn.style.display = 'none';
     // The "New Post"/"Neuer Beitrag" button isn't part of the sidebar at
     // all - confirmed live it's ".m-create-post" under a completely
-    // different "l-header__menu__item" class family, which is why sidebar
-    // width fixes never touched it and it kept forcing extra width next to
-    // the icon rail. Hidden outright for every role in this compact view -
-    // a reliable, language-independent class match instead of text.
+    // different "l-header__menu__item" class family. Previously hidden
+    // outright since it kept forcing extra width next to the icon rail;
+    // now that the real width culprit (.l-header itself) is fixed, it can
+    // stay visible and just get the same icon-only treatment as everything
+    // else instead of being replaced by a separate CRM button.
     var newPostBtn = document.querySelector('.m-create-post');
-    if (newPostBtn && newPostBtn.style.display !== 'none') newPostBtn.style.display = 'none';
+    if (newPostBtn) {
+      if (newPostBtn.style.display === 'none') newPostBtn.style.removeProperty('display');
+      stripTrailingText(newPostBtn);
+    }
     // <main>'s own positioning scheme differs by page - confirmed live via
     // /debug-dom. On some pages (e.g. the Home feed) it's
     // position:absolute/fixed with OnlyFans' own hardcoded left:280px,
