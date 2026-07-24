@@ -990,6 +990,51 @@ app.post('/chatter-slot', async (req, res) => {
   }
 });
 
+// Which fan conversation a specific chatter's slot is currently showing -
+// the Fan CRM panel needs to know this to load/save the right fan's data,
+// but our own app has no visibility into what's clicked *inside* the VNC
+// view otherwise (that all happens directly on OnlyFans' own page).
+// Polled periodically by the frontend; deliberately lightweight (just the
+// URL, not a screenshot or full page read).
+app.get('/chatter-slot-page', (req, res) => {
+  const { userId, modelId } = req.query;
+  if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
+
+  const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+  if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+
+  let pageUrl = 'unknown';
+  try {
+    pageUrl = slot.page.url();
+  } catch (e) {
+    /* page mid-navigation or closed - just report unknown */
+  }
+  res.json({ status: 'success', pageUrl });
+});
+
+// Scrapes the visible text of a chatter's currently-open OnlyFans chat, for
+// "Fill with AI" to analyze - not polled, only called on demand (the user
+// clicking that button), since reading a page's full text is heavier than
+// the plain URL check above. No reliance on OnlyFans' own class names
+// (those aren't stable) - just the page's rendered text, same "fragile but
+// functional" trade-off as the dark-mode CSS injection elsewhere in this
+// file. The AI side has to make sense of the raw, noisy text itself.
+app.get('/chatter-slot-chat-text', async (req, res) => {
+  try {
+    const { userId, modelId } = req.query;
+    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
+
+    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+
+    const text = await slot.page.evaluate(() => document.body.innerText);
+    res.json({ status: 'success', text: text.slice(0, 12000) });
+  } catch (error) {
+    console.error('[CHATTER-SLOT-CHAT-TEXT] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
 // One-off diagnostic screenshot of a model's or slot's current page -
 // useful for verifying layout/CSS changes without needing a live VNC
 // viewer open. Shared-secret gated like everything else here.

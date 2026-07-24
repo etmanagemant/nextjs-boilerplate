@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { loadRFB } from "@/lib/loadRfb";
+import { FanCrmPanel } from "@/components/FanCrmPanel";
 
 interface OnlyFansViewerProps {
   modelId: string;
@@ -41,6 +42,9 @@ export function OnlyFansViewer({
   const noSessionPollRef = useRef<NodeJS.Timeout | null>(null);
   const noSessionSyncedRef = useRef(false);
   const unmountedRef = useRef(false);
+
+  const [currentFan, setCurrentFan] = useState<{ fanId: string; metadata: any } | null>(null);
+  const fanPollRef = useRef<NodeJS.Timeout | null>(null);
 
   // Assigns (or reuses) this user's own independent chatter slot for this
   // model - its own Chrome window on its own virtual display, so two
@@ -134,6 +138,35 @@ export function OnlyFansViewer({
     }
   };
 
+  // Detects which fan conversation is currently open inside the VNC view
+  // (there's no other way for this app to know - that all happens directly
+  // on OnlyFans' own page) so the Fan CRM panel can show/save the right
+  // fan's data, and switches automatically when the chatter opens a
+  // different chat inside OnlyFans itself.
+  const pollCurrentFan = async () => {
+    try {
+      const res = await fetch(`/api/crm/current-fan?modelId=${encodeURIComponent(modelId)}`);
+      const data = res.ok ? await res.json() : {};
+      if (data.status === "success" && data.fanId) {
+        setCurrentFan({ fanId: data.fanId, metadata: data.metadata });
+      } else {
+        setCurrentFan(null);
+      }
+    } catch {
+      /* keep whatever was last known rather than flicker the panel away on a single failed poll */
+    }
+  };
+
+  useEffect(() => {
+    if (phase !== "live") return;
+    pollCurrentFan();
+    fanPollRef.current = setInterval(pollCurrentFan, 3000);
+    return () => {
+      if (fanPollRef.current) clearInterval(fanPollRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, modelId]);
+
   useEffect(() => {
     unmountedRef.current = false;
     start();
@@ -167,8 +200,18 @@ export function OnlyFansViewer({
     }
   };
 
-  const viewerContent = (
-    <div className="relative w-full h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] rounded-lg overflow-hidden border border-[#D4AF37]/10">
+  // Constrained to its own aspect ratio (matching the remote 1280x800
+  // display) instead of stretching to fill whatever width is left over -
+  // a VNC feed can only scale proportionally or distort, never reflow like
+  // a native page, so letting it stretch into a much wider container just
+  // left dead gray bars on both sides. Sized to the available height and
+  // centered; the space this reclaims on wide screens is exactly what the
+  // Fan CRM panel below now uses instead of sitting empty.
+  const videoArea = (
+    <div
+      className="relative h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] rounded-lg overflow-hidden border border-[#D4AF37]/10 mx-auto"
+      style={{ aspectRatio: "1280 / 800" }}
+    >
       {phase === "connecting" && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/60 to-[#0A0A0A]/80 z-10 backdrop-blur-sm">
           <div className="text-center">
@@ -253,6 +296,24 @@ export function OnlyFansViewer({
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+
+  // The Fan CRM panel only makes sense once a specific fan conversation is
+  // actually open inside OnlyFans (detected via pollCurrentFan) - showing
+  // it against the plain message list or while still connecting would just
+  // be an empty, meaningless panel.
+  const viewerContent = (
+    <div className="relative w-full h-full flex items-stretch justify-center overflow-hidden bg-[#0A0A0A]">
+      {videoArea}
+      {phase === "live" && currentFan && (
+        <FanCrmPanel
+          modelId={modelId}
+          fanId={currentFan.fanId}
+          metadata={currentFan.metadata}
+          onSaved={pollCurrentFan}
+        />
       )}
     </div>
   );
