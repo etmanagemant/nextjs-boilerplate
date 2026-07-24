@@ -157,7 +157,16 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
       // Collapsing both the item and the sidebar's own fixed-width
       // container down to icon width fixes that.
       '.l-sidebar, .l-sidebar__inner { width: 64px !important; overflow: hidden !important; } ' +
-      '.l-sidebar__menu__item { width: 48px !important; min-width: 48px !important; padding-left: 0 !important; padding-right: 0 !important; justify-content: center !important; }';
+      '.l-sidebar__menu__item { width: 48px !important; min-width: 48px !important; padding-left: 0 !important; padding-right: 0 !important; justify-content: center !important; } ' +
+      // Shrinking the sidebar alone wasn't enough - confirmed live via
+      // /debug-dom that OnlyFans' own <main> content wrapper has a
+      // hardcoded left:280px (matching the OLD sidebar width) independent
+      // of how wide the sidebar actually renders, so a big dead gap stayed
+      // between the icons and the real page content (e.g. the Home feed).
+      // Only the chat page happened not to hit this, since it uses a
+      // different layout structure. Forcing main to sit right after the
+      // now-64px sidebar fixes every page, not just chat.
+      'main { left: 64px !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
   if (document.head) inject();
