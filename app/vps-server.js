@@ -679,7 +679,18 @@ app.post('/sync-live', async (req, res) => {
       return res.json({ status: 'success', modelId, discovered: calls, pageUrl: session.page.url() });
     }
 
-    const endpoint = process.env.ONLYFANS_CHATS_ENDPOINT || '/api2/v2/chats?limit=20&offset=0&order=activity';
+    // This used to fall back to a guessed endpoint (/api2/v2/chats?...) that
+    // has now been directly confirmed to always return HTTP 400 - meaning
+    // the periodic background sync loop was hitting a guaranteed-broken
+    // endpoint against live sessions every 90 seconds for no benefit at all,
+    // and possibly contributing to sessions dropping back to logged-out
+    // (repeated malformed requests are exactly the kind of thing anti-fraud
+    // systems flag). No longer guessing - only runs once the real endpoint
+    // is confirmed via a discover pass and set explicitly.
+    const endpoint = process.env.ONLYFANS_CHATS_ENDPOINT;
+    if (!endpoint) {
+      return res.json({ status: 'not_configured', modelId, message: 'ONLYFANS_CHATS_ENDPOINT not set - run discover:true against a live session first' });
+    }
     const data = await session.page.evaluate(async (url) => {
       const res = await fetch(url, { credentials: 'include' });
       const text = await res.text();
@@ -717,7 +728,14 @@ app.post('/send-message', async (req, res) => {
   session.lastActivity = Date.now();
 
   try {
-    const endpoint = process.env.ONLYFANS_SEND_MESSAGE_ENDPOINT || `/api2/v2/chats/${fanId}/messages`;
+    // No longer guessing a default here either (see the same fix on
+    // /sync-live) - a wrong guess means every send attempt POSTs a
+    // malformed request to OnlyFans for no benefit. Confirm the real
+    // endpoint via discover:true first.
+    const endpoint = process.env.ONLYFANS_SEND_MESSAGE_ENDPOINT;
+    if (!endpoint) {
+      return res.json({ status: 'not_configured', modelId, message: 'ONLYFANS_SEND_MESSAGE_ENDPOINT not set - run discover:true against a live session first' });
+    }
     const data = await session.page.evaluate(async (url, messageText) => {
       const res = await fetch(url, {
         method: 'POST',

@@ -83,6 +83,16 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (vpsResult.status === "not_configured") {
+      return NextResponse.json({
+        success: false,
+        sent: false,
+        message: "OnlyFans send endpoint not confirmed yet - message saved locally",
+        localMessageId,
+        skipped: true,
+      });
+    }
+
     if (vpsResult.status !== "success" || !vpsResult.data?.ok) {
       console.warn("OnlyFans send failed:", vpsResult.error || vpsResult.data);
       return NextResponse.json(

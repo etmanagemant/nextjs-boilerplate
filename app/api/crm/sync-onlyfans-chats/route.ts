@@ -66,6 +66,21 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (vpsResult.status === "not_configured") {
+      // The real OnlyFans chats endpoint hasn't been confirmed yet (see
+      // ONLYFANS_CHATS_ENDPOINT on the VPS) - this is expected until a
+      // discover pass finds it, not an error worth alarming about every
+      // 90 seconds.
+      return NextResponse.json({
+        status: "success",
+        message: "Chats endpoint not confirmed yet - skipped",
+        fansCount: 0,
+        messagesCount: 0,
+        skipped: true,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     if (vpsResult.status !== "success") {
       return NextResponse.json({ error: vpsResult.error || "VPS sync-live failed" }, { status: 502 });
     }
