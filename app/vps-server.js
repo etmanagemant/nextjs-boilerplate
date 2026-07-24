@@ -174,15 +174,21 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
       // container down to icon width fixes that.
       '.l-sidebar, .l-sidebar__inner { width: 64px !important; overflow: hidden !important; } ' +
       '.l-sidebar__menu__item { width: 48px !important; min-width: 48px !important; padding-left: 0 !important; padding-right: 0 !important; justify-content: center !important; } ' +
-      // Shrinking the sidebar alone wasn't enough - confirmed live via
-      // /debug-dom that OnlyFans' own <main> content wrapper has a
-      // hardcoded left:280px (matching the OLD sidebar width) independent
-      // of how wide the sidebar actually renders, so a big dead gap stayed
-      // between the icons and the real page content (e.g. the Home feed).
-      // Only the chat page happened not to hit this, since it uses a
-      // different layout structure. Forcing main to sit right after the
-      // now-64px sidebar fixes every page, not just chat.
-      'main { left: 64px !important; }';
+      // The actual flex item reserving horizontal track space turned out to
+      // be the OUTER <header class="l-header"> wrapping .l-sidebar, not
+      // .l-sidebar itself - confirmed live via /debug-dom: .l-sidebar
+      // measured 64px as intended, but l-header (its parent, a flex sibling
+      // of <main> inside .m-main-container) was still the original 280px,
+      // so <main> kept starting 280px in regardless of how narrow the
+      // sidebar visually looked. This alone fixes the chat page - <main>
+      // there is position:relative, so it repositions itself correctly
+      // through normal flex flow once its sibling actually shrinks, no
+      // "left" override needed at all.
+      // flex-basis (not width) governs how much track space a flex child
+      // reserves when it's explicitly set, which a plain width override
+      // cannot beat - forcing the shorthand directly is what actually
+      // shrinks the reserved space instead of just clipping the box.
+      '.l-header { width: 64px !important; flex: 0 0 64px !important; overflow: hidden !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
   if (document.head) inject();
@@ -268,6 +274,25 @@ const NAV_SCRIPT_TEMPLATE = `
     // a reliable, language-independent class match instead of text.
     var newPostBtn = document.querySelector('.m-create-post');
     if (newPostBtn && newPostBtn.style.display !== 'none') newPostBtn.style.display = 'none';
+    // <main>'s own positioning scheme differs by page - confirmed live via
+    // /debug-dom. On some pages (e.g. the Home feed) it's
+    // position:absolute/fixed with OnlyFans' own hardcoded left:280px,
+    // needing an explicit override. On others (e.g. the chat page) it's
+    // position:relative and gets its horizontal position from normal flex
+    // flow instead - overriding "left" there doesn't replace that flow
+    // position, it ADDS an offset on top of it (280 natural + 64 override =
+    // 344, a worse gap than doing nothing). Deciding this in JS per actual
+    // computed position, instead of one blanket CSS rule, is what actually
+    // fixes both instead of trading one page's gap for another's.
+    var mainEl = document.querySelector('main');
+    if (mainEl) {
+      var mainPos = window.getComputedStyle(mainEl).position;
+      if (mainPos === 'absolute' || mainPos === 'fixed') {
+        if (mainEl.style.left !== '64px') mainEl.style.setProperty('left', '64px', 'important');
+      } else if (mainEl.style.left) {
+        mainEl.style.removeProperty('left');
+      }
+    }
   }
   function start() {
     scan();
