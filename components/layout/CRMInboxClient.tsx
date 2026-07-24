@@ -199,7 +199,11 @@ export default function CRMInboxClient({
   };
 
   return (
-    <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
+    // Not h-screen (100vh) - this renders inside <main>'s pt-32 (the
+    // site header's reserved space), so 100vh here would be 8rem taller
+    // than what's actually left in the viewport, forcing the whole page
+    // to scroll just to reach the bottom of the OnlyFans view.
+    <div className="flex h-[calc(100vh-8rem)] bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
       {/* SIDEBAR */}
       <WorkspaceSidebar
         connectedModels={connectedModels}

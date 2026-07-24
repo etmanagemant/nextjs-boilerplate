@@ -198,14 +198,21 @@ async function launchBrowser(modelId, display) {
         // (which only captures the page content, not the whole virtual
         // screen) but very visible over VNC as a chunk of dead black
         // desktop next to a smaller window. Must match xvfb-login.service's
-        // screen size exactly. Was 1920x1080 - OnlyFans' desktop layout
-        // stays exactly the same at 1366x768 (well above any responsive
-        // breakpoint), but with fewer physical pixels for the same layout,
-        // noVNC's scaleViewport has less to shrink to fit a given on-screen
-        // video size, so text and buttons end up visibly larger/readable.
-        '--window-size=1366,768',
+        // screen size exactly. Was 1920x1080 then 1366x768 - OnlyFans'
+        // desktop layout stays exactly the same at 1280x800 (well above any
+        // responsive breakpoint), but with fewer physical pixels for the
+        // same layout, noVNC's scaleViewport has less to shrink to fit a
+        // given on-screen video size, so text and buttons end up visibly
+        // larger/readable.
+        '--window-size=1280,800',
         '--window-position=0,0',
         `--user-data-dir=/tmp/chromium-${modelId}`,
+        // App mode: no address bar, no back/forward toolbar, no tab strip -
+        // just the page content filling the window. page.screenshot() never
+        // showed this stuff anyway (it only ever captures page content, not
+        // the browser's own native UI), but VNC shows the real window,
+        // browser-chrome-and-all, which is what this actually fixes.
+        '--app=https://www.onlyfans.com',
       ],
     });
 
@@ -301,7 +308,7 @@ async function ensureSlotInfra(slot) {
 
   slot.infraReady = (async () => {
     if (!slot.xvfbProc || slot.xvfbProc.exitCode !== null) {
-      slot.xvfbProc = spawn('/usr/bin/Xvfb', [slot.display, '-screen', '0', '1366x768x24', '-nolisten', 'tcp'], { stdio: 'ignore' });
+      slot.xvfbProc = spawn('/usr/bin/Xvfb', [slot.display, '-screen', '0', '1280x800x24', '-nolisten', 'tcp'], { stdio: 'ignore' });
       slot.xvfbProc.on('exit', (code) => console.warn(`[SLOT ${slot.id}] Xvfb exited (${code})`));
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -382,14 +389,20 @@ async function ensureSlotBrowser(slot, modelId) {
       '--disable-extensions',
       '--disable-blink-features=AutomationControlled',
       '--lang=de-DE',
-      '--window-size=1366,768',
+      '--window-size=1280,800',
       '--window-position=0,0',
       `--user-data-dir=${dest}`,
+      // TEST: app mode - no address bar/back-forward toolbar/tab strip,
+      // just the raw page content filling the window.
+      '--app=https://onlyfans.com/my/chats',
     ],
   });
 
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1366, height: 768 });
+  // App mode opens its own window directly at the given URL - there's no
+  // separate blank tab to grab via newPage() (that would open a second,
+  // regular window instead).
+  const page = (await browser.pages())[0] || (await browser.newPage());
+  await page.setViewport({ width: 1280, height: 800 });
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9' });
   await enableDarkMode(page);
   try {
@@ -482,16 +495,19 @@ async function getOrCreateSession(modelId) {
   await wipeProfileDir(modelId);
 
   const browser = await launchBrowser(modelId, ':1');
-  const page = await browser.newPage();
+  // App mode (see the --app comment in launchBrowser) opens its own window
+  // directly at the given URL - there's no separate blank tab to grab via
+  // newPage() (that would open a second, regular window instead).
+  const page = (await browser.pages())[0] || (await browser.newPage());
   // Must match the --window-size Chrome launch arg and xvfb-login.service's
   // screen size. 1920x1080 briefly overloaded this 1-vCPU/1GB VPS (load
   // average 15+, heavy swapping) since Chrome renders it entirely in
   // software with --disable-gpu - that turned out to mostly be a
   // concurrent-launch race (fixed by withModelLock), not the resolution
-  // alone. Now at 1366x768, chosen for VNC readability (see the
+  // alone. Now at 1280x800, chosen for VNC readability (see the
   // --window-size comment in launchBrowser), which also happens to be
   // lighter than Full HD.
-  await page.setViewport({ width: 1366, height: 768 });
+  await page.setViewport({ width: 1280, height: 800 });
   // Chrome's --lang flag covers its own UI chrome; sites pick their content
   // language from the Accept-Language header, so both are needed for
   // OnlyFans itself to render in German.
@@ -935,6 +951,29 @@ app.post('/chatter-slot', async (req, res) => {
     }
     console.error('[CHATTER-SLOT] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// One-off diagnostic screenshot of a model's or slot's current page -
+// useful for verifying layout/CSS changes without needing a live VNC
+// viewer open. Shared-secret gated like everything else here.
+app.get('/debug-screenshot', async (req, res) => {
+  try {
+    const { modelId, slotId } = req.query;
+    let page;
+    if (slotId) {
+      const slot = CHATTER_SLOTS.find((s) => String(s.id) === String(slotId));
+      if (!slot || !slot.page) return res.status(404).json({ error: 'No active page for that slot' });
+      page = slot.page;
+    } else {
+      const session = modelSessions[modelId];
+      if (!session) return res.status(404).json({ error: 'No active session for this model' });
+      page = session.page;
+    }
+    const screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 85 });
+    res.json({ status: 'success', screenshot });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
