@@ -1661,6 +1661,11 @@ app.get('/debug-dom', async (req, res) => {
               position: cs.position,
               left: cs.left,
               paddingLeft: cs.paddingLeft,
+              transform: cs.transform,
+              marginRight: cs.marginRight,
+              flexBasis: cs.flexBasis,
+              width: cs.width,
+              inlineStyle: el.getAttribute('style'),
               parent: parent
                 ? {
                     tag: parent.tagName,
