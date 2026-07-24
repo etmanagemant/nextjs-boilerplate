@@ -490,6 +490,20 @@ export function OnlyFansViewer({
         autoComplete="off"
       />
 
+      {/* Small mode indicator - lets us actually see whether the live stream
+          is active or it fell back to the polled view, instead of guessing
+          from how smooth it feels. */}
+      {!isLoading && (
+        <div
+          className={`absolute top-2 right-2 z-20 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+            streamOk ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+          }`}
+          title={streamOk ? "Live-Stream aktiv" : "Fallback: Bild wird alle 250ms abgefragt"}
+        >
+          {streamOk ? "🟢 Live" : "🟡 Poll-Modus"}
+        </div>
+      )}
+
       {/* Smiley bar overlay - floats over the live OnlyFans message box.
           Click into the chat field first, then tap an emoji to insert it. */}
       {!isLoading && !error && !sessionExpired && (

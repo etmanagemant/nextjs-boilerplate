@@ -50,6 +50,8 @@ export async function GET(request: NextRequest) {
       ? Date.now() - new Date(dbSession.last_verified_at).getTime() < 2 * 60 * 1000
       : false;
 
+    let wasJustRestored = false;
+
     if (!data.hasSession) {
       const restored = wasAlreadyConnected
         ? await tryRestoreFromSupabase(modelId, dbSession!.auth_cookies)
@@ -66,6 +68,7 @@ export async function GET(request: NextRequest) {
       if (!data.hasSession) {
         return NextResponse.json({ error: "VPS session unavailable, try again shortly" }, { status: 503 });
       }
+      wasJustRestored = true;
     }
 
     if (data.isLoggedIn) {
@@ -84,18 +87,35 @@ export async function GET(request: NextRequest) {
           .eq("model_id", modelId)
           .then(() => {}, () => {});
       }
-    } else if (wasAlreadyConnected && !data.checkFailed && !confirmedRecently) {
+    } else if (wasAlreadyConnected && !data.checkFailed && (wasJustRestored || !confirmedRecently)) {
       // Only a session that was previously a *confirmed, working* connection,
       // where the VPS check itself actually succeeded (not a crashed/closed
       // page read) and definitely found a real logged-out page, counts as
       // "expired" here - a fresh login-in-progress session is expected to
       // show isLoggedIn:false until the admin actually logs in, and a failed
       // read (checkFailed) means we don't actually know the real state.
-      await disconnectModelSession(supabase, modelId, "session invalidated (OnlyFans logged it out)");
+      //
+      // The grace period is skipped entirely when wasJustRestored: cloning
+      // cookies into a brand-new browser (the only option once the VPS's
+      // live session has died - idle timeout, a VPS restart, anything) is a
+      // known, proven-unreliable move with OnlyFans - it gets redirected
+      // back to a real login page even with fully valid cookies. That's not
+      // a flaky read the grace period should protect against; it's a
+      // definitive answer from a check we just deliberately ran, and
+      // treating it as "maybe fine" was exactly why reconnecting and then
+      // opening the CRM inbox could still show a login page instead of a
+      // clear "please reconnect" prompt.
+      await disconnectModelSession(
+        supabase,
+        modelId,
+        wasJustRestored ? "cookie-restore rejected by OnlyFans - needs a real re-login" : "session invalidated (OnlyFans logged it out)"
+      );
       return NextResponse.json({
         status: "session_expired",
         sessionExpired: true,
-        error: "Session ist nicht mehr gültig - bitte neu verbinden",
+        error: wasJustRestored
+          ? "Automatische Wiederherstellung wurde von OnlyFans abgelehnt - bitte im Connection Hub neu verbinden"
+          : "Session ist nicht mehr gültig - bitte neu verbinden",
         modelId,
       });
     }

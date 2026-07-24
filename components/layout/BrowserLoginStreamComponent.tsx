@@ -283,7 +283,19 @@ export default function BrowserLoginStreamComponent({
       <div className="bg-gradient-to-b from-[#1a1a1a] to-[#0f0f0f] border border-[#D4AF37]/30 rounded-lg shadow-2xl w-[95vw] max-w-[1600px] p-6">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-xl font-bold text-[#D4AF37]">🌐 Live Browser-Login</h2>
+            <h2 className="text-xl font-bold text-[#D4AF37] flex items-center gap-2">
+              🌐 Live Browser-Login
+              {phase === "live" && (
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    streamOk ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  }`}
+                  title={streamOk ? "Live-Stream aktiv" : "Fallback: Bild wird alle 300ms abgefragt"}
+                >
+                  {streamOk ? "🟢 Live" : "🟡 Poll-Modus"}
+                </span>
+              )}
+            </h2>
             <p className="text-xs text-slate-400 mt-1">
               <span className="font-bold text-[#D4AF37]">Model:</span> {modelName}
             </p>

@@ -55,7 +55,14 @@ app.use((req, res, next) => {
 // ============================================================================
 
 const modelSessions = {}; // modelId -> { browser, page, lastActivity, createdAt }
-const IDLE_TIMEOUT_MS = 20 * 60 * 1000; // close a session after 20 min of no requests
+// Was 20 minutes - but only one session can run at a time anyway
+// (MAX_CONCURRENT_SESSIONS below), so there's no extra RAM cost to keeping
+// the one connected model alive longer. Every time this closed a session,
+// the next view had to fall back to cloning cookies into a fresh browser,
+// which OnlyFans reliably rejects (redirects to a real login page) even
+// with valid cookies - so a short idle timeout was directly causing
+// "reconnected, but still see a login page" reports.
+const IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000; // close a session after 6h of no requests
 
 // Short-lived, single-use tokens for /stream (see the auth middleware above
 // for why that route can't use the shared secret). Next.js mints one via
