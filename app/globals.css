@@ -108,6 +108,11 @@ body {
   background-size: 300% 100%;
   background-position: 200% 0;
   pointer-events: none;
+  /* Explicitly invisible until hovered - the gradient's "off to the side"
+     positioning alone still let a sliver of gold show at rest on some
+     button sizes, which read as the whole sidebar being permanently
+     gold-tinted instead of solid black. Opacity makes "off" unambiguous. */
+  opacity: 0;
 }
 
 .btn-gold-hover-shimmer:hover {
@@ -116,5 +121,6 @@ body {
 }
 
 .btn-gold-hover-shimmer:hover::after {
+  opacity: 1;
   animation: gold-shimmer-sweep 2.5s linear infinite;
 }
