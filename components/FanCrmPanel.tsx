@@ -146,6 +146,20 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
       if (Array.isArray(s.preferences) && s.preferences.length) {
         setPreferences((prev) => Array.from(new Set([...prev, ...s.preferences])));
       }
+      // These two are read-only Info fields (not manual inputs), so save
+      // directly rather than setting editable state - only if it's a
+      // genuinely valid date, since an unparseable string would fail the
+      // save outright (timestamptz column).
+      const dateFields: Record<string, unknown> = {};
+      for (const key of ["last_subscription_at", "last_paid_at"] as const) {
+        const value = s[key];
+        if (value && !Number.isNaN(new Date(value).getTime())) {
+          dateFields[key] = new Date(value).toISOString();
+        }
+      }
+      if (Object.keys(dateFields).length > 0) {
+        saveField(dateFields);
+      }
       setAiStatus("done");
       setAiMessage("Vorschläge übernommen - bitte prüfen und speichern.");
     } catch (err) {
