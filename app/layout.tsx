@@ -36,7 +36,7 @@ export default async function RootLayout({
   return (
     <html lang="de" className="dark">
       <body className="min-h-screen bg-[#050505] text-[#F3E5AB] antialiased tracking-wide">
-        <header className="fixed top-0 left-0 right-0 z-50 h-20 border-b border-[#8A6D3F]/30 bg-[#0A0A0A]/90 backdrop-blur px-3 shadow-lg shadow-black/50">
+        <header className="fixed top-0 left-0 right-0 z-50 h-28 border-b border-[#8A6D3F]/30 bg-[#0A0A0A]/90 backdrop-blur px-3 shadow-lg shadow-black/50">
           <div className="flex h-full items-center justify-between w-full relative">
             
             {/* LEFT SIDE - Start, Dashboard, OnlyFans, Stechuhr, Abrechnung */}
@@ -78,7 +78,7 @@ export default async function RootLayout({
                 width={633}
                 height={611}
                 priority
-                className="h-16 w-auto"
+                className="h-24 w-auto"
               />
             </div>
 
@@ -97,7 +97,7 @@ export default async function RootLayout({
           </div>
         </header>
 
-        <main className="pt-24 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
+        <main className="pt-32 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
           {children}
         </main>
       </body>

@@ -66,7 +66,10 @@ body {
   width: 35%;
   height: 100%;
   background: linear-gradient(120deg, transparent, rgba(243, 229, 171, 0.3), transparent);
-  animation: gold-shimmer-sweep 3.5s ease-in-out infinite;
+  /* linear, not ease-in-out: easing decelerates the sweep right as it exits,
+     which reads as a stutter/hang at the end of each pass. Constant speed
+     the whole way across looks smooth. */
+  animation: gold-shimmer-sweep 3.5s linear infinite;
   pointer-events: none;
 }
 
