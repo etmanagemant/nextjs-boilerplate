@@ -344,7 +344,22 @@ async function ensureSlotInfra(slot) {
 // starting from a fresh filesystem copy of that model's live profile.
 async function ensureSlotBrowser(slot, modelId) {
   if (slot.browser && slot.browser.isConnected() && slot.modelId === modelId) {
-    return slot.page;
+    // A slot copied before the admin finished logging in (a chatter can
+    // easily open CRM Inbox while Connection Hub is still mid-login)
+    // freezes that pre-login snapshot forever otherwise - nothing ever
+    // re-copies it just because the main session later becomes
+    // authenticated. Confirmed directly: main session isLoggedIn:true
+    // while an existing slot still showed the raw login page. Only pay for
+    // the two extra getLoginState() calls on the reuse path, not on every
+    // interaction with the slot.
+    const [slotState, mainState] = await Promise.all([
+      getLoginState(slot.page),
+      modelSessions[modelId] ? getLoginState(modelSessions[modelId].page) : Promise.resolve({ isLoggedIn: false }),
+    ]);
+    if (slotState.isLoggedIn || !mainState.isLoggedIn) {
+      return slot.page;
+    }
+    console.log(`[SLOT ${slot.id}] Stale pre-login copy detected, refreshing from main session`);
   }
   if (slot.browser) {
     try {
