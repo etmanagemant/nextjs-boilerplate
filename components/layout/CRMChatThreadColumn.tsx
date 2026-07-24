@@ -10,6 +10,8 @@ interface ChatThreadColumnProps {
   onMessageChange: (text: string) => void;
   onSendMessage: () => void;
   emojis: string[];
+  onEmojisChange: (emojis: string[]) => void;
+  chatterId: string;
   selectedEmoji?: string;
   isLoading: boolean;
   isSending: boolean;
@@ -21,6 +23,8 @@ export default function ChatThreadColumn({
   onMessageChange,
   onSendMessage,
   emojis,
+  onEmojisChange,
+  chatterId,
   selectedEmoji,
   isLoading,
   isSending,
@@ -111,6 +115,11 @@ export default function ChatThreadColumn({
                       </div>
                     )}
                   </div>
+                  {msg.sender === "chatter" && msg.chatter_name && (
+                    <p className="text-[10px] opacity-60 mt-0.5 text-right">
+                      gesendet von {msg.chatter_name}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
@@ -121,7 +130,12 @@ export default function ChatThreadColumn({
 
       {/* Emoji Bar */}
       <div className="px-4 py-3 border-t border-[#9C7A3D]/20">
-        <SmileLeiste emojis={emojis} onEmojiClick={handleEmojiClick} />
+        <SmileLeiste
+          emojis={emojis}
+          onEmojiClick={handleEmojiClick}
+          chatterId={chatterId}
+          onEmojisChange={onEmojisChange}
+        />
       </div>
 
       {/* Message Input */}

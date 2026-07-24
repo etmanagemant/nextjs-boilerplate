@@ -5,6 +5,8 @@ import Link from "next/link";
 import { loadRFB } from "@/lib/loadRfb";
 import { FanCrmPanel } from "@/components/FanCrmPanel";
 import { ModelNotesPanel } from "@/components/ModelNotesPanel";
+import EmojiPicker from "@/components/layout/EmojiPicker";
+import { updateChatterEmojis } from "@/app/management/crm-connect/actions";
 
 interface OnlyFansViewerProps {
   modelId: string;
@@ -13,6 +15,8 @@ interface OnlyFansViewerProps {
   isModal?: boolean;
   isEmbedded?: boolean;
   emojis?: string[];
+  onEmojisChange?: (emojis: string[]) => void;
+  chatterId?: string;
   userRole?: string;
 }
 
@@ -34,12 +38,15 @@ export function OnlyFansViewer({
   isModal = false,
   isEmbedded = true,
   emojis = DEFAULT_EMOJIS,
+  onEmojisChange,
+  chatterId,
   userRole = "chatter",
 }: OnlyFansViewerProps) {
   const isAdmin = userRole === "admin";
   const [phase, setPhase] = useState<"connecting" | "live" | "no-session" | "error">("connecting");
   const [error, setError] = useState("");
   const [pasteStatus, setPasteStatus] = useState<"idle" | "done">("idle");
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<any>(null);
@@ -206,6 +213,19 @@ export function OnlyFansViewer({
     }
   };
 
+  const handleToggleQuickEmoji = async (emoji: string) => {
+    if (!chatterId || !onEmojisChange) return;
+    const next = emojis.includes(emoji)
+      ? emojis.filter((e) => e !== emoji)
+      : [...emojis, emoji];
+    onEmojisChange(next);
+    try {
+      await updateChatterEmojis(chatterId, next);
+    } catch (err) {
+      console.error("Failed to save quick emojis:", err);
+    }
+  };
+
   // Constrained to its own aspect ratio (matching the remote 1280x800
   // display) instead of stretching to fill whatever width is left over -
   // a VNC feed can only scale proportionally or distort, never reflow like
@@ -283,21 +303,49 @@ export function OnlyFansViewer({
             🟢 Live
           </div>
 
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-[92%] overflow-x-auto flex gap-1.5 px-3 py-2 rounded-full bg-black/80 border border-[#C9A86A]/40 backdrop-blur-sm shadow-2xl">
-            {emojis.map((emoji, i) => (
-              <button
-                key={i}
-                onClick={() => handlePasteEmoji(emoji)}
-                className="text-lg leading-none flex-shrink-0 hover:scale-125 transition-transform cursor-pointer"
-                title="In Zwischenablage kopieren, dann Strg+V im Chat-Feld"
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
+          {/* Only shown once an actual fan chat is open (detected via
+              pollCurrentFan) - showing it whenever the session is merely
+              "live" meant it floated over the fan list, a profile page,
+              anywhere, with nowhere useful to paste into. */}
+          {currentFan && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5">
+              {emojiPickerOpen && (
+                <div className="relative w-72">
+                  <EmojiPicker
+                    quickEmojis={emojis}
+                    onSelect={(emoji) => {
+                      handlePasteEmoji(emoji);
+                      setEmojiPickerOpen(false);
+                    }}
+                    onToggleQuick={handleToggleQuickEmoji}
+                    onClose={() => setEmojiPickerOpen(false)}
+                  />
+                </div>
+              )}
+              <div className="max-w-[92%] overflow-x-auto flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/80 border border-[#C9A86A]/40 backdrop-blur-sm shadow-2xl">
+                {emojis.map((emoji, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handlePasteEmoji(emoji)}
+                    className="text-lg leading-none flex-shrink-0 hover:scale-125 transition-transform cursor-pointer"
+                    title="In Zwischenablage kopieren, dann Strg+V im Chat-Feld"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setEmojiPickerOpen((v) => !v)}
+                  title="Mehr Emojis"
+                  className="text-sm flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full border border-dashed border-[#9C7A3D]/60 text-[#C9A86A]"
+                >
+                  {emojiPickerOpen ? "▾" : "+"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {pasteStatus === "done" && (
-            <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 text-[11px] text-emerald-400 bg-black/80 px-3 py-1 rounded-full border border-emerald-500/30">
+            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 text-[11px] text-emerald-400 bg-black/80 px-3 py-1 rounded-full border border-emerald-500/30">
               Kopiert — Strg+V im Chat-Feld zum Einfügen
             </div>
           )}

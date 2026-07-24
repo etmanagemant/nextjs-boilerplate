@@ -258,6 +258,8 @@ export default function CRMInboxClient({
                 isModal={false}
                 onClose={() => setSelectedOnlyFansModel(null)}
                 emojis={emojis}
+                onEmojisChange={setEmojis}
+                chatterId={chatterId}
                 userRole={userRole}
               />
             </div>
@@ -284,6 +286,8 @@ export default function CRMInboxClient({
                   onMessageChange={setCurrentMessage}
                   onSendMessage={handleSendMessage}
                   emojis={emojis}
+                  onEmojisChange={setEmojis}
+                  chatterId={chatterId}
                   selectedEmoji={selectedScript ? "✓" : undefined}
                   isLoading={isLoadingMessages}
                   isSending={isSending}
@@ -314,6 +318,9 @@ export default function CRMInboxClient({
                     isEmbedded={true}
                     isModal={false}
                     onClose={() => setSelectedOnlyFansModel(null)}
+                    emojis={emojis}
+                    onEmojisChange={setEmojis}
+                    chatterId={chatterId}
                     userRole={userRole}
                   />
                 </div>

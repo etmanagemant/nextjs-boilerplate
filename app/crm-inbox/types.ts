@@ -14,6 +14,7 @@ export interface ChatMessage {
   id: string;
   fan_id: string;
   chatter_id: string;
+  chatter_name?: string;
   sender: 'chatter' | 'fan';
   message_text: string;
   attached_media_id?: string;

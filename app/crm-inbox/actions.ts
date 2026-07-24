@@ -78,7 +78,31 @@ export async function fetchChatMessages(fanId: string, limit: number = 50) {
       .limit(limit);
 
     if (error) throw error;
-    return data || [];
+    if (!data || data.length === 0) return [];
+
+    // Attach the sending chatter's display name so the thread can show a
+    // small "gesendet von X" overlay under each CRM-sent message - multiple
+    // chatters can rotate through the same model, so the raw chatter_id
+    // alone isn't meaningful in the UI.
+    const chatterIds = Array.from(
+      new Set(data.filter((m) => m.sender === "chatter" && m.chatter_id).map((m) => m.chatter_id))
+    );
+
+    let namesById = new Map<string, string>();
+    if (chatterIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, email")
+        .in("user_id", chatterIds);
+      namesById = new Map(
+        (profiles || []).map((p) => [p.user_id, p.full_name || p.email || "Chatter"])
+      );
+    }
+
+    return data.map((m) => ({
+      ...m,
+      chatter_name: m.sender === "chatter" ? namesById.get(m.chatter_id) : undefined,
+    }));
   } catch (err) {
     console.error("Error fetching chat messages:", err);
     return [];

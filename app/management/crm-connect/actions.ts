@@ -16,7 +16,9 @@ import { revalidatePath } from "next/cache";
 // ============================================================================
 
 /**
- * Update emoji list for a specific chatter
+ * Update emoji list for a specific chatter. A chatter may edit their own
+ * quick-emoji bar directly (self-service, no admin needed); editing someone
+ * else's list still requires admin - used by the crm-connect management page.
  */
 export async function updateChatterEmojis(
   chatterId: string,
@@ -29,17 +31,19 @@ export async function updateChatterEmojis(
     throw new Error("Unauthorized: User not authenticated");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  if (user.id !== chatterId) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
 
-  if (
-    profile?.role !== "admin" &&
-    user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"
-  ) {
-    throw new Error("Unauthorized: Admin access required");
+    if (
+      profile?.role !== "admin" &&
+      user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"
+    ) {
+      throw new Error("Unauthorized: Admin access required");
+    }
   }
 
   const { error } = await supabase.from("crm_chatter_emojis").upsert(
