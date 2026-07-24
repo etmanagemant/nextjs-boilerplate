@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { loadRFB } from "@/lib/loadRfb";
 import { FanCrmPanel } from "@/components/FanCrmPanel";
+import { ModelNotesPanel } from "@/components/ModelNotesPanel";
 
 interface OnlyFansViewerProps {
   modelId: string;
@@ -12,6 +13,7 @@ interface OnlyFansViewerProps {
   isModal?: boolean;
   isEmbedded?: boolean;
   emojis?: string[];
+  userRole?: string;
 }
 
 const DEFAULT_EMOJIS = ["😊", "😂", "🔥", "❤️", "😍", "👏", "🎉", "😘", "🥵", "💦", "😉", "🙈"];
@@ -32,7 +34,9 @@ export function OnlyFansViewer({
   isModal = false,
   isEmbedded = true,
   emojis = DEFAULT_EMOJIS,
+  userRole = "chatter",
 }: OnlyFansViewerProps) {
+  const isAdmin = userRole === "admin";
   const [phase, setPhase] = useState<"connecting" | "live" | "no-session" | "error">("connecting");
   const [error, setError] = useState("");
   const [pasteStatus, setPasteStatus] = useState<"idle" | "done">("idle");
@@ -160,7 +164,9 @@ export function OnlyFansViewer({
   useEffect(() => {
     if (phase !== "live") return;
     pollCurrentFan();
-    fanPollRef.current = setInterval(pollCurrentFan, 3000);
+    // 1s, not 3s - opening a chat and waiting up to 3s for the panel to
+    // show up read as sluggish/broken.
+    fanPollRef.current = setInterval(pollCurrentFan, 1000);
     return () => {
       if (fanPollRef.current) clearInterval(fanPollRef.current);
     };
@@ -318,12 +324,15 @@ export function OnlyFansViewer({
               fanId={currentFan.fanId}
               metadata={currentFan.metadata}
               onSaved={pollCurrentFan}
+              isAdmin={isAdmin}
             />
           ) : (
-            <div className="w-80 flex-shrink-0 h-full bg-black/40 border-l border-[#D4AF37]/20 flex items-center justify-center p-6">
-              <p className="text-xs text-slate-500 text-center">
-                👤 Öffne einen Fan-Chat in OnlyFans, um hier die Fan-Details zu sehen.
-              </p>
+            <div className="w-80 flex-shrink-0 h-full bg-black/40 border-l border-[#D4AF37]/20 flex flex-col">
+              <div className="sticky top-0 bg-black/60 p-4 border-b border-[#D4AF37]/20">
+                <h2 className="text-sm font-black text-[#D4AF37] uppercase tracking-wider">👤 Fan CRM</h2>
+                <p className="text-[11px] text-slate-500 mt-1">Öffne einen Fan-Chat in OnlyFans für Fan-Details.</p>
+              </div>
+              <ModelNotesPanel modelId={modelId} isAdmin={isAdmin} />
             </div>
           )}
         </>

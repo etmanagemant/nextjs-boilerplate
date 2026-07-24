@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ModelNotesPanel } from "@/components/ModelNotesPanel";
+
+// Saves on every space/period/comma/Enter, not just on blur - relying on
+// blur alone turned out unreliable here (clicking back into the VNC video
+// to keep chatting doesn't reliably fire it the way clicking a normal form
+// field would).
+const TRIGGER_CHARS = [" ", ".", ",", "\n"];
 
 interface FanMetadataFull {
   fan_id: string;
@@ -24,6 +31,7 @@ interface FanCrmPanelProps {
   fanId: string;
   metadata: FanMetadataFull;
   onSaved: () => void;
+  isAdmin: boolean;
 }
 
 function formatDate(value: string | null): string {
@@ -42,7 +50,7 @@ function formatDate(value: string | null): string {
  * chatter's own slot's current page URL - our app has no other visibility
  * into what's clicked inside the VNC view).
  */
-export function FanCrmPanel({ modelId, fanId, metadata, onSaved }: FanCrmPanelProps) {
+export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanCrmPanelProps) {
   const [realName, setRealName] = useState(metadata.real_name || "");
   const [location, setLocation] = useState(metadata.location || "");
   const [age, setAge] = useState(metadata.age || "");
@@ -78,6 +86,20 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved }: FanCrmPanelPr
       onSaved();
     } catch (err) {
       console.error("[FAN-CRM] Save error:", err);
+    }
+  };
+
+  // Wires up an <input>/<textarea> to save immediately after a trigger
+  // character, in addition to the onBlur fallback below - typing a whole
+  // sentence and then clicking straight back into the OnlyFans video
+  // (rather than into another form field) doesn't reliably fire blur.
+  const withAutoSave = (setter: (v: string) => void, field: string) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const value = e.target.value;
+    setter(value);
+    if (TRIGGER_CHARS.includes(value.slice(-1))) {
+      saveField({ [field]: value });
     }
   };
 
@@ -159,7 +181,7 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved }: FanCrmPanelPr
           <input
             type="text"
             value={realName}
-            onChange={(e) => setRealName(e.target.value)}
+            onChange={withAutoSave(setRealName, "real_name")}
             onBlur={() => saveField({ real_name: realName })}
             placeholder="Name eingeben..."
             className="w-full bg-black/60 border border-[#D4AF37]/30 rounded px-2 py-1.5 text-sm text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -172,7 +194,7 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved }: FanCrmPanelPr
             <input
               type="text"
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
+              onChange={withAutoSave(setLocation, "location")}
               onBlur={() => saveField({ location })}
               placeholder="-"
               className="w-full bg-black/60 border border-[#D4AF37]/30 rounded px-2 py-1.5 text-sm text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -183,7 +205,7 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved }: FanCrmPanelPr
             <input
               type="text"
               value={age}
-              onChange={(e) => setAge(e.target.value)}
+              onChange={withAutoSave(setAge, "age")}
               onBlur={() => saveField({ age })}
               placeholder="-"
               className="w-full bg-black/60 border border-[#D4AF37]/30 rounded px-2 py-1.5 text-sm text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -241,7 +263,7 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved }: FanCrmPanelPr
           <label className="text-xs text-slate-400 uppercase tracking-widest mb-1 block font-bold">Notizen</label>
           <textarea
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={withAutoSave(setNotes, "notes")}
             onBlur={() => saveField({ notes })}
             placeholder="Notizen zu diesem Fan..."
             className="w-full h-20 bg-black/60 border border-[#D4AF37]/30 rounded p-2 text-xs text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none"
@@ -271,12 +293,16 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved }: FanCrmPanelPr
             <input
               type="text"
               value={cameFrom}
-              onChange={(e) => setCameFrom(e.target.value)}
+              onChange={withAutoSave(setCameFrom, "came_from")}
               onBlur={() => saveField({ came_from: cameFrom })}
               placeholder="-"
               className="w-24 bg-black/60 border border-[#D4AF37]/20 rounded px-1.5 py-0.5 text-xs text-[#F3E5AB] text-right placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
             />
           </div>
+        </div>
+
+        <div className="border-t border-[#8A6D3F]/20 pt-3">
+          <ModelNotesPanel modelId={modelId} isAdmin={isAdmin} compact />
         </div>
       </div>
     </div>

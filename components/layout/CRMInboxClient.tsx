@@ -258,6 +258,7 @@ export default function CRMInboxClient({
                 isModal={false}
                 onClose={() => setSelectedOnlyFansModel(null)}
                 emojis={emojis}
+                userRole={userRole}
               />
             </div>
           ) : (
@@ -313,6 +314,7 @@ export default function CRMInboxClient({
                     isEmbedded={true}
                     isModal={false}
                     onClose={() => setSelectedOnlyFansModel(null)}
+                    userRole={userRole}
                   />
                 </div>
               )}

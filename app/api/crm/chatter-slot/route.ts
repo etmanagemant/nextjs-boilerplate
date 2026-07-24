@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/getCurrentUser";
+import { getRequestAdmin } from "@/lib/crmAdmin";
 import { vpsFetch } from "@/lib/vpsClient";
 
 export const dynamic = "force-dynamic";
@@ -12,12 +12,15 @@ export const runtime = "nodejs";
  * models at the same time, instead of sharing one VNC feed and fighting
  * over the same scroll position/cursor. Any logged-in CRM user is enough
  * here (chatters, not just admins) - the VPS pool itself is a small, bounded
- * number of slots, not one per user.
+ * number of slots, not one per user. Passes along whether this user is an
+ * admin so the VPS only injects the chatter-only nav restrictions (hiding
+ * Home/Queue/Statements/My profile/More/Statistics) for actual chatters -
+ * admins get the real, unrestricted OnlyFans page.
  * POST /api/crm/chatter-slot  Body: { modelId }
  */
 export async function POST(req: NextRequest) {
   try {
-    const { user } = await getCurrentUser();
+    const { user, isAdmin } = await getRequestAdmin();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -29,7 +32,7 @@ export async function POST(req: NextRequest) {
 
     const slotResponse = await vpsFetch("/chatter-slot", {
       method: "POST",
-      body: JSON.stringify({ userId: user.id, modelId }),
+      body: JSON.stringify({ userId: user.id, modelId, role: isAdmin ? "admin" : "chatter" }),
     });
     if (!slotResponse.ok) {
       return NextResponse.json({ error: "VPS unreachable" }, { status: 502 });
