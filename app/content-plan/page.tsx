@@ -55,9 +55,9 @@ export default async function ContentPlanPage({
     const posts = selectedModelId ? await getContentPlanPosts(selectedModelId) : [];
 
     return (
-      <main className="p-6 max-w-7xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
+      <main className="p-6 max-w-7xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#8A6D3F]/20 shadow-2xl">
         {/* HEADER */}
-        <div className="flex justify-between items-center mb-8 border-b border-[#AA7C11]/20 pb-6 flex-wrap gap-4 pt-4">
+        <div className="flex justify-between items-center mb-8 border-b border-[#8A6D3F]/20 pb-6 flex-wrap gap-4 pt-4">
           <div>
             <h1 className="text-3xl font-black uppercase tracking-wider">
               <span>📅</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Content-Plan</span>
@@ -77,7 +77,7 @@ export default async function ContentPlanPage({
         </div>
 
         {/* MODEL SELECTOR */}
-        <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 mb-8 shadow-lg">
+        <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 mb-8 shadow-lg">
           <label className="text-xs font-bold text-[#D4AF37] uppercase tracking-wider block mb-3">
             Model auswählen:
           </label>
@@ -93,8 +93,8 @@ export default async function ContentPlanPage({
                   href={`/content-plan?model=${model.id}`}
                   className={`px-4 py-2 rounded-lg text-sm font-bold transition cursor-pointer ${
                     selectedModelId === model.id
-                      ? "bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black shadow-lg"
-                      : "bg-[#050505] border border-[#AA7C11]/20 text-[#D4AF37] hover:border-[#D4AF37]"
+                      ? "bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black shadow-lg"
+                      : "bg-[#050505] border border-[#8A6D3F]/20 text-[#D4AF37] hover:border-[#D4AF37]"
                   }`}
                 >
                   {model.name}
@@ -118,7 +118,7 @@ export default async function ContentPlanPage({
 
         {/* INFO SECTION */}
         {selectedModelId && (
-          <section className="bg-black/40 border border-[#AA7C11]/10 p-4 rounded-xl mb-8 text-center shadow-lg">
+          <section className="bg-black/40 border border-[#8A6D3F]/10 p-4 rounded-xl mb-8 text-center shadow-lg">
             <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">
               Posts für Model
             </div>
@@ -137,7 +137,7 @@ export default async function ContentPlanPage({
             selectedModelId={selectedModelId}
           />
         ) : (
-          <div className="bg-black/40 p-12 rounded-xl border border-[#AA7C11]/10 text-center">
+          <div className="bg-black/40 p-12 rounded-xl border border-[#8A6D3F]/10 text-center">
             <p className="text-slate-400">Bitte wähle ein Model aus der Liste oben.</p>
           </div>
         )}

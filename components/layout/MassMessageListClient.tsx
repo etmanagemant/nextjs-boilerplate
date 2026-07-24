@@ -25,9 +25,9 @@ export default function MassMessageListClient({ aktuelleWoche, archivierteMonate
   const renderKarten = (nachrichtenListe: any[]) => (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {nachrichtenListe.map((n) => (
-        <div key={n.id} className="bg-black/30 border border-[#AA7C11]/20 rounded-xl p-4 flex flex-col justify-between hover:border-[#D4AF37]/40 transition relative group">
+        <div key={n.id} className="bg-black/30 border border-[#8A6D3F]/20 rounded-xl p-4 flex flex-col justify-between hover:border-[#D4AF37]/40 transition relative group">
           <div>
-            <div className="flex justify-between items-center border-b border-[#AA7C11]/10 pb-2 mb-2">
+            <div className="flex justify-between items-center border-b border-[#8A6D3F]/10 pb-2 mb-2">
               <span className="text-xs font-black text-[#D4AF37] uppercase tracking-wide">Model: {n.model_name}</span>
               <span className="text-[10px] text-slate-500 font-semibold">{n.datum}</span>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -41,7 +41,7 @@ export default function MassMessageListClient({ aktuelleWoche, archivierteMonate
 
             {editingId === n.id ? (
               <div className="space-y-2">
-                <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1.5 text-xs text-white outline-none resize-none" />
+                <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} className="w-full bg-[#050505] border border-[#8A6D3F]/40 rounded p-1.5 text-xs text-white outline-none resize-none" />
                 <div className="flex gap-1.5 justify-end text-[10px]">
                   <button type="button" onClick={() => setEditingId(null)} className="px-2 py-0.5 bg-slate-800 rounded">Abbrechen</button>
                   <button type="button" onClick={async () => {
@@ -51,11 +51,11 @@ export default function MassMessageListClient({ aktuelleWoche, archivierteMonate
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-slate-300 italic bg-[#050505]/60 p-2.5 rounded border border-[#AA7C11]/5 break-words">"{n.message_text}"</p>
+              <p className="text-xs text-slate-300 italic bg-[#050505]/60 p-2.5 rounded border border-[#8A6D3F]/5 break-words">"{n.message_text}"</p>
             )}
           </div>
           {editingId !== n.id && (
-            <button type="button" onClick={() => handleCopy(n.message_text, n.id)} className="w-full mt-3 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#AA7C11]/30 text-[#D4AF37] rounded py-1.5 text-xs font-bold transition cursor-pointer">
+            <button type="button" onClick={() => handleCopy(n.message_text, n.id)} className="w-full mt-3 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#8A6D3F]/30 text-[#D4AF37] rounded py-1.5 text-xs font-bold transition cursor-pointer">
               {copiedId === n.id ? "✓ In Zwischenablage kopiert!" : "📋 Vorlage kopieren"}
             </button>
           )}
@@ -74,18 +74,18 @@ export default function MassMessageListClient({ aktuelleWoche, archivierteMonate
 
       {/* 2. SEKTION: Archivierte Vormonate (Klickbare Akkordeons) */}
       <div className="space-y-3">
-        <h3 className="text-xs font-extrabold text-[#D4AF37] bg-[#AA7C11]/5 border border-[#AA7C11]/10 px-3 py-1.5 rounded-lg tracking-wider uppercase"><span>📦</span> <span>Archivierte Vormonate</span></h3>
+        <h3 className="text-xs font-extrabold text-[#D4AF37] bg-[#8A6D3F]/5 border border-[#8A6D3F]/10 px-3 py-1.5 rounded-lg tracking-wider uppercase"><span>📦</span> <span>Archivierte Vormonate</span></h3>
         <div className="space-y-2">
           {Object.entries(archivierteMonate).map(([monat, liste]) => {
             const isOpen = !!openMonate[monat];
             return (
-              <div key={monat} className="border border-[#AA7C11]/10 rounded-xl bg-black/10 overflow-hidden">
+              <div key={monat} className="border border-[#8A6D3F]/10 rounded-xl bg-black/10 overflow-hidden">
                 {/* Klickbarer Header für die Staffelung */}
                 <button type="button" onClick={() => toggleMonat(monat)} className="w-full flex justify-between items-center px-4 py-3 bg-[#050505] hover:bg-black/40 text-xs font-bold text-slate-200 uppercase tracking-wide transition outline-none cursor-pointer">
                   <span>🗓️ {monat} ({liste.length} Nachrichten)</span>
                   <span className="text-[#D4AF37] font-mono text-sm">{isOpen ? "▲" : "▼"}</span>
                 </button>
-                {isOpen && <div className="p-4 bg-[#0A0A0A] border-t border-[#AA7C11]/10">{renderKarten(liste)}</div>}
+                {isOpen && <div className="p-4 bg-[#0A0A0A] border-t border-[#8A6D3F]/10">{renderKarten(liste)}</div>}
               </div>
             );
           })}

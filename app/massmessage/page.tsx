@@ -62,8 +62,8 @@ export default async function MassMessagesPage() {
   });
 
   return (
-    <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
-      <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
+    <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#8A6D3F]/20 shadow-2xl">
+      <div className="mb-6 border-b border-[#8A6D3F]/20 pb-4">
         <h1 className="text-2xl font-black tracking-wide bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase">MASS MESSAGES VERWALTUNG</h1>
         <p className="text-xs text-slate-400 mt-1">Hier werden alle genutzten Nachrichten intelligent gestaffelt und archiviert.</p>
       </div>

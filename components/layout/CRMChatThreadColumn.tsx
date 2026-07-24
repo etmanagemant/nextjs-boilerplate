@@ -94,7 +94,7 @@ export default function ChatThreadColumn({
                   className={`max-w-xs px-4 py-3 rounded-lg ${
                     msg.sender === "chatter"
                       ? "bg-gradient-to-r from-[#D4AF37] to-[#F3E5AB] text-[#0A0A0A]"
-                      : "bg-black/60 border border-[#AA7C11]/20 text-[#F3E5AB]"
+                      : "bg-black/60 border border-[#8A6D3F]/20 text-[#F3E5AB]"
                   }`}
                 >
                   <p className="text-sm break-words">{msg.message_text}</p>
@@ -120,7 +120,7 @@ export default function ChatThreadColumn({
       </div>
 
       {/* Emoji Bar */}
-      <div className="px-4 py-3 border-t border-[#AA7C11]/20">
+      <div className="px-4 py-3 border-t border-[#8A6D3F]/20">
         <SmileLeiste emojis={emojis} onEmojiClick={handleEmojiClick} />
       </div>
 

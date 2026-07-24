@@ -359,7 +359,7 @@ export function OnlyFansViewer({
             </p>
             <Link
               href="/management/crm-connect"
-              className="inline-block px-5 py-3 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/40"
+              className="inline-block px-5 py-3 bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/40"
             >
               🔗 Zum Connection Hub
             </Link>
@@ -432,13 +432,13 @@ export function OnlyFansViewer({
             <div className="flex gap-3 mt-4">
               <button
                 onClick={handleRetry}
-                className="flex-1 px-4 py-3 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/40"
+                className="flex-1 px-4 py-3 bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/40"
               >
                 🔄 Erneut versuchen
               </button>
               <button
                 onClick={handleRefreshSession}
-                className="flex-1 px-4 py-3 bg-gradient-to-b from-[#D4AF37]/70 to-[#AA7C11]/70 hover:from-[#D4AF37] hover:to-[#AA7C11] text-black font-bold rounded-lg text-sm transition shadow-lg"
+                className="flex-1 px-4 py-3 bg-gradient-to-b from-[#D4AF37]/70 to-[#8A6D3F]/70 hover:from-[#D4AF37] hover:to-[#8A6D3F] text-black font-bold rounded-lg text-sm transition shadow-lg"
               >
                 🔗 Session aktualisieren
               </button>

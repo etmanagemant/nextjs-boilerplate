@@ -199,7 +199,7 @@ export default function UploadVaultClient({
         </div>
 
         {/* Upload Area */}
-        <section className="mb-8 p-8 rounded-xl border-2 border-dashed border-[#AA7C11]/50 bg-black/40 hover:border-[#D4AF37]/70 transition cursor-pointer"
+        <section className="mb-8 p-8 rounded-xl border-2 border-dashed border-[#8A6D3F]/50 bg-black/40 hover:border-[#D4AF37]/70 transition cursor-pointer"
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDragDrop}
         >
@@ -226,7 +226,7 @@ export default function UploadVaultClient({
                 accept="image/*,video/*,.pdf"
               />
               <button
-                className="px-6 py-3 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg disabled:opacity-50"
+                className="px-6 py-3 bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg disabled:opacity-50"
                 disabled={isUploading}
               >
                 {isUploading ? `Uploading... ${uploadProgress}%` : "➕ Datei wählen"}
@@ -245,7 +245,7 @@ export default function UploadVaultClient({
         </section>
 
         {/* Filter Tabs */}
-        <div className="mb-6 flex gap-2 border-b border-[#AA7C11]/20 pb-4 flex-wrap">
+        <div className="mb-6 flex gap-2 border-b border-[#8A6D3F]/20 pb-4 flex-wrap">
           {(["all", "image", "video", "document"] as const).map((filterType) => (
             <button
               key={filterType}
@@ -270,7 +270,7 @@ export default function UploadVaultClient({
 
         {/* Media Grid */}
         {filteredMedia.length === 0 ? (
-          <div className="bg-black/40 p-12 rounded-xl border border-[#AA7C11]/10 text-center text-slate-400">
+          <div className="bg-black/40 p-12 rounded-xl border border-[#8A6D3F]/10 text-center text-slate-400">
             <p className="text-lg">
               {media.length === 0
                 ? "Noch keine Dateien hochgeladen. Starten Sie mit einem Upload!"
@@ -282,7 +282,7 @@ export default function UploadVaultClient({
             {filteredMedia.map((item) => (
               <div
                 key={item.id}
-                className="bg-black/40 rounded-lg border border-[#AA7C11]/10 overflow-hidden hover:border-[#D4AF37]/30 transition"
+                className="bg-black/40 rounded-lg border border-[#8A6D3F]/10 overflow-hidden hover:border-[#D4AF37]/30 transition"
               >
                 {/* Media Preview */}
                 <div className="w-full h-32 bg-[#050505] flex items-center justify-center overflow-hidden">
@@ -301,7 +301,7 @@ export default function UploadVaultClient({
                 <div className="p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-lg">{getMediaIcon(item.media_type)}</span>
-                    <span className="text-xs font-bold bg-[#AA7C11]/20 px-2 py-1 rounded uppercase">
+                    <span className="text-xs font-bold bg-[#8A6D3F]/20 px-2 py-1 rounded uppercase">
                       {item.media_type}
                     </span>
                   </div>

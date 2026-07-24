@@ -155,7 +155,7 @@ export default function CRMConnectClient({
         <div className="max-w-7xl mx-auto min-h-screen">
       {/* Hero Section */}
       <div className="mb-12">
-        <div className="flex items-center justify-between mb-6 pb-6 border-b border-[#AA7C11]/20 flex-wrap gap-4">
+        <div className="flex items-center justify-between mb-6 pb-6 border-b border-[#8A6D3F]/20 flex-wrap gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-black uppercase tracking-wider flex items-center gap-2">
               <span>🔗</span> 
@@ -179,7 +179,7 @@ export default function CRMConnectClient({
 
       {/* Creator Overview Grid */}
       <section className="mb-12">
-        <div className="mb-6 pb-4 border-b border-[#AA7C11]/20">
+        <div className="mb-6 pb-4 border-b border-[#8A6D3F]/20">
           <h2 className="text-xl font-bold text-[#D4AF37] uppercase tracking-wider">
             👥 Creator Connection Grid
           </h2>
@@ -200,7 +200,7 @@ export default function CRMConnectClient({
                 return (
                   <div
                     key={model.id}
-                    className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 hover:border-[#D4AF37]/30 transition hover:shadow-lg hover:shadow-[#D4AF37]/20 group"
+                    className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 hover:border-[#D4AF37]/30 transition hover:shadow-lg hover:shadow-[#D4AF37]/20 group"
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div>
@@ -253,7 +253,7 @@ export default function CRMConnectClient({
                       ) : (
                         <button
                           onClick={() => handleOpenBrowserLogin(model)}
-                          className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black hover:shadow-lg hover:shadow-[#D4AF37]/40"
+                          className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] text-black hover:shadow-lg hover:shadow-[#D4AF37]/40"
                         >
                           <span>🌐</span> Model verbinden
                         </button>
@@ -268,7 +268,7 @@ export default function CRMConnectClient({
       {/* Script Library & Chatter Config Section */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Script Library */}
-        <div className="lg:col-span-2 bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10">
+        <div className="lg:col-span-2 bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10">
           {isLoadingScripts ? (
             <ScriptLibrarySkeleton />
           ) : (
@@ -281,13 +281,13 @@ export default function CRMConnectClient({
         </div>
 
         {/* Chatter Configuration Quick Panel */}
-        <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10">
+        <div className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10">
           <h3 className="text-lg font-bold text-[#D4AF37] uppercase tracking-wider mb-4">
             👥 Team Configuration
           </h3>
 
           <div className="space-y-3">
-            <div className="bg-black/60 p-4 rounded-lg border border-[#AA7C11]/10">
+            <div className="bg-black/60 p-4 rounded-lg border border-[#8A6D3F]/10">
               <p className="text-xs text-slate-400 uppercase tracking-widest mb-2">
                 Active Chatters
               </p>
@@ -311,7 +311,7 @@ export default function CRMConnectClient({
               </div>
             </div>
 
-            <div className="bg-black/60 p-4 rounded-lg border border-[#AA7C11]/10">
+            <div className="bg-black/60 p-4 rounded-lg border border-[#8A6D3F]/10">
               <p className="text-xs text-slate-400 uppercase tracking-widest mb-2">
                 Active Moderators
               </p>

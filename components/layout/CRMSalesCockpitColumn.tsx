@@ -41,7 +41,7 @@ export default function SalesCockpitColumn({
       <div className="flex-1 overflow-y-auto flex flex-col">
         {/* Model Notes - always the same, regardless of which fan is open */}
         {onModelNotesChange && (
-          <div className="border-b border-[#AA7C11]/20 p-4 space-y-2 bg-[#D4AF37]/5">
+          <div className="border-b border-[#8A6D3F]/20 p-4 space-y-2 bg-[#D4AF37]/5">
             <p className="text-xs text-[#D4AF37] uppercase tracking-widest font-bold">
               🏢 Model Notes
             </p>
@@ -59,7 +59,7 @@ export default function SalesCockpitColumn({
         )}
 
         {/* TOP: Fan Metadata */}
-        <div className="border-b border-[#AA7C11]/20 p-4 space-y-3">
+        <div className="border-b border-[#8A6D3F]/20 p-4 space-y-3">
           <div>
             <p className="text-xs text-slate-400 uppercase tracking-widest mb-2 font-bold">
               📝 Fan Notes
@@ -132,7 +132,7 @@ export default function SalesCockpitColumn({
                     className={`w-full p-3 rounded-lg text-left transition border ${
                       selectedScript?.id === script.id
                         ? "bg-[#D4AF37]/20 border-[#D4AF37]/50"
-                        : "bg-black/60 border-[#AA7C11]/20 hover:border-[#D4AF37]/30"
+                        : "bg-black/60 border-[#8A6D3F]/20 hover:border-[#D4AF37]/30"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -172,7 +172,7 @@ export default function SalesCockpitColumn({
       </div>
 
       {/* Status Indicator */}
-      <div className="p-3 bg-black/60 border-t border-[#AA7C11]/20 text-center">
+      <div className="p-3 bg-black/60 border-t border-[#8A6D3F]/20 text-center">
         {selectedScript ? (
           <p className="text-xs text-emerald-400">
             ✓ Script selected: <span className="font-bold">{selectedScript.title}</span>

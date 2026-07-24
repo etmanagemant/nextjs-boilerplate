@@ -37,7 +37,7 @@ export default function ContentUploader({
 
   if (!isInitialized) {
     return (
-      <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 mb-8 shadow-lg">
+      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 mb-8 shadow-lg">
         <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">
           📸 Bilder hochladen
         </h2>
@@ -128,7 +128,7 @@ export default function ContentUploader({
   };
 
   return (
-    <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 mb-8 shadow-lg">
+    <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 mb-8 shadow-lg">
       <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">
         📸 Bilder hochladen
       </h2>
@@ -141,7 +141,7 @@ export default function ContentUploader({
         className={`relative border-2 border-dashed rounded-xl p-8 text-center transition cursor-pointer ${
           isDragActive
             ? "border-[#D4AF37] bg-[#D4AF37]/10"
-            : "border-[#AA7C11]/30 bg-[#050505]/50 hover:border-[#AA7C11]/60"
+            : "border-[#8A6D3F]/30 bg-[#050505]/50 hover:border-[#8A6D3F]/60"
         }`}
       >
         <input
@@ -157,7 +157,7 @@ export default function ContentUploader({
             <div className="text-[#D4AF37] font-semibold text-sm"><span>⬆️</span> Lädt...</div>
             <div className="w-full bg-[#050505] rounded-full h-2">
               <div
-                className="bg-gradient-to-r from-[#D4AF37] to-[#AA7C11] h-full transition-all"
+                className="bg-gradient-to-r from-[#D4AF37] to-[#8A6D3F] h-full transition-all"
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>

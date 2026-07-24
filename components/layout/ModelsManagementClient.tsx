@@ -98,7 +98,7 @@ export default function ModelsManagementClient({
         {models.map((model) => (
           <div
             key={model.id}
-            className="flex justify-between items-center p-3 border border-[#AA7C11]/20 rounded-md bg-[#050505]/40 hover:border-[#D4AF37]/50 transition"
+            className="flex justify-between items-center p-3 border border-[#8A6D3F]/20 rounded-md bg-[#050505]/40 hover:border-[#D4AF37]/50 transition"
           >
             <div className="flex items-center gap-3 flex-1">
               {model.avatar_url ? (
@@ -125,9 +125,9 @@ export default function ModelsManagementClient({
                     onChange={(e) => setEditingAvatarUrl(e.target.value)}
                     autoFocus
                     placeholder="Bild-URL (OnlyFans Profilbild)"
-                    className="w-48 px-2 py-1 border border-[#AA7C11]/30 rounded-md text-xs text-white bg-[#050505] focus:border-[#D4AF37] outline-none"
+                    className="w-48 px-2 py-1 border border-[#8A6D3F]/30 rounded-md text-xs text-white bg-[#050505] focus:border-[#D4AF37] outline-none"
                   />
-                  <button type="submit" className="text-[11px] bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer">OK</button>
+                  <button type="submit" className="text-[11px] bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer">OK</button>
                   <button type="button" onClick={() => setEditingAvatarId(null)} className="text-[11px] bg-slate-600 text-white px-2 py-1 rounded font-bold hover:bg-slate-700 transition cursor-pointer">✕</button>
                 </form>
               ) : (
@@ -152,11 +152,11 @@ export default function ModelsManagementClient({
                     value={editingName}
                     onChange={(e) => setEditingName(e.target.value)}
                     autoFocus
-                    className="flex-1 px-2 py-1 border border-[#AA7C11]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#D4AF37] outline-none"
+                    className="flex-1 px-2 py-1 border border-[#8A6D3F]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#D4AF37] outline-none"
                   />
                   <button
                     type="submit"
-                    className="text-[11px] bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer"
+                    className="text-[11px] bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer"
                   >
                     OK
                   </button>
@@ -199,7 +199,7 @@ export default function ModelsManagementClient({
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0A0A0A] border border-[#AA7C11]/30 rounded-lg shadow-2xl max-w-md w-full p-6">
+          <div className="bg-[#0A0A0A] border border-[#8A6D3F]/30 rounded-lg shadow-2xl max-w-md w-full p-6">
             <div className="text-center">
               <div className="text-4xl mb-3">⚠️</div>
               <h3 className="text-lg font-bold text-[#D4AF37] mb-3">ACHTUNG</h3>

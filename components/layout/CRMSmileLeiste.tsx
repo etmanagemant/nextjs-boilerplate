@@ -19,7 +19,7 @@ export default function SmileLeiste({
           <button
             key={idx}
             onClick={() => onEmojiClick(emoji)}
-            className="text-2xl p-2 rounded-lg bg-black/60 border border-[#AA7C11]/20 hover:border-[#D4AF37]/50 hover:bg-black/80 transition"
+            className="text-2xl p-2 rounded-lg bg-black/60 border border-[#8A6D3F]/20 hover:border-[#D4AF37]/50 hover:bg-black/80 transition"
             title={`Insert ${emoji}`}
           >
             {emoji}

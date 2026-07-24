@@ -189,7 +189,7 @@ export default function ScriptVaultClient({
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="mb-8 px-6 py-3 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg"
+            className="mb-8 px-6 py-3 bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg"
           >
             ➕ Neues Script erstellen
           </button>
@@ -197,7 +197,7 @@ export default function ScriptVaultClient({
 
         {/* Script Form */}
         {showForm && (
-          <section className="mb-8 bg-black/40 p-6 rounded-xl border border-[#AA7C11]/20 shadow-lg">
+          <section className="mb-8 bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/20 shadow-lg">
             <h2 className="text-lg font-bold text-[#D4AF37] mb-4 uppercase">
               {editingId ? "✏️ Script bearbeiten" : "✨ Neues Script hinzufügen"}
             </h2>
@@ -213,7 +213,7 @@ export default function ScriptVaultClient({
                     setFormData({ ...formData, title: e.target.value })
                   }
                   placeholder="z.B. Willkommens-Gruß"
-                  className="w-full bg-[#050505] border border-[#AA7C11]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#D4AF37]"
+                  className="w-full bg-[#050505] border border-[#8A6D3F]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#D4AF37]"
                   required
                 />
               </div>
@@ -229,7 +229,7 @@ export default function ScriptVaultClient({
                   }
                   placeholder="Dein Sales-Script hier..."
                   rows={6}
-                  className="w-full bg-[#050505] border border-[#AA7C11]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#D4AF37]"
+                  className="w-full bg-[#050505] border border-[#8A6D3F]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#D4AF37]"
                   required
                 />
               </div>
@@ -247,7 +247,7 @@ export default function ScriptVaultClient({
                         category: e.target.value as any,
                       })
                     }
-                    className="w-full bg-[#050505] border border-[#AA7C11]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#D4AF37]"
+                    className="w-full bg-[#050505] border border-[#8A6D3F]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#D4AF37]"
                   >
                     <option value="greeting">Willkommengruß</option>
                     <option value="offer">Angebot</option>
@@ -266,7 +266,7 @@ export default function ScriptVaultClient({
                       onChange={(e) =>
                         setFormData({ ...formData, assignTo: e.target.value })
                       }
-                      className="w-full bg-[#050505] border border-[#AA7C11]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#D4AF37]"
+                      className="w-full bg-[#050505] border border-[#8A6D3F]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#D4AF37]"
                     >
                       <option value="">-- Global verfügbar --</option>
                       {chatters.map((c) => (
@@ -295,11 +295,11 @@ export default function ScriptVaultClient({
                 </label>
               </div>
 
-              <div className="flex gap-3 pt-4 border-t border-[#AA7C11]/10">
+              <div className="flex gap-3 pt-4 border-t border-[#8A6D3F]/10">
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="flex-1 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] px-4 py-2 text-black font-bold rounded uppercase cursor-pointer disabled:opacity-50 transition"
+                  className="flex-1 bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] px-4 py-2 text-black font-bold rounded uppercase cursor-pointer disabled:opacity-50 transition"
                 >
                   {isLoading ? "Speichern..." : editingId ? "✓ Aktualisieren" : "✓ Erstellen"}
                 </button>
@@ -318,7 +318,7 @@ export default function ScriptVaultClient({
         {/* Scripts Grid */}
         <div className="space-y-4">
           {displayScripts.length === 0 ? (
-            <div className="bg-black/40 p-8 rounded-xl border border-[#AA7C11]/10 text-center text-slate-400">
+            <div className="bg-black/40 p-8 rounded-xl border border-[#8A6D3F]/10 text-center text-slate-400">
               <p className="text-sm">
                 {scripts.length === 0
                   ? "Noch keine Scripts vorhanden. Erstelle dein erstes Script!"
@@ -329,7 +329,7 @@ export default function ScriptVaultClient({
             displayScripts.map((script) => (
               <div
                 key={script.id}
-                className="bg-black/40 p-4 rounded-lg border border-[#AA7C11]/10 space-y-3 hover:border-[#D4AF37]/30 transition"
+                className="bg-black/40 p-4 rounded-lg border border-[#8A6D3F]/10 space-y-3 hover:border-[#D4AF37]/30 transition"
               >
                 <div className="flex justify-between items-start gap-4">
                   <div className="flex-1">
@@ -337,7 +337,7 @@ export default function ScriptVaultClient({
                       {script.title}
                     </h3>
                     <div className="flex gap-2 mb-2 flex-wrap">
-                      <span className="text-[10px] bg-[#AA7C11]/20 px-2 py-1 rounded uppercase font-bold">
+                      <span className="text-[10px] bg-[#8A6D3F]/20 px-2 py-1 rounded uppercase font-bold">
                         {script.category === "greeting"
                           ? "👋 Willkommengruß"
                           : script.category === "offer"

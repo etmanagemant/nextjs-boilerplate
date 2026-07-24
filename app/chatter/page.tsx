@@ -195,9 +195,9 @@ export default function ChatterPage() {
   }
 
   return (
-    <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
+    <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#8A6D3F]/20 shadow-2xl">
       {/* Header-Zustand */}
-      <div className="flex justify-between items-center border-b border-[#AA7C11]/20 pb-4 mb-6">
+      <div className="flex justify-between items-center border-b border-[#8A6D3F]/20 pb-4 mb-6">
         <div>
           <h1 className="text-2xl font-black uppercase tracking-wider">{currentUserRole === "moderator" ? <><span>🎭</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Stripchat Stechuhr</span></> : currentUserRole === "admin" ? <><span>👑</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Admin: Dual-Mode Stechuhr</span></> : <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Mitarbeiter Stechuhr</span>}</h1>
           <p className="text-xs text-slate-400 mt-0.5">{currentUserRole === "moderator" ? "Stripchat Sessions & Umsatz-Tracking" : currentUserRole === "admin" ? "OnlyFans + Stripchat Stechuhr-Systeme" : "Schichten erfassen und Live-Mass-Messages kopieren"}</p>
@@ -211,7 +211,7 @@ export default function ChatterPage() {
       {(currentUserRole === "moderator" || currentUserRole === "admin") && (
         <>
           {currentUserRole === "admin" && (
-            <div className="mb-4 pb-3 border-b-2 border-[#AA7C11]/30">
+            <div className="mb-4 pb-3 border-b-2 border-[#8A6D3F]/30">
               <h2 className="text-lg font-black text-[#D4AF37] uppercase tracking-wider"><span>🎭</span> <span>Stripchat Schicht</span></h2>
             </div>
           )}
@@ -230,7 +230,7 @@ export default function ChatterPage() {
                   {rows.map((r) => {
                     const hours = toDurationHours(r.started_at, r.ended_at);
                     return (
-                      <div key={r.id} className="rounded-xl border border-[#AA7C11]/10 bg-black/20 p-4">
+                      <div key={r.id} className="rounded-xl border border-[#8A6D3F]/10 bg-black/20 p-4">
                         <div className="flex items-center justify-between">
                           <div className="text-xs font-bold text-slate-200 uppercase tracking-wide">Session #{r.id}</div>
                           <div className="text-xs font-bold font-mono text-[#D4AF37]">{hours.toFixed(2)} h</div>
@@ -253,11 +253,11 @@ export default function ChatterPage() {
       {(currentUserRole === "chatter" || currentUserRole === "admin") && (
         <>
           {currentUserRole === "admin" && (
-            <div className="mt-8 mb-4 pb-3 border-b-2 border-[#AA7C11]/30">
+            <div className="mt-8 mb-4 pb-3 border-b-2 border-[#8A6D3F]/30">
               <h2 className="text-lg font-black uppercase tracking-wider"><span>💼</span> <span className="text-[#F3E5AB]">OnlyFans Stechuhr</span></h2>
             </div>
           )}
-          <div className="bg-gradient-to-r from-[#050505] to-black border border-[#AA7C11]/20 rounded-xl p-4 mb-6">
+          <div className="bg-gradient-to-r from-[#050505] to-black border border-[#8A6D3F]/20 rounded-xl p-4 mb-6">
             <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">{currentUserRole === "admin" ? "OnlyFans Stechuhr:" : "Deine Stechuhr:"}</span>
             <button onClick={triggerGlobalStart} disabled={!!activeShift} className="rounded-lg bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer">Start Schicht</button>
             <button onClick={triggerGlobalEnd} disabled={!activeShift} className="rounded-lg bg-gradient-to-b from-red-400 to-red-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer ml-2">Ende Schicht</button>
@@ -286,27 +286,27 @@ export default function ChatterPage() {
             <h3 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">Deine aktuellen Schicht-Zuteilungen</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {naechsteZweiSchichten.map((s) => (
-                <div key={s.id} className="bg-black/30 border border-[#AA7C11]/20 rounded-xl p-4 flex flex-col justify-between min-h-[140px] hover:border-[#D4AF37]/40 transition">
+                <div key={s.id} className="bg-black/30 border border-[#8A6D3F]/20 rounded-xl p-4 flex flex-col justify-between min-h-[140px] hover:border-[#D4AF37]/40 transition">
                   <div>
-                    <div className="flex justify-between items-center border-b border-[#AA7C11]/10 pb-1.5 mb-2">
+                    <div className="flex justify-between items-center border-b border-[#8A6D3F]/10 pb-1.5 mb-2">
                       <span className="text-xs font-black text-[#D4AF37] uppercase tracking-wide">Model: {s.model}</span>
                       <span className="text-[10px] text-slate-400 font-semibold font-mono">{new Date(s.datum).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} | {s.von} - {s.bis} Uhr</span>
                     </div>
                     {s.nachricht ? (
-                      <p className="text-xs text-slate-300 italic line-clamp-2 bg-[#050505]/60 p-2.5 rounded border border-[#AA7C11]/5 break-words">"{s.nachricht}"</p>
+                      <p className="text-xs text-slate-300 italic line-clamp-2 bg-[#050505]/60 p-2.5 rounded border border-[#8A6D3F]/5 break-words">"{s.nachricht}"</p>
                     ) : (
                       <p className="text-xs text-slate-500 italic p-2">Keine Mass Message für diese Schicht.</p>
                     )}
                   </div>
                   {s.nachricht && (
-                    <button type="button" onClick={() => handleCopyMessage(s.nachricht, s.id)} className="w-full mt-3 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#AA7C11]/30 text-[#D4AF37] rounded py-1 text-xs font-bold transition cursor-pointer">
+                    <button type="button" onClick={() => handleCopyMessage(s.nachricht, s.id)} className="w-full mt-3 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#8A6D3F]/30 text-[#D4AF37] rounded py-1 text-xs font-bold transition cursor-pointer">
                       {copiedShiftId === s.id ? "✓ Nachricht kopiert!" : "📋 Mass Message kopieren"}
                     </button>
                   )}
                 </div>
               ))}
               {naechsteZweiSchichten.length === 0 && (
-                <div className="col-span-2 text-xs text-slate-500 italic p-6 text-center border border-dashed border-[#AA7C11]/10 rounded-xl">Aktuell keine anstehenden Schichten geplant.</div>
+                <div className="col-span-2 text-xs text-slate-500 italic p-6 text-center border border-dashed border-[#8A6D3F]/10 rounded-xl">Aktuell keine anstehenden Schichten geplant.</div>
               )}
             </div>
           </div>
@@ -321,7 +321,7 @@ export default function ChatterPage() {
                 {rows.map((r) => {
                   const hours = toDurationHours(r.started_at, r.ended_at);
                   return (
-                    <div key={r.id} className="rounded-xl border border-[#AA7C11]/10 bg-black/20 p-4">
+                    <div key={r.id} className="rounded-xl border border-[#8A6D3F]/10 bg-black/20 p-4">
                       <div className="flex items-center justify-between">
                         <div className="text-xs font-bold text-slate-200 uppercase tracking-wide">Schicht #{r.id}</div>
                         <div className="text-xs font-bold font-mono text-[#D4AF37]">{hours.toFixed(2)} h</div>

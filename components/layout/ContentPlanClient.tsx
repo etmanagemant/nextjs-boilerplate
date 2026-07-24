@@ -304,7 +304,7 @@ export default function ContentPlanClient({
       {/* ========================================
           COMMUNITY MANAGER
           ======================================== */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg">
+      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg">
         <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">
           📌 Community-Manager
         </h2>
@@ -315,11 +315,11 @@ export default function ContentPlanClient({
               placeholder="Neue Community/Subreddit..."
               value={newCommunityName}
               onChange={(e) => setNewCommunityName(e.target.value)}
-              className="flex-1 px-3 py-2 border border-[#AA7C11]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#D4AF37] outline-none"
+              className="flex-1 px-3 py-2 border border-[#8A6D3F]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#D4AF37] outline-none"
             />
             <button
               type="submit"
-              className="bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black px-4 py-2 rounded-md text-sm font-bold hover:from-[#E5C158] transition cursor-pointer"
+              className="bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black px-4 py-2 rounded-md text-sm font-bold hover:from-[#E5C158] transition cursor-pointer"
             >
               Hinzufügen
             </button>
@@ -330,7 +330,7 @@ export default function ContentPlanClient({
           {communities.map((community) => (
             <div
               key={community.id}
-              className="bg-[#050505] border border-[#AA7C11]/20 rounded p-2 flex justify-between items-center"
+              className="bg-[#050505] border border-[#8A6D3F]/20 rounded p-2 flex justify-between items-center"
             >
               <span className="text-xs text-white truncate">{community.name}</span>
               <button
@@ -347,7 +347,7 @@ export default function ContentPlanClient({
       {/* ========================================
           CONTENT PLAN POSTS (EXPLORER GRID)
           ======================================== */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg">
+      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg">
         <h2 className="text-sm font-bold mb-6 text-[#D4AF37] uppercase tracking-wider">
           🖼️ Content-Fotos & Plan
         </h2>
@@ -360,7 +360,7 @@ export default function ContentPlanClient({
           className={`mb-6 p-8 border-2 border-dashed rounded-lg transition cursor-pointer text-center ${
             dragOverUpload
               ? "border-[#D4AF37] bg-[#D4AF37]/10"
-              : "border-[#AA7C11]/30 bg-[#050505] hover:border-[#AA7C11]/50"
+              : "border-[#8A6D3F]/30 bg-[#050505] hover:border-[#8A6D3F]/50"
           }`}
         >
           <input
@@ -409,7 +409,7 @@ export default function ContentPlanClient({
                 className={`bg-[#050505] border-2 rounded-lg overflow-hidden transition cursor-move transform hover:scale-105 ${
                   draggedItem === post.id
                     ? "border-[#D4AF37] opacity-50"
-                    : "border-[#AA7C11]/20 hover:border-[#D4AF37]/50"
+                    : "border-[#8A6D3F]/20 hover:border-[#D4AF37]/50"
                 }`}
               >
                 {/* PHOTO */}
@@ -445,7 +445,7 @@ export default function ContentPlanClient({
                         onChange={(e) =>
                           setEditValues({ ...editValues, post_date: e.target.value })
                         }
-                        className="w-full bg-[#050505] border border-[#AA7C11]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
+                        className="w-full bg-[#050505] border border-[#8A6D3F]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
                       />
                     </div>
 
@@ -456,7 +456,7 @@ export default function ContentPlanClient({
                         onChange={(e) =>
                           setEditValues({ ...editValues, content_type: e.target.value })
                         }
-                        className="w-full bg-[#050505] border border-[#AA7C11]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
+                        className="w-full bg-[#050505] border border-[#8A6D3F]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
                       >
                         <option value="">Wählen...</option>
                         <option value="photo">Foto</option>
@@ -476,7 +476,7 @@ export default function ContentPlanClient({
                             setEditValues({ ...editValues, title_idea: e.target.value })
                           }
                           placeholder="Titel..."
-                          className="flex-1 bg-[#050505] border border-[#AA7C11]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
+                          className="flex-1 bg-[#050505] border border-[#8A6D3F]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
                         />
                         {editValues.title_idea && (
                           <button
@@ -485,7 +485,7 @@ export default function ContentPlanClient({
                             className={`${
                               copiedTitle === editValues.title_idea
                                 ? "bg-emerald-500 text-white"
-                                : "bg-[#AA7C11]/20 text-[#D4AF37] hover:bg-[#AA7C11]/40"
+                                : "bg-[#8A6D3F]/20 text-[#D4AF37] hover:bg-[#8A6D3F]/40"
                             } px-3 py-1 rounded text-xs font-bold cursor-pointer transition flex-shrink-0`}
                             title="Titel kopieren"
                           >
@@ -534,7 +534,7 @@ export default function ContentPlanClient({
                       </div>
                     </div>
 
-                    <div className="flex gap-2 pt-2 border-t border-[#AA7C11]/10">
+                    <div className="flex gap-2 pt-2 border-t border-[#8A6D3F]/10">
                       <button
                         onClick={savePostEdits}
                         disabled={isSaving}
@@ -600,7 +600,7 @@ export default function ContentPlanClient({
                     </div>
 
                     {(post.communities || []).length > 0 && (
-                      <div className="pt-2 border-t border-[#AA7C11]/10">
+                      <div className="pt-2 border-t border-[#8A6D3F]/10">
                         <span className="text-[#D4AF37] font-semibold text-xs">Communities:</span>
                         <div className="text-[10px] text-slate-400 mt-1">
                           {post.communities
@@ -613,7 +613,7 @@ export default function ContentPlanClient({
                       </div>
                     )}
 
-                    <div className="flex gap-2 pt-2 border-t border-[#AA7C11]/10">
+                    <div className="flex gap-2 pt-2 border-t border-[#8A6D3F]/10">
                       <button
                         onClick={() => startEditingPost(post)}
                         className="flex-1 bg-[#D4AF37]/10 text-[#D4AF37] px-2 py-1 rounded text-xs font-bold hover:bg-[#D4AF37]/20 cursor-pointer"

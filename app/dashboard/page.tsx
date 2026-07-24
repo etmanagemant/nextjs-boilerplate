@@ -232,8 +232,8 @@ export default function DashboardPage() {
   // MODERATOR-SPEZIFISCHES DASHBOARD
   if (currentUserRole === "moderator" && moderatorStriptchatStats) {
     return (
-      <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
-        <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
+      <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#8A6D3F]/20 shadow-2xl">
+        <div className="mb-6 border-b border-[#8A6D3F]/20 pb-4">
           <h1 className="text-2xl font-black uppercase tracking-wider"><span>🎭</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Stripchat Dashboard</span></h1>
           <p className="text-xs text-slate-400 mt-1">Deine persönlichen Stripchat-Session-Daten & Umsätze</p>
         </div>
@@ -264,8 +264,8 @@ export default function DashboardPage() {
   
   // ADMIN DASHBOARD (Original)
   return (
-    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
-      <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
+    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#8A6D3F]/20 shadow-2xl">
+      <div className="mb-6 border-b border-[#8A6D3F]/20 pb-4">
         <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">ET Performance Dashboard</h1>
         <p className="text-xs text-slate-400 mt-1">Echtzeit-Umsatzauswertungen & Performancedaten</p>
       </div>
@@ -276,7 +276,7 @@ export default function DashboardPage() {
           <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-3"><span>⚠️</span> <span>Offene Einnahmen & Tips Pool ({unassignedRevenues.length})</span></h2>
           <div className="space-y-2">
             {unassignedRevenues.map((r) => (
-              <div key={r.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#050505] p-3 rounded-lg border border-[#AA7C11]/20 gap-3 text-xs">
+              <div key={r.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#050505] p-3 rounded-lg border border-[#8A6D3F]/20 gap-3 text-xs">
                 <div>
                   <span className="font-bold text-white block">Eingegangener Tip: ${Number(r.amount).toFixed(2)}</span>
                   <span className="text-[10px] text-slate-400 block font-mono">Model-Herkunft: {r.modelName}</span>
@@ -285,7 +285,7 @@ export default function DashboardPage() {
                   <select 
                     value={selectedChatterForTransfer[r.id] || ""} 
                     onChange={(e) => setSelectedChatterForTransfer({...selectedChatterForTransfer, [r.id]: e.target.value})}
-                    className="bg-black border border-[#AA7C11]/30 rounded p-1.5 text-xs text-white outline-none cursor-pointer"
+                    className="bg-black border border-[#8A6D3F]/30 rounded p-1.5 text-xs text-white outline-none cursor-pointer"
                   >
                     <option value="">Chatter wählen...</option>
                     {userStatsArray.filter(u => u.name !== "Tobias").map((u: any) => (
@@ -347,7 +347,7 @@ export default function DashboardPage() {
 
       {/* Kacheln */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center">
+        <div className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg text-center">
           {isAdmin ? (
             <>
               <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Live Agentur-Umsatz (Admin)</div>
@@ -362,7 +362,7 @@ export default function DashboardPage() {
             </>
           )}
         </div>
-        <div className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg text-center flex flex-col justify-center items-center">
+        <div className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg text-center flex flex-col justify-center items-center">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Agentur Ranglisten-Platz</div>
           <div className="text-4xl font-black text-[#D4AF37] mt-2 font-mono">
             🏆 #{userStatsArray.findIndex(u => u.brutto === chatterBrutto) + 1} / {userStatsArray.length}
@@ -371,12 +371,12 @@ export default function DashboardPage() {
       </div>
 
       {/* Rangliste Mitarbeiter */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg mb-8">
+      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg mb-8">
         <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">Mitarbeiter Live-Rangliste</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[#AA7C11]/10 bg-[#050505] text-[#D4AF37] font-semibold text-xs uppercase tracking-wider">
+              <tr className="border-b border-[#8A6D3F]/10 bg-[#050505] text-[#D4AF37] font-semibold text-xs uppercase tracking-wider">
                 <th className="p-3 w-12">Rang</th>
                 <th className="p-3">Mitarbeiter</th>
                 <th className="p-3">Arbeitszeit</th>
@@ -389,7 +389,7 @@ export default function DashboardPage() {
               {userStatsArray.map((user, idx) => {
                 const usdPerHr = user.hours > 0 ? user.netto / user.hours : 0;
                 return (
-                  <tr key={idx} className="border-b border-[#AA7C11]/5 hover:bg-black/20 transition">
+                  <tr key={idx} className="border-b border-[#8A6D3F]/5 hover:bg-black/20 transition">
                     <td className="p-3 font-mono font-black text-[#D4AF37]">#{idx + 1}</td>
                     <td className="p-3 font-semibold text-white tracking-wide">{user.name}</td>
                     <td className="p-3 font-mono text-slate-400">{user.hours.toFixed(2)} h</td>
@@ -405,12 +405,12 @@ export default function DashboardPage() {
       </section>
 
       {/* 👑 NEUE MODEL RANGLISTE (Vollautomatisch basierend auf der Herkunft der Einnahmen!) */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg mb-8">
-        <h2 className="text-sm font-bold mb-4 text-[#AA7C11] uppercase tracking-wider">Model Live-Umsatz-Performance</h2>
+      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg mb-8">
+        <h2 className="text-sm font-bold mb-4 text-[#8A6D3F] uppercase tracking-wider">Model Live-Umsatz-Performance</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[#AA7C11]/10 bg-[#050505] text-[#AA7C11] font-semibold text-xs uppercase tracking-wider">
+              <tr className="border-b border-[#8A6D3F]/10 bg-[#050505] text-[#8A6D3F] font-semibold text-xs uppercase tracking-wider">
                 <th className="p-3 w-12">Platz</th>
                 <th className="p-3">Model Name</th>
                 <th className="p-3 text-amber-200">Generiert Brutto</th>
@@ -419,7 +419,7 @@ export default function DashboardPage() {
             </thead>
             <tbody>
               {modelStatsArray.map((model, idx) => (
-                <tr key={idx} className="border-b border-[#AA7C11]/5 hover:bg-black/20 transition">
+                <tr key={idx} className="border-b border-[#8A6D3F]/5 hover:bg-black/20 transition">
                   <td className="p-3 font-mono font-black text-[#D4AF37]">#{idx + 1}</td>
                   <td className="p-3 font-semibold text-white tracking-wide">✨ {model.name}</td>
                   <td className="p-3 font-mono text-amber-200/80">${model.brutto.toFixed(2)}</td>

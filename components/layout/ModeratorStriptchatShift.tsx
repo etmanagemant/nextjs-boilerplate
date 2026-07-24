@@ -470,7 +470,7 @@ export default function ModeratorStriptchatShift({
   if (!shiftState) {
     // SHIFT NOT ACTIVE - Model Selection mit Checkboxes
     return (
-      <section className="bg-black/40 p-6 rounded-xl border border-[#AA7C11]/10 shadow-lg space-y-4">
+      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg space-y-4">
         <h2 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider">
           🎭 Stripchat Schicht starten
         </h2>
@@ -481,7 +481,7 @@ export default function ModeratorStriptchatShift({
             <label className="block text-xs font-semibold text-[#D4AF37] mb-2">
               Models auswählen (mehrere möglich)
             </label>
-            <div className="bg-[#050505] border border-[#AA7C11]/30 rounded p-3 space-y-2">
+            <div className="bg-[#050505] border border-[#8A6D3F]/30 rounded p-3 space-y-2">
               {sichereModels.length > 0 ? (
                 sichereModels.map((model) => (
                   <label key={model.id} className="flex items-center gap-2 cursor-pointer hover:bg-[#1a1a1a] p-2 rounded transition">
@@ -511,7 +511,7 @@ export default function ModeratorStriptchatShift({
 
           {/* Lifetime-Start Inputs für ausgewählte Models */}
           {selectedModelIds.length > 0 && (
-            <div className="space-y-2 border-t border-[#AA7C11]/20 pt-3">
+            <div className="space-y-2 border-t border-[#8A6D3F]/20 pt-3">
               <label className="block text-xs font-semibold text-[#D4AF37] mb-1">
                 Stripchat Lifetime-Umsatz VOR Schichtbeginn ($)
               </label>
@@ -531,7 +531,7 @@ export default function ModeratorStriptchatShift({
                         })
                       }
                       placeholder="z.B. 1250.50"
-                      className="flex-1 px-3 py-1.5 bg-[#050505] border border-[#AA7C11]/30 rounded text-white text-xs focus:border-[#D4AF37] outline-none"
+                      className="flex-1 px-3 py-1.5 bg-[#050505] border border-[#8A6D3F]/30 rounded text-white text-xs focus:border-[#D4AF37] outline-none"
                     />
                   </div>
                 );
@@ -573,7 +573,7 @@ export default function ModeratorStriptchatShift({
       </div>
 
       {/* Private Show Section - Pro Model ein separater Timer */}
-      <div className="space-y-3 border-t border-[#AA7C11]/10 pt-4">
+      <div className="space-y-3 border-t border-[#8A6D3F]/10 pt-4">
         <label className="block text-xs font-semibold text-[#D4AF37]">
           🎭 Privat-Shows - Pro Model
         </label>
@@ -613,7 +613,7 @@ export default function ModeratorStriptchatShift({
       </div>
 
       {/* Shift End Section - Pro Model ein Input-Feld */}
-      <div className="space-y-3 border-t border-[#AA7C11]/10 pt-4">
+      <div className="space-y-3 border-t border-[#8A6D3F]/10 pt-4">
         <label className="block text-xs font-semibold text-[#D4AF37]">
           Stripchat Lifetime-Umsatz NACH Schichtende ($) - Pro Model
         </label>
@@ -634,7 +634,7 @@ export default function ModeratorStriptchatShift({
                   })
                 }
                 placeholder="z.B. 1350.75"
-                className="flex-1 px-3 py-2 bg-[#050505] border border-[#AA7C11]/30 rounded text-white text-sm focus:border-[#D4AF37] outline-none"
+                className="flex-1 px-3 py-2 bg-[#050505] border border-[#8A6D3F]/30 rounded text-white text-sm focus:border-[#D4AF37] outline-none"
               />
             </div>
           );
@@ -649,7 +649,7 @@ export default function ModeratorStriptchatShift({
       </div>
 
       {/* 🎁 PRÄMIEN-FORTSCHRITT */}
-      <div className="border-t border-[#AA7C11]/10 pt-4">
+      <div className="border-t border-[#8A6D3F]/10 pt-4">
         <h3 className="text-xs font-bold text-[#D4AF37] uppercase tracking-wider mb-3"><span>🎁</span> <span>Dein Prämien-Fortschritt</span></h3>
         <div className="grid grid-cols-3 gap-2">
           {/* 15 Shows = 30€ */}

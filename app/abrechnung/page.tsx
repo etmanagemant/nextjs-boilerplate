@@ -189,37 +189,40 @@ export default function AbrechnungPage() {
   if (loading) return <div className="text-center pt-24 font-bold text-[#D4AF37] animate-pulse">Lade Abrechnungsdaten...</div>;
 
   return (
-    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#AA7C11]/20 shadow-2xl">
-      <div className="mb-6 border-b border-[#AA7C11]/20 pb-4">
-        <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">
-          {isAdmin ? "💰 ET Agency Abrechnungs-Zentrale" : "Deine Abrechnung & Auszahlungsdaten"}
+    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#8A6D3F]/20 shadow-2xl">
+      <div className="mb-6 border-b border-[#8A6D3F]/20 pb-4">
+        <h1 className="text-2xl font-black uppercase tracking-wider">
+          {isAdmin && <span>💰</span>}{" "}
+          <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">
+            {isAdmin ? "ET Agency Abrechnungs-Zentrale" : "Deine Abrechnung & Auszahlungsdaten"}
+          </span>
         </h1>
         <p className="text-xs text-slate-400 mt-1">Übersicht deiner Einnahmen, Schichtstunden und Provisionsberechnungen</p>
       </div>
 
       {!isAdmin && (
-        <section className="mb-8 bg-black/50 p-5 rounded-xl border border-[#AA7C11]/20 shadow-xl">
+        <section className="mb-8 bg-black/50 p-5 rounded-xl border border-[#8A6D3F]/20 shadow-xl">
           <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-4"><span>📝</span> <span>Deine Zahlungsdaten hinterlegen</span></h2>
           <div className="space-y-3">
             <div>
               <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Adresse</label>
-              <textarea value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="off" placeholder="Straße, PLZ, Ort" className="w-full h-16 bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
+              <textarea value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="off" placeholder="Straße, PLZ, Ort" className="w-full h-16 bg-black border border-[#8A6D3F]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">IBAN</label>
-                <input type="text" value={iban} onChange={(e) => setIban(e.target.value)} autoComplete="off" placeholder="DE..." className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
+                <input type="text" value={iban} onChange={(e) => setIban(e.target.value)} autoComplete="off" placeholder="DE..." className="w-full bg-black border border-[#8A6D3F]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
               </div>
               <div>
                 <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Crypto Netz</label>
-                <input type="text" value={cryptoNetwork} onChange={(e) => setCryptoNetwork(e.target.value)} autoComplete="off" placeholder="z.B. TRC20" className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
+                <input type="text" value={cryptoNetwork} onChange={(e) => setCryptoNetwork(e.target.value)} autoComplete="off" placeholder="z.B. TRC20" className="w-full bg-black border border-[#8A6D3F]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
               </div>
             </div>
             <div>
               <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Crypto Wallet</label>
-              <input type="text" value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value)} autoComplete="off" placeholder="Wallet Adresse..." className="w-full bg-black border border-[#AA7C11]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
+              <input type="text" value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value)} autoComplete="off" placeholder="Wallet Adresse..." className="w-full bg-black border border-[#8A6D3F]/20 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
             </div>
-            <button onClick={handleSaveProfile} className="w-full bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] text-black text-xs font-bold px-3 py-2 rounded uppercase cursor-pointer"><span>💾</span> Daten speichern</button>
+            <button onClick={handleSaveProfile} className="w-full bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] text-black text-xs font-bold px-3 py-2 rounded uppercase cursor-pointer"><span>💾</span> Daten speichern</button>
             {saveStatus && <div className="text-center text-xs font-mono text-emerald-400">{saveStatus}</div>}
           </div>
         </section>
@@ -227,17 +230,17 @@ export default function AbrechnungPage() {
 
       <div className="space-y-4">
         {abrechnungsDaten.map((daten, idx) => (
-          <div key={idx} className="bg-black/40 p-5 rounded-xl border border-[#AA7C11]/10 shadow-lg">
+          <div key={idx} className="bg-black/40 p-5 rounded-xl border border-[#8A6D3F]/10 shadow-lg">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-bold text-white">{daten.name}</h2>
               {daten.role === "moderator" ? (
                 <span className="bg-purple-600/20 border border-purple-500/30 text-purple-300 text-[10px] font-mono px-2 py-0.5 rounded">💰 EUR {daten.hourlyRate.toFixed(2)}/h</span>
               ) : (
-                <span className="bg-[#AA7C11]/10 border border-[#AA7C11]/30 text-[#D4AF37] text-[10px] font-mono px-2 py-0.5 rounded">{daten.rate}% Provision</span>
+                <span className="bg-[#8A6D3F]/10 border border-[#8A6D3F]/30 text-[#D4AF37] text-[10px] font-mono px-2 py-0.5 rounded">{daten.rate}% Provision</span>
               )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+              <div className="bg-[#050505]/60 p-2 rounded border border-[#8A6D3F]/10">
                 <div className="text-slate-400 font-bold text-[10px] mb-1">STUNDEN</div>
                 <div className="font-mono font-bold text-[#D4AF37]">{daten.hours.toFixed(2)}h</div>
               </div>
@@ -259,15 +262,15 @@ export default function AbrechnungPage() {
                 </>
               ) : (
                 <>
-                  <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+                  <div className="bg-[#050505]/60 p-2 rounded border border-[#8A6D3F]/10">
                     <div className="text-slate-400 font-bold text-[10px] mb-1">BRUTTO</div>
                     <div className="font-mono font-bold text-white">${daten.brutto.toFixed(2)}</div>
                   </div>
-                  <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+                  <div className="bg-[#050505]/60 p-2 rounded border border-[#8A6D3F]/10">
                     <div className="text-slate-400 font-bold text-[10px] mb-1">NETTO</div>
                     <div className="font-mono font-bold text-emerald-400">${daten.netto.toFixed(2)}</div>
                   </div>
-                  <div className="bg-[#050505]/60 p-2 rounded border border-[#AA7C11]/10">
+                  <div className="bg-[#050505]/60 p-2 rounded border border-[#8A6D3F]/10">
                     <div className="text-slate-400 font-bold text-[10px] mb-1">AUSZAHLUNG ({daten.rate}%)</div>
                     <div className="font-mono font-bold text-[#F3E5AB]">${daten.auszahlung.toFixed(2)}</div>
                   </div>

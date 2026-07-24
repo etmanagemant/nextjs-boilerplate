@@ -264,14 +264,14 @@ export default function ScriptLibraryManager({
       {/* Scripts List */}
       <div className="space-y-3">
         {globalScripts.length === 0 ? (
-          <div className="bg-black/40 p-8 rounded-xl border border-[#AA7C11]/10 text-center text-slate-400">
+          <div className="bg-black/40 p-8 rounded-xl border border-[#8A6D3F]/10 text-center text-slate-400">
             <p className="text-sm">No scripts in library yet. Create one to get started!</p>
           </div>
         ) : (
           globalScripts.map((script) => (
             <div
               key={script.id}
-              className="bg-black/40 p-4 rounded-lg border border-[#AA7C11]/10 space-y-3"
+              className="bg-black/40 p-4 rounded-lg border border-[#8A6D3F]/10 space-y-3"
             >
               <div className="flex justify-between items-start gap-4">
                 <div className="flex-1">

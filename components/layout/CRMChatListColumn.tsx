@@ -48,13 +48,13 @@ export default function ChatListColumn({
               className={`w-full p-3 rounded-lg transition border ${
                 selectedFanId === fan.id
                   ? "bg-[#D4AF37]/20 border-[#D4AF37]/50"
-                  : "bg-black/40 border-[#AA7C11]/20 hover:border-[#D4AF37]/30"
+                  : "bg-black/40 border-[#8A6D3F]/20 hover:border-[#D4AF37]/30"
               }`}
             >
               {/* Avatar & Info */}
               <div className="flex items-start gap-3">
                 {/* Avatar Placeholder */}
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#D4AF37] to-[#AA7C11] flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#D4AF37] to-[#8A6D3F] flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-bold text-[#0A0A0A]">
                     {fan.username[0].toUpperCase()}
                   </span>

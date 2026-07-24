@@ -101,19 +101,19 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
   return (
     <div className="w-[98%] mx-auto mt-4 text-[#F3E5AB]">
       {/* Kopfzeile im edlen Gold-Look */}
-      <div className="flex items-center justify-between gap-4 mb-6 bg-[#0A0A0A] p-4 rounded-xl border border-[#AA7C11]/20 shadow-lg">
+      <div className="flex items-center justify-between gap-4 mb-6 bg-[#0A0A0A] p-4 rounded-xl border border-[#8A6D3F]/20 shadow-lg">
         <div>
           <h1 className="text-2xl font-black tracking-wide bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase">Weekly Schedule Calendar</h1>
           <div className="mt-1 text-sm text-[#D4AF37]/80 font-mono font-semibold">{weekLabel}</div>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 7); return startOfWeekMonday(n); })} className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-xs font-bold text-black shadow-md transition-all cursor-pointer">← Letzte Woche</button>
-          <button type="button" onClick={() => setBaseWeekStart(startOfWeekMonday(new Date()))} className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-xs font-bold text-black shadow-md transition-all cursor-pointer">Heute</button>
-          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 7); return startOfWeekMonday(n); })} className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-xs font-bold text-black shadow-md transition-all cursor-pointer">Nächste Woche →</button>
+          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 7); return startOfWeekMonday(n); })} className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-xs font-bold text-black shadow-md transition-all cursor-pointer">← Letzte Woche</button>
+          <button type="button" onClick={() => setBaseWeekStart(startOfWeekMonday(new Date()))} className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-xs font-bold text-black shadow-md transition-all cursor-pointer">Heute</button>
+          <button type="button" onClick={() => setBaseWeekStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 7); return startOfWeekMonday(n); })} className="rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-xs font-bold text-black shadow-md transition-all cursor-pointer">Nächste Woche →</button>
         </div>
       </div>
 
-      <div className="rounded-xl border border-[#AA7C11]/20 bg-[#0A0A0A]/60 p-6 shadow-2xl backdrop-blur-md">
+      <div className="rounded-xl border border-[#8A6D3F]/20 bg-[#0A0A0A]/60 p-6 shadow-2xl backdrop-blur-md">
         <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
           {days.map((d) => {
             const dateKey = formatDateISO(d);
@@ -147,17 +147,17 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
 
             return (
               <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[480px] ${
-                isToday ? "border-[#D4AF37] bg-[#D4AF37]/5 shadow-lg shadow-[#D4AF37]/5" : "border-[#AA7C11]/20 bg-black/40"
+                isToday ? "border-[#D4AF37] bg-[#D4AF37]/5 shadow-lg shadow-[#D4AF37]/5" : "border-[#8A6D3F]/20 bg-black/40"
               }`}>
                 <div>
-                  <div className="flex items-center justify-between border-b border-[#AA7C11]/10 pb-2 mb-3">
+                  <div className="flex items-center justify-between border-b border-[#8A6D3F]/10 pb-2 mb-3">
                     <span className="text-xs font-bold uppercase tracking-widest text-[#D4AF37]/70">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
-                    <span className={`text-base font-mono font-bold px-2 py-0.5 rounded-md ${isToday ? "bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black" : "text-[#F3E5AB]"}`}>{d.toLocaleDateString(undefined, { day: "2-digit" })}</span>
+                    <span className={`text-base font-mono font-bold px-2 py-0.5 rounded-md ${isToday ? "bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black" : "text-[#F3E5AB]"}`}>{d.toLocaleDateString(undefined, { day: "2-digit" })}</span>
                   </div>
 
                   <div className="space-y-3">
                     {schichtenAnDiesemTag.length === 0 ? (
-                      <div className="text-xs text-slate-500 italic p-2 text-center border border-dashed border-[#AA7C11]/10 rounded-lg">Keine Schichten</div>
+                      <div className="text-xs text-slate-500 italic p-2 text-center border border-dashed border-[#8A6D3F]/10 rounded-lg">Keine Schichten</div>
                     ) : (
                       schichtenAnDiesemTag.map((schicht) => {
                         let parsedNotes = { mitarbeiter: "Mitarbeiter", von: "00:00", bis: "00:00", model: "Kein Model", nachricht: "" };
@@ -167,7 +167,7 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                         } catch (e) { parsedNotes.mitarbeiter = "Geplant"; }
                         
                         // 🎨 OPTIONALE VISUELLE UNTERSCHEIDUNG FÜR ADMIN
-                        let shiftColorClass = "border-[#AA7C11]/20 bg-[#050505]"; // Default (Chatter - Gold)
+                        let shiftColorClass = "border-[#8A6D3F]/20 bg-[#050505]"; // Default (Chatter - Gold)
                         if (role === "admin") {
                           const assignedUserId = schicht.chatter_id || schicht.user_id || schicht.assigned_user_id;
                           const assignedUserRole = profileMap?.get(assignedUserId) || "chatter";
@@ -186,29 +186,29 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                             )}
 
                             {editingShiftId === schicht.id ? (
-                              <div className="space-y-2.5 mt-1 bg-black p-2.5 rounded-md border border-[#AA7C11]/30">
+                              <div className="space-y-2.5 mt-1 bg-black p-2.5 rounded-md border border-[#8A6D3F]/30">
                                 <span className="text-[10px] font-bold text-[#D4AF37] block tracking-wider uppercase">Schicht anpassen</span>
                                 <div>
                                   <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Datum</label>
-                                  <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
+                                  <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full bg-[#050505] border border-[#8A6D3F]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
                                 </div>
                                 <div>
                                   <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Mitarbeiter</label>
-                                  <input type="text" value={editMitarbeiter} onChange={(e) => setEditMitarbeiter(e.target.value)} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
+                                  <input type="text" value={editMitarbeiter} onChange={(e) => setEditMitarbeiter(e.target.value)} className="w-full bg-[#050505] border border-[#8A6D3F]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-1.5">
                                   <div>
                                     <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Von</label>
-                                    <input type="text" placeholder="12:00" value={editVon} onChange={(e) => setEditVon(e.target.value)} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
+                                    <input type="text" placeholder="12:00" value={editVon} onChange={(e) => setEditVon(e.target.value)} className="w-full bg-[#050505] border border-[#8A6D3F]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
                                   </div>
                                   <div>
                                     <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Bis</label>
-                                    <input type="text" placeholder="16:00" value={editBis} onChange={(e) => setEditBis(e.target.value)} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
+                                    <input type="text" placeholder="16:00" value={editBis} onChange={(e) => setEditBis(e.target.value)} className="w-full bg-[#050505] border border-[#8A6D3F]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none" />
                                   </div>
                                 </div>
                                 <div>
                                   <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Model auswählen</label>
-                                  <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none cursor-pointer">
+                                  <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className="w-full bg-[#050505] border border-[#8A6D3F]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none cursor-pointer">
                                     <option value="Kein Model" className="bg-[#050505] text-white">Kein Model</option>
                                     {(modelsListe || []).map((m) => (
                                       <option key={m.id} value={m.name} className="bg-[#050505] text-white">{m.name}</option>
@@ -217,11 +217,11 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                                 </div>
                                 <div>
                                   <label className="text-[9px] text-[#D4AF37] font-bold block mb-0.5">Nachricht (optional)</label>
-                                  <textarea value={editNachricht} onChange={(e) => setEditNachricht(e.target.value)} rows={2} className="w-full bg-[#050505] border border-[#AA7C11]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none resize-none" />
+                                  <textarea value={editNachricht} onChange={(e) => setEditNachricht(e.target.value)} rows={2} className="w-full bg-[#050505] border border-[#8A6D3F]/40 rounded p-1 text-xs text-white focus:border-[#D4AF37] outline-none resize-none" />
                                 </div>
-                                <div className="flex gap-1.5 justify-end pt-1 border-t border-[#AA7C11]/10">
+                                <div className="flex gap-1.5 justify-end pt-1 border-t border-[#8A6D3F]/10">
                                   <button type="button" onClick={() => setEditingShiftId(null)} className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-[10px] font-semibold hover:bg-slate-700 cursor-pointer">Abbrechen</button>
-                                  <button type="submit" onClick={() => handleSaveEdit(schicht.id)} className="px-2 py-1 bg-gradient-to-b from-[#D4AF37] to-[#AA7C11] text-black rounded text-[10px] font-bold hover:from-[#E5C158] cursor-pointer">Sichern</button>
+                                  <button type="submit" onClick={() => handleSaveEdit(schicht.id)} className="px-2 py-1 bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black rounded text-[10px] font-bold hover:from-[#E5C158] cursor-pointer">Sichern</button>
                                 </div>
                               </div>
                             ) : (
@@ -231,12 +231,12 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                                   <div className="text-[11px] text-slate-400 font-medium font-mono">{parsedNotes.von} - {parsedNotes.bis} Uhr</div>
                                 )}
                                 {parsedNotes.model && parsedNotes.model !== "Kein Model" && (
-                                  <div className="text-[10px] text-[#D4AF37] font-bold bg-[#AA7C11]/10 border border-[#AA7C11]/30 rounded px-1.5 py-0.5 inline-block mt-0.5">Model: {parsedNotes.model}</div>
+                                  <div className="text-[10px] text-[#D4AF37] font-bold bg-[#8A6D3F]/10 border border-[#8A6D3F]/30 rounded px-1.5 py-0.5 inline-block mt-0.5">Model: {parsedNotes.model}</div>
                                 )}
                                 {parsedNotes.nachricht && (
-                                  <div className="text-[10px] text-slate-400 bg-black/60 rounded p-1.5 border border-[#AA7C11]/10 relative group/msg mt-1.5 break-words">
+                                  <div className="text-[10px] text-slate-400 bg-black/60 rounded p-1.5 border border-[#8A6D3F]/10 relative group/msg mt-1.5 break-words">
                                     <span>{parsedNotes.nachricht}</span>
-                                    <button type="button" onClick={() => handleCopyText(parsedNotes.nachricht, schicht.id)} className="absolute bottom-1 right-1 opacity-0 group-hover/msg:opacity-100 bg-[#050505] border border-[#AA7C11]/40 text-[10px] px-1 rounded text-slate-300 hover:text-[#D4AF37] transition cursor-pointer">
+                                    <button type="button" onClick={() => handleCopyText(parsedNotes.nachricht, schicht.id)} className="absolute bottom-1 right-1 opacity-0 group-hover/msg:opacity-100 bg-[#050505] border border-[#8A6D3F]/40 text-[10px] px-1 rounded text-slate-300 hover:text-[#D4AF37] transition cursor-pointer">
                                       {copiedId === schicht.id ? "✔️" : "📋"}
                                     </button>
                                   </div>

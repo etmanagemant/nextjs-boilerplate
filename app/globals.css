@@ -28,3 +28,49 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
 }
+
+/* Header nav buttons: black with a glowing gold outline, a slow passive
+   breathing glow always running, and a diagonal light sweep every few
+   seconds for a subtle "shimmer" - both intensify on hover instead of
+   turning on from nothing. */
+@keyframes gold-glow-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(212, 175, 55, 0.25), 0 0 1px rgba(212, 175, 55, 0.5) inset;
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(212, 175, 55, 0.5), 0 0 2px rgba(212, 175, 55, 0.7) inset;
+  }
+}
+
+@keyframes gold-shimmer-sweep {
+  0% {
+    transform: translateX(-150%) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(250%) skewX(-20deg);
+  }
+}
+
+.btn-gold-outline {
+  position: relative;
+  overflow: hidden;
+  animation: gold-glow-breathe 2.8s ease-in-out infinite;
+}
+
+.btn-gold-outline::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 35%;
+  height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(243, 229, 171, 0.3), transparent);
+  animation: gold-shimmer-sweep 3.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.btn-gold-outline:hover {
+  animation-duration: 1s;
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.85), 0 0 6px rgba(243, 229, 171, 0.8) inset;
+}
