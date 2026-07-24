@@ -1613,6 +1613,9 @@ app.get('/debug-dom', async (req, res) => {
           .map((el) => {
             const rect = el.getBoundingClientRect();
             const cs = window.getComputedStyle(el);
+            const parent = el.parentElement;
+            const pcs = parent ? window.getComputedStyle(parent) : null;
+            const prect = parent ? parent.getBoundingClientRect() : null;
             return {
               tag: el.tagName,
               className: typeof el.className === 'string' ? el.className.slice(0, 300) : '',
@@ -1621,6 +1624,19 @@ app.get('/debug-dom', async (req, res) => {
               justifyContent: cs.justifyContent,
               marginLeft: cs.marginLeft,
               textAlign: cs.textAlign,
+              position: cs.position,
+              left: cs.left,
+              paddingLeft: cs.paddingLeft,
+              parent: parent
+                ? {
+                    tag: parent.tagName,
+                    className: typeof parent.className === 'string' ? parent.className.slice(0, 200) : '',
+                    display: pcs.display,
+                    gridTemplateColumns: pcs.gridTemplateColumns,
+                    paddingLeft: pcs.paddingLeft,
+                    rect: prect ? { left: prect.left, width: prect.width } : null,
+                  }
+                : null,
             };
           });
       }
