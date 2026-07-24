@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams, useRouter } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
 interface GlobalSidebarProps {
@@ -30,10 +30,8 @@ const ONLYFANS_SECTION_PATHS = ["/crm-inbox", "/management/crm-connect", "/scrip
 export default function GlobalSidebar({ role }: GlobalSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const isAdmin = role === "admin";
   const [models, setModels] = useState<ConnectedModel[]>([]);
-  const [openingNewPost, setOpeningNewPost] = useState(false);
 
   const inOnlyFansSection = ONLYFANS_SECTION_PATHS.some((p) => pathname.startsWith(p));
 
@@ -98,32 +96,6 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
   ].filter((t) => !t.adminOnly || isAdmin);
 
   const activeModelId = searchParams.get("model");
-
-  // Replaces OnlyFans' own "New Post"/"Neuer Beitrag" button, hidden in
-  // this compact view - ensures a chatter slot exists for the target
-  // model, points it at OnlyFans' real post-composer (/posts/create,
-  // confirmed live), then opens that model's OnlyFans view so the VNC
-  // feed shows it already there.
-  const handleNewPost = async () => {
-    const targetModelId = activeModelId || models[0]?.id;
-    if (!targetModelId || openingNewPost) return;
-    setOpeningNewPost(true);
-    try {
-      await fetch("/api/crm/chatter-slot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId: targetModelId }),
-      });
-      await fetch("/api/crm/open-new-post", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId: targetModelId }),
-      });
-      router.push(`/crm-inbox?model=${targetModelId}`);
-    } finally {
-      setOpeningNewPost(false);
-    }
-  };
 
   return (
     <aside className="fixed left-0 top-32 bottom-0 w-56 z-40 bg-[#0A0A0A] border-r border-[#9C7A3D]/30 flex flex-col py-4 px-2 gap-1 overflow-y-auto scrollbar-hide">
@@ -196,14 +168,6 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
                         <span className="truncate">{tool.name}</span>
                       </Link>
                     ))}
-                    <button
-                      onClick={handleNewPost}
-                      disabled={openingNewPost || (!activeModelId && models.length === 0)}
-                      className="btn-gold-hover-shimmer w-full flex items-center gap-2 px-2 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10 disabled:opacity-40"
-                    >
-                      <span className="flex-shrink-0">➕</span>
-                      <span className="truncate">{openingNewPost ? "Öffne..." : "New Post"}</span>
-                    </button>
                   </>
                 )}
               </div>

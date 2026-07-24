@@ -273,31 +273,46 @@ const NAV_SCRIPT_TEMPLATE = `
     if (contactBtn && contactBtn.style.display !== 'none') contactBtn.style.display = 'none';
     // The "New Post"/"Neuer Beitrag" button isn't part of the sidebar at
     // all - confirmed live it's ".m-create-post" under a completely
-    // different "l-header__menu__item" class family. Previously hidden
-    // outright since it kept forcing extra width next to the icon rail;
-    // now that the real width culprit (.l-header itself) is fixed, it can
-    // stay visible and just get the same icon-only treatment as everything
-    // else instead of being replaced by a separate CRM button.
+    // different "l-header__menu__item" class family. Post creation is an
+    // admin/model-management task, not something chatters need - shown
+    // icon-only for admins (same treatment as the rest of the rail), fully
+    // hidden for chatters, same permission split as the HIDDEN_LABELS items.
     var newPostBtn = document.querySelector('.m-create-post');
     if (newPostBtn) {
-      if (newPostBtn.style.display === 'none') newPostBtn.style.removeProperty('display');
-      stripTrailingText(newPostBtn);
+      if (ROLE === 'admin') {
+        if (newPostBtn.style.display === 'none') newPostBtn.style.removeProperty('display');
+        stripTrailingText(newPostBtn);
+      } else if (newPostBtn.style.display !== 'none') {
+        newPostBtn.style.display = 'none';
+      }
     }
     // <main>'s own positioning scheme differs by page - confirmed live via
     // /debug-dom. On some pages (e.g. the Home feed) it's
     // position:absolute/fixed with OnlyFans' own hardcoded left:280px,
     // needing an explicit override. On others (e.g. the chat page) it's
-    // position:relative and gets its horizontal position from normal flex
-    // flow instead - overriding "left" there doesn't replace that flow
-    // position, it ADDS an offset on top of it (280 natural + 64 override =
-    // 344, a worse gap than doing nothing). Deciding this in JS per actual
-    // computed position, instead of one blanket CSS rule, is what actually
-    // fixes both instead of trading one page's gap for another's.
+    // position:relative, but even after the real .l-header width fix above,
+    // <main> still measured a ~216px gap past the header's actual right
+    // edge that no single computed-style property (margin/padding/left/
+    // transform - all individually checked live) explained, so something
+    // in OnlyFans' own flex math still reserves it. Rather than chase the
+    // exact mechanism further, this measures the gap directly every scan
+    // (reset left to 0, compare main's real edge to the header's real right
+    // edge, apply whatever delta cancels it) - self-correcting regardless
+    // of which internal cause produces the gap on a given page.
     var mainEl = document.querySelector('main');
+    var headerEl = document.querySelector('.l-header');
     if (mainEl) {
       var mainPos = window.getComputedStyle(mainEl).position;
       if (mainPos === 'absolute' || mainPos === 'fixed') {
         if (mainEl.style.left !== '64px') mainEl.style.setProperty('left', '64px', 'important');
+      } else if (mainPos === 'relative' && headerEl) {
+        mainEl.style.setProperty('left', '0px', 'important');
+        var headerRight = headerEl.getBoundingClientRect().right;
+        var mainLeftNow = mainEl.getBoundingClientRect().left;
+        var neededLeft = Math.round(headerRight - mainLeftNow);
+        if (Math.abs(neededLeft) > 1) {
+          mainEl.style.setProperty('left', neededLeft + 'px', 'important');
+        }
       } else if (mainEl.style.left) {
         mainEl.style.removeProperty('left');
       }
@@ -1423,26 +1438,6 @@ app.get('/chatter-slot-page', (req, res) => {
     /* page mid-navigation or closed - just report unknown */
   }
   res.json({ status: 'success', pageUrl });
-});
-
-// Navigates a chatter's own slot to OnlyFans' real post-composer
-// (confirmed live via /debug-dom: the native "New Post"/"Neuer Beitrag"
-// button links to /posts/create) - used by the CRM's own "New Post" nav
-// entry, since the native button is hidden in this compact view.
-app.post('/open-new-post', async (req, res) => {
-  const { userId, modelId } = req.body || {};
-  if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
-
-  const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
-  if (!slot || !slot.page) return res.json({ status: 'no_slot' });
-
-  try {
-    await slot.page.goto('https://onlyfans.com/posts/create', { waitUntil: 'domcontentloaded', timeout: 15000 });
-    res.json({ status: 'success' });
-  } catch (error) {
-    console.error('[OPEN-NEW-POST] Error:', error.message);
-    res.status(200).json({ status: 'error', error: error.message });
-  }
 });
 
 // Scrapes the visible text of a chatter's currently-open OnlyFans chat, for
