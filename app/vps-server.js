@@ -1,5 +1,15 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+// puppeteer-extra + the stealth plugin patch the automation fingerprints a
+// plain Puppeteer-launched Chrome carries for its entire lifetime
+// (navigator.webdriver, missing plugins, CDP-specific quirks, etc.) - not
+// about how "human" input during the manual VNC login looks (that's
+// already indistinguishable from real input, since it arrives as genuine
+// X11/OS-level events), but about the browser process itself being
+// continuously fingerprintable as automated for as long as it stays open,
+// which anti-fraud systems can act on at any point, not just at login.
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -475,11 +485,19 @@ app.get('/cookies', async (req, res) => {
 // Fetch the connected model's own OnlyFans profile info (for the avatar,
 // called right after "Creator verbinden") by reusing the live authenticated
 // session - same page.evaluate(fetch) trick as /sync-live, for the same
-// reason a fresh cookie-cloned session would get rejected. The endpoint is
-// a best guess (a common "current user" REST convention) - unconfirmed
-// against a real session, same caveat as the chats/send-message endpoints;
-// the Next.js side tries several likely field names for the avatar URL and
-// just skips it if none match, so a wrong guess here fails safe.
+// reason a fresh cookie-cloned session would get rejected.
+//
+// The guessed default ('/api2/v2/users/me') was directly confirmed broken -
+// it returns HTTP 400 ("Something went wrong. [29141B1D]"), the exact same
+// error OnlyFans' real API gives for an unsigned/malformed request (their
+// API requires proprietary signed headers a plain fetch() doesn't have).
+// That meant every single "Creator verbinden" click fired one guaranteed-
+// malformed request against OnlyFans' real API, from inside the freshly
+// authenticated session, using its real cookies, at the single most
+// sensitive moment right after login - exactly the kind of anomaly an
+// anti-fraud system would key on. No longer guessing, same as
+// ONLYFANS_CHATS_ENDPOINT/ONLYFANS_SEND_MESSAGE_ENDPOINT - only runs once a
+// real endpoint is confirmed via a discover pass and set explicitly.
 app.get('/profile-info', async (req, res) => {
   const { modelId } = req.query;
   if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
@@ -488,8 +506,12 @@ app.get('/profile-info', async (req, res) => {
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
   session.lastActivity = Date.now();
 
+  const endpoint = process.env.ONLYFANS_ME_ENDPOINT;
+  if (!endpoint) {
+    return res.json({ status: 'not_configured', modelId, message: 'ONLYFANS_ME_ENDPOINT not set - run discover:true against a live session first' });
+  }
+
   try {
-    const endpoint = process.env.ONLYFANS_ME_ENDPOINT || '/api2/v2/users/me';
     const data = await session.page.evaluate(async (url) => {
       const res = await fetch(url, { credentials: 'include' });
       const text = await res.text();
