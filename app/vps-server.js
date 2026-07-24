@@ -195,6 +195,13 @@ async function launchBrowser(modelId, display) {
         '--disable-default-apps',
         '--disable-extensions',
         '--disable-blink-features=AutomationControlled',
+        // Without this, Chrome's outer window opens at its own default
+        // size, not the full 1920x1080 Xvfb display - invisible to
+        // page.screenshot() (which only captures the page content, not the
+        // whole virtual screen) but very visible over VNC as a chunk of
+        // dead black desktop next to a smaller window.
+        '--window-size=1920,1080',
+        '--window-position=0,0',
         `--user-data-dir=/tmp/chromium-${modelId}`,
       ],
     });
