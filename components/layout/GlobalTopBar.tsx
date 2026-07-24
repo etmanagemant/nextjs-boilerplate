@@ -27,7 +27,7 @@ export default function GlobalTopBar() {
   }, [notifOpen]);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-[#0A0A0A]/95 backdrop-blur border-b border-[#9C7A3D]/20">
+    <header className="fixed top-0 left-0 right-0 z-50 h-32 bg-[#0A0A0A]/95 backdrop-blur border-b border-[#9C7A3D]/20">
       <div className="h-full flex items-center justify-between pl-4 pr-4">
         <Image
           src="/images/logo.png"
@@ -35,7 +35,7 @@ export default function GlobalTopBar() {
           width={633}
           height={611}
           priority
-          className="h-14 w-auto"
+          className="h-28 w-auto"
         />
 
         <div className="flex items-center gap-2">
@@ -63,9 +63,10 @@ export default function GlobalTopBar() {
             <button
               type="submit"
               title="Abmelden"
-              className="w-10 h-10 flex items-center justify-center rounded-lg text-lg text-[#C9A86A] hover:bg-red-500/10 hover:text-red-400 transition border border-transparent hover:border-red-500/30"
+              className="flex items-center gap-1.5 px-3 h-10 rounded-lg text-sm font-bold text-[#C9A86A] hover:bg-red-500/10 hover:text-red-400 transition border border-transparent hover:border-red-500/30"
             >
-              🚪
+              <span className="text-lg">🚪</span>
+              <span>Logout</span>
             </button>
           </form>
         </div>

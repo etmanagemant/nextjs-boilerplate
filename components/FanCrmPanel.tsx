@@ -30,6 +30,7 @@ interface FanCrmPanelProps {
   modelId: string;
   fanId: string;
   metadata: FanMetadataFull;
+  lastEditedBy?: string | null;
   onSaved: () => void;
   isAdmin: boolean;
 }
@@ -50,7 +51,7 @@ function formatDate(value: string | null): string {
  * chatter's own slot's current page URL - our app has no other visibility
  * into what's clicked inside the VNC view).
  */
-export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanCrmPanelProps) {
+export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, isAdmin }: FanCrmPanelProps) {
   const [realName, setRealName] = useState(metadata.real_name || "");
   const [location, setLocation] = useState(metadata.location || "");
   const [age, setAge] = useState(metadata.age || "");
@@ -247,6 +248,11 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
               className="w-24 bg-black/60 border border-[#C9A86A]/20 rounded px-1.5 py-0.5 text-xs text-[#E2C48A] text-right placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A]"
             />
           </div>
+          {lastEditedBy && (
+            <p className="text-[10px] text-slate-500 text-right pt-1">
+              zuletzt bearbeitet von {lastEditedBy}
+            </p>
+          )}
         </div>
 
         <div className="border-t border-[#9C7A3D]/20 pt-3">

@@ -192,10 +192,16 @@ const NAV_SCRIPT_TEMPLATE = `
 
   function norm(s) { return (s || '').trim().toLowerCase(); }
 
+  // Walks the FULL subtree, not just direct children - OnlyFans wraps most
+  // nav labels in a nested <span class="...__text">, so a direct-children-
+  // only check (the first version of this) never actually found the text
+  // node to clear and silently did nothing. Confirmed live via a screenshot
+  // showing full text still present on every sidebar item.
   function stripTrailingText(el) {
-    for (var i = el.childNodes.length - 1; i >= 0; i--) {
-      var node = el.childNodes[i];
-      if (node.nodeType === 3 && node.textContent) node.textContent = '';
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (node.textContent) node.textContent = '';
     }
   }
 
@@ -235,23 +241,53 @@ async function applyNavRestrictions(page, role) {
 // the ones actually sent from THIS slot, not every "m-from-me" bubble.
 // Multiple chatters can have their own slot open on the exact same real
 // OnlyFans conversation at once (same underlying account, synced by
-// OnlyFans itself across all of them) - the first version of this labeled
-// EVERY outgoing bubble with whichever chatter happened to be viewing it,
-// which is wrong whenever more than one slot is open on the same chat
-// (confirmed live: a message actually sent by admin Tobias showed up
-// labeled with a different chatter's name in their own slot). Fixed by
-// only labeling a NEW bubble that appears shortly after a local send
-// action (Enter in the compose box, or a "send"-labeled button click) was
-// observed in THIS SPECIFIC page - a bubble that appears without a recent
-// local trigger came from a different slot/session and is left unlabeled
-// rather than guessed. %%CHATTER_NAME%% is substituted per slot before
-// injection (evaluateOnNewDocument only accepts a plain string).
+// OnlyFans itself across all of them). First version only labeled
+// messages while the SAME session that sent them was still open, keyed off
+// a local "did I just press send" timer - meaning a different chatter (or
+// the same chatter reopening later) never saw the label at all, since nothing
+// persisted anywhere. Confirmed by the user's exact requirement: admin
+// Tobias sends at 13:40, chatter Y opens the same chat at 14:00 and must
+// still see "gesendet von Tobias" under that older message, then supervisor
+// Saskia joining at 15:00 must see BOTH Tobias's and chatter Y's messages
+// correctly attributed - i.e. attribution has to be a fact recorded
+// somewhere shared, not a per-browser-session guess.
+//
+// So this now does two independent things:
+//  1) Detects a local send (Enter in the compose box, or a "send"-labeled
+//     button click) and POSTs the sent text + this slot's chatter name to
+//     our own app's /api/crm/log-sent-message, which persists it in
+//     Supabase (crm_onlyfans_sent_log).
+//  2) Independently, on a timer, GETs that same log for the current fan and
+//     labels EVERY matching "m-from-me" bubble - not just ones this
+//     specific slot sent - by walking both lists (DOM bubbles in order,
+//     log entries in order) and matching by message text, consuming log
+//     entries left-to-right so repeated identical texts ("test", "test")
+//     still line up correctly against repeated log entries in the same
+//     order. A bubble with no matching log entry (sent before this feature
+//     existed, or never logged for some other reason) is left unlabeled
+//     rather than guessed.
+//
+// %%CHATTER_NAME%%, %%MODEL_ID%%, %%API_BASE%% are substituted per slot
+// before injection (evaluateOnNewDocument only accepts a plain string, not
+// a closure over a variable).
 const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
 (function() {
   var CHATTER_NAME = "%%CHATTER_NAME%%";
+  var MODEL_ID = "%%MODEL_ID%%";
+  var API_BASE = "%%API_BASE%%";
   var LABEL_CLASS = 'etm-sent-by-label';
-  var SEND_WINDOW_MS = 6000;
+  var SEND_WINDOW_MS = 8000;
   var recentSendUntil = 0;
+
+  function getFanId() {
+    var m = location.pathname.match(/\\/chats\\/chat\\/(\\d+)/);
+    return m ? m[1] : null;
+  }
+
+  function getBubbleText(el) {
+    var holder = el.querySelector('.b-chat__message__text-holder');
+    return holder ? holder.textContent.trim() : '';
+  }
 
   function armSendWindow() {
     recentSendUntil = Date.now() + SEND_WINDOW_MS;
@@ -272,42 +308,81 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
     }, true);
   }
 
-  function label(el) {
-    // Every "m-from-me" bubble is only ever evaluated once, whether or not
-    // it gets labeled - a bubble that already existed on page load (real
-    // chat history, not something this slot just sent) must never light up
-    // later just because the send window happens to be open at that moment.
-    if (el.dataset.etmChecked) return;
-    el.dataset.etmChecked = '1';
+  function logIfLocallySent(el) {
+    if (el.dataset.etmLogged) return;
+    el.dataset.etmLogged = '1';
     if (Date.now() > recentSendUntil) return;
-    var body = el.querySelector('.b-chat__message__body') || el;
-    var tag = document.createElement('div');
-    tag.className = LABEL_CLASS;
-    tag.textContent = 'gesendet von ' + CHATTER_NAME;
-    tag.style.cssText = 'font-size:10px;opacity:0.55;text-align:right;margin-top:2px;color:inherit;';
-    body.appendChild(tag);
+    var fanId = getFanId();
+    var text = getBubbleText(el);
+    if (!fanId || !text || !API_BASE) return;
+    fetch(API_BASE + '/api/crm/log-sent-message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelId: MODEL_ID, fanId: fanId, chatterName: CHATTER_NAME, messageText: text }),
+    }).catch(function() {});
   }
 
-  function scan() {
+  function scanForLocalSends() {
     var mine = document.querySelectorAll('.b-chat__message.m-from-me');
-    for (var i = 0; i < mine.length; i++) label(mine[i]);
+    for (var i = 0; i < mine.length; i++) logIfLocallySent(mine[i]);
   }
+
+  var sentLog = [];
+  function fetchLog() {
+    var fanId = getFanId();
+    if (!fanId || !API_BASE) return;
+    fetch(API_BASE + '/api/crm/log-sent-message?modelId=' + encodeURIComponent(MODEL_ID) + '&fanId=' + encodeURIComponent(fanId))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        sentLog = (data && data.entries) || [];
+        applyLabelsFromLog();
+      })
+      .catch(function() {});
+  }
+
+  function applyLabelsFromLog() {
+    var mine = document.querySelectorAll('.b-chat__message.m-from-me');
+    var logIdx = 0;
+    for (var i = 0; i < mine.length; i++) {
+      var el = mine[i];
+      if (el.querySelector('.' + LABEL_CLASS)) continue;
+      var text = getBubbleText(el);
+      if (!text) continue;
+      for (var j = logIdx; j < sentLog.length; j++) {
+        if (!sentLog[j]._used && sentLog[j].message_text === text) {
+          sentLog[j]._used = true;
+          logIdx = j + 1;
+          var body = el.querySelector('.b-chat__message__body') || el;
+          var tag = document.createElement('div');
+          tag.className = LABEL_CLASS;
+          tag.textContent = 'gesendet von ' + sentLog[j].chatter_name;
+          tag.style.cssText = 'font-size:10px;opacity:0.55;text-align:right;margin-top:2px;color:inherit;';
+          body.appendChild(tag);
+          break;
+        }
+      }
+    }
+  }
+
   function start() {
     attachSendListeners();
-    scan();
-    new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+    scanForLocalSends();
+    fetchLog();
+    setInterval(fetchLog, 4000);
+    new MutationObserver(scanForLocalSends).observe(document.documentElement, { childList: true, subtree: true });
   }
   if (document.body) start();
   else document.addEventListener('DOMContentLoaded', start);
 })();
 `;
 
-async function applySentByOverlay(page, chatterName) {
+async function applySentByOverlay(page, chatterName, modelId) {
   try {
-    const script = SENT_BY_OVERLAY_SCRIPT_TEMPLATE.replace(
-      '%%CHATTER_NAME%%',
-      String(chatterName || 'Chatter').replace(/"/g, '\\"')
-    );
+    const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+    const script = SENT_BY_OVERLAY_SCRIPT_TEMPLATE
+      .replace('%%CHATTER_NAME%%', String(chatterName || 'Chatter').replace(/"/g, '\\"'))
+      .replace('%%MODEL_ID%%', String(modelId || '').replace(/"/g, '\\"'))
+      .replace('%%API_BASE%%', apiBase.replace(/"/g, '\\"'));
     await page.evaluateOnNewDocument(script);
   } catch (e) {
     console.warn('[SENT-BY-OVERLAY] Could not register:', e.message);
@@ -606,7 +681,7 @@ async function ensureSlotBrowser(slot, modelId, role, chatterName) {
   await enableDarkMode(page);
   await reserveOverlaySpace(page);
   await applyNavRestrictions(page, role);
-  await applySentByOverlay(page, chatterName);
+  await applySentByOverlay(page, chatterName, modelId);
 
   // The filesystem copy above can still be stale even when the main
   // session is genuinely logged in: Chrome writes its cookie database to

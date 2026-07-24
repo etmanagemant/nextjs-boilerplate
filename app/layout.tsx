@@ -44,7 +44,7 @@ export default async function RootLayout({
         {user && <GlobalTopBar />}
         {user && <GlobalSidebar role={role} />}
 
-        <main className={user ? "pt-16 pl-16 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]" : "min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]"}>
+        <main className={user ? "pt-32 pl-56 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]" : "min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]"}>
           {children}
         </main>
       </body>

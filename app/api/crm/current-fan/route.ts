@@ -51,9 +51,23 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error;
 
+    // Same attribution principle as the OnlyFans message overlay: whoever
+    // last edited this fan's CRM data should be visible to every viewer,
+    // not just remembered locally.
+    let lastEditedBy: string | null = null;
+    if (data?.chatter_id) {
+      const { data: editorProfile } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("user_id", data.chatter_id)
+        .maybeSingle();
+      lastEditedBy = editorProfile?.full_name || editorProfile?.email || null;
+    }
+
     return NextResponse.json({
       status: "success",
       fanId,
+      lastEditedBy,
       metadata: data || {
         fan_id: fanId,
         model_id: modelId,

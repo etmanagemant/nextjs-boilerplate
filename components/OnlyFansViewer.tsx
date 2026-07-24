@@ -54,7 +54,7 @@ export function OnlyFansViewer({
   const noSessionSyncedRef = useRef(false);
   const unmountedRef = useRef(false);
 
-  const [currentFan, setCurrentFan] = useState<{ fanId: string; metadata: any } | null>(null);
+  const [currentFan, setCurrentFan] = useState<{ fanId: string; metadata: any; lastEditedBy: string | null } | null>(null);
   const fanPollRef = useRef<NodeJS.Timeout | null>(null);
 
   // Assigns (or reuses) this user's own independent chatter slot for this
@@ -159,7 +159,7 @@ export function OnlyFansViewer({
       const res = await fetch(`/api/crm/current-fan?modelId=${encodeURIComponent(modelId)}`);
       const data = res.ok ? await res.json() : {};
       if (data.status === "success" && data.fanId) {
-        setCurrentFan({ fanId: data.fanId, metadata: data.metadata });
+        setCurrentFan({ fanId: data.fanId, metadata: data.metadata, lastEditedBy: data.lastEditedBy || null });
       } else {
         setCurrentFan(null);
       }
@@ -388,6 +388,7 @@ export function OnlyFansViewer({
               modelId={modelId}
               fanId={currentFan.fanId}
               metadata={currentFan.metadata}
+              lastEditedBy={currentFan.lastEditedBy}
               onSaved={pollCurrentFan}
               isAdmin={isAdmin}
             />

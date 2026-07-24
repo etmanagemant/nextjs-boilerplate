@@ -14,10 +14,11 @@ interface NavItem {
 }
 
 /**
- * Persistent icon-only nav rail, present on every page - replaces the old
- * per-page header button row. Kept icon-only (not the wider labeled
- * sidebar CRM Inbox has for its own tools/models) so it stays out of the
- * way on pages that also have their own contextual sidebar.
+ * Persistent labeled nav sidebar, present on every page - replaces the old
+ * per-page header button row entirely. Full icon+label buttons (matching
+ * the "Tools" section style already used on the CRM Inbox's own workspace
+ * sidebar), not an icon-only rail - that treatment is for OnlyFans' own
+ * embedded nav, a separate and unrelated request.
  */
 export default function GlobalSidebar({ role }: GlobalSidebarProps) {
   const pathname = usePathname();
@@ -50,21 +51,22 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
   }
 
   return (
-    <aside className="fixed left-0 top-16 bottom-0 w-16 z-40 bg-[#0A0A0A] border-r border-[#9C7A3D]/30 flex flex-col items-center py-3 gap-1 overflow-y-auto scrollbar-hide">
+    <aside className="fixed left-0 top-32 bottom-0 w-56 z-40 bg-[#0A0A0A] border-r border-[#9C7A3D]/30 flex flex-col py-4 px-2 gap-1 overflow-y-auto scrollbar-hide">
+      <p className="px-3 pb-2 text-xs font-bold text-slate-500 uppercase tracking-widest">Tools</p>
       {items.map((item, i) => {
         const isActive = pathname === item.href;
         return (
           <Link
             key={`${item.href}-${i}`}
             href={item.href}
-            title={item.label}
-            className={`w-11 h-11 flex-shrink-0 flex items-center justify-center rounded-lg text-xl transition-all ${
+            className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
               isActive
-                ? "bg-[#C9A86A]/20 border border-[#C9A86A]/60 text-[#E2C48A] shadow-[0_0_10px_rgba(201,168,106,0.3)]"
-                : "text-[#C9A86A]/80 hover:bg-[#C9A86A]/10 hover:text-[#E2C48A] border border-transparent"
+                ? "bg-[#C9A86A]/20 text-[#C9A86A] border-l-2 border-[#C9A86A]"
+                : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
             }`}
           >
-            {item.icon}
+            <span className="text-lg flex-shrink-0">{item.icon}</span>
+            <span>{item.label}</span>
           </Link>
         );
       })}
