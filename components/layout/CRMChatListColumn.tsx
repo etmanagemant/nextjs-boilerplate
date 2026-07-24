@@ -16,10 +16,10 @@ export default function ChatListColumn({
   isLoading,
 }: ChatListColumnProps) {
   return (
-    <div className="h-full bg-black/40 border-r border-[#D4AF37]/20 overflow-y-auto">
+    <div className="h-full bg-black/40 border-r border-[#C9A86A]/20 overflow-y-auto">
       {/* Header */}
-      <div className="sticky top-0 bg-black/60 p-4 border-b border-[#D4AF37]/20 z-10">
-        <h2 className="text-sm font-black text-[#D4AF37] uppercase tracking-wider">
+      <div className="sticky top-0 bg-black/60 p-4 border-b border-[#C9A86A]/20 z-10">
+        <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">
           👥 Active Fans
         </h2>
         <p className="text-xs text-slate-500 mt-1">{fans.length} chats</p>
@@ -47,14 +47,14 @@ export default function ChatListColumn({
               onClick={() => onSelectFan(fan.id)}
               className={`w-full p-3 rounded-lg transition border ${
                 selectedFanId === fan.id
-                  ? "bg-[#D4AF37]/20 border-[#D4AF37]/50"
-                  : "bg-black/40 border-[#8A6D3F]/20 hover:border-[#D4AF37]/30"
+                  ? "bg-[#C9A86A]/20 border-[#C9A86A]/50"
+                  : "bg-black/40 border-[#9C7A3D]/20 hover:border-[#C9A86A]/30"
               }`}
             >
               {/* Avatar & Info */}
               <div className="flex items-start gap-3">
                 {/* Avatar Placeholder */}
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#D4AF37] to-[#8A6D3F] flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#C9A86A] to-[#9C7A3D] flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-bold text-[#0A0A0A]">
                     {fan.username[0].toUpperCase()}
                   </span>
@@ -63,11 +63,11 @@ export default function ChatListColumn({
                 {/* Username & Metadata */}
                 <div className="flex-1 text-left">
                   <div className="flex items-center gap-2 justify-between">
-                    <p className="text-sm font-bold text-[#F3E5AB]">
+                    <p className="text-sm font-bold text-[#E2C48A]">
                       {fan.username}
                     </p>
                     {fan.is_vip && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gold-500/20 text-gold-300 border border-gold-500/30 font-bold">
                         👑 VIP
                       </span>
                     )}

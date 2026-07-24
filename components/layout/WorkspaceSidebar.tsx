@@ -174,20 +174,20 @@ export default function WorkspaceSidebar({
 
   return (
     <aside
-      className={`bg-[#050505] border-r border-[#D4AF37]/20 flex flex-col transition-all duration-300 ${
+      className={`bg-[#050505] border-r border-[#C9A86A]/20 flex flex-col transition-all duration-300 ${
         isCollapsed ? "w-20" : "w-64"
       }`}
     >
       {/* COLLAPSE BUTTON */}
-      <div className="px-4 py-3 border-b border-[#D4AF37]/10 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-[#C9A86A]/10 flex items-center justify-between">
         {!isCollapsed && (
-          <h2 className="text-xs font-bold text-[#D4AF37] uppercase tracking-widest">
+          <h2 className="text-xs font-bold text-[#C9A86A] uppercase tracking-widest">
             Workspace
           </h2>
         )}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="text-slate-400 hover:text-[#D4AF37] transition"
+          className="text-slate-400 hover:text-[#C9A86A] transition"
           title={isCollapsed ? "Expand" : "Collapse"}
         >
           {isCollapsed ? "→" : "←"}
@@ -211,8 +211,8 @@ export default function WorkspaceSidebar({
                 href={tool.href}
                 className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
                   isActive
-                    ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
-                    : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
+                    ? "bg-[#C9A86A]/20 text-[#C9A86A] border-l-2 border-[#C9A86A]"
+                    : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
                 }`}
                 title={isCollapsed ? tool.name : undefined}
               >
@@ -225,7 +225,7 @@ export default function WorkspaceSidebar({
 
         {/* Connected Models Section */}
         {modelsToDisplay.length > 0 && (
-          <div className="pt-4 border-t border-[#D4AF37]/10">
+          <div className="pt-4 border-t border-[#C9A86A]/10">
             {!isCollapsed && (
               <p className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
                 🟢 Models ({modelsToDisplay.length})
@@ -258,8 +258,8 @@ export default function WorkspaceSidebar({
                     }}
                     className={`w-full flex items-center justify-between gap-2 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition cursor-pointer ${
                       isActive
-                        ? "bg-[#D4AF37]/20 text-[#D4AF37] border-l-2 border-[#D4AF37]"
-                        : "text-slate-400 hover:text-[#F3E5AB] hover:bg-[#D4AF37]/10"
+                        ? "bg-[#C9A86A]/20 text-[#C9A86A] border-l-2 border-[#C9A86A]"
+                        : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
                     }`}
                     title={`${model.name} - Left-click: Select / Open | Right-click: Menu`}
                   >
@@ -269,7 +269,7 @@ export default function WorkspaceSidebar({
                         <img
                           src={model.avatar_url}
                           alt={model.name}
-                          className="w-6 h-6 rounded-full object-cover border border-[#D4AF37]/40 flex-shrink-0"
+                          className="w-6 h-6 rounded-full object-cover border border-[#C9A86A]/40 flex-shrink-0"
                         />
                       ) : (
                         <span className="text-lg flex-shrink-0">👤</span>
@@ -286,7 +286,7 @@ export default function WorkspaceSidebar({
                         e.stopPropagation();
                         handleOpenContextMenu(model.id, e);
                       }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs opacity-0 group-hover:opacity-100 transition flex-shrink-0 cursor-pointer hover:text-[#F3E5AB] text-slate-400 p-1"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs opacity-0 group-hover:opacity-100 transition flex-shrink-0 cursor-pointer hover:text-[#E2C48A] text-slate-400 p-1"
                       title="Menu options"
                     >
                       ⋮
@@ -298,14 +298,14 @@ export default function WorkspaceSidebar({
           </div>
         )}
         {isLoadingModels && (
-          <div className="pt-4 border-t border-[#D4AF37]/10 px-3 py-2">
+          <div className="pt-4 border-t border-[#C9A86A]/10 px-3 py-2">
             {!isCollapsed && <p className="text-xs text-slate-500">Lade Models...</p>}
           </div>
         )}
       </nav>
 
       {/* FOOTER */}
-      <div className="px-3 py-3 border-t border-[#D4AF37]/10 text-xs text-slate-500">
+      <div className="px-3 py-3 border-t border-[#C9A86A]/10 text-xs text-slate-500">
         {!isCollapsed && (
           <div className="text-center">
             <p>v1.0</p>
@@ -317,7 +317,7 @@ export default function WorkspaceSidebar({
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          className="fixed bg-[#1A1A1A] border border-[#D4AF37]/30 rounded-lg shadow-2xl z-50 py-1"
+          className="fixed bg-[#1A1A1A] border border-[#C9A86A]/30 rounded-lg shadow-2xl z-50 py-1"
           style={{
             left: `${Math.max(16, contextMenu.x - 120)}px`,
             top: `${Math.max(16, contextMenu.y)}px`,
@@ -326,13 +326,13 @@ export default function WorkspaceSidebar({
         >
           <button
             onClick={() => handleOpenNewTab(contextMenu.modelId)}
-            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-[#D4AF37]/20 hover:text-[#F3E5AB] transition"
+            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-[#C9A86A]/20 hover:text-[#E2C48A] transition"
           >
             🌐 Open new tab
           </button>
           <button
             onClick={() => handleRefreshSession(contextMenu.modelId)}
-            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-[#D4AF37]/20 hover:text-[#F3E5AB] transition"
+            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-[#C9A86A]/20 hover:text-[#E2C48A] transition"
           >
             🔄 Refresh session
           </button>

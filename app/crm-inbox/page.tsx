@@ -90,14 +90,14 @@ export default async function CRMInboxPage() {
     console.error("Error loading CRM Inbox:", err);
     return (
       <div className="flex items-center justify-center h-screen bg-[#0A0A0A]">
-        <div className="text-center text-[#F3E5AB]">
+        <div className="text-center text-[#E2C48A]">
           <h1 className="text-2xl font-bold mb-2"><span>⚠️</span> <span>Error Loading Inbox</span></h1>
           <p className="text-slate-400 mb-4">
             There was a problem loading your chat interface. Please try again.
           </p>
           <Link
             href="/dashboard"
-            className="px-4 py-2 bg-[#D4AF37]/20 text-[#D4AF37] rounded hover:bg-[#D4AF37]/30 transition"
+            className="px-4 py-2 bg-[#C9A86A]/20 text-[#C9A86A] rounded hover:bg-[#C9A86A]/30 transition"
           >
             Back to Dashboard
           </Link>

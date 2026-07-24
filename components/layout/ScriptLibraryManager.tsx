@@ -115,7 +115,7 @@ export default function ScriptLibraryManager({
 
   const categoryColors: Record<string, string> = {
     greeting: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-    offer: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+    offer: "bg-gold-500/20 text-gold-300 border-gold-500/30",
     follow_up: "bg-blue-500/20 text-blue-300 border-blue-500/30",
     custom: "bg-purple-500/20 text-purple-300 border-purple-500/30",
   };
@@ -125,7 +125,7 @@ export default function ScriptLibraryManager({
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-lg font-bold text-[#D4AF37] uppercase tracking-wider">
+          <h3 className="text-lg font-bold text-[#C9A86A] uppercase tracking-wider">
             📚 Script Library
           </h3>
           <p className="text-xs text-slate-400 mt-1">
@@ -135,7 +135,7 @@ export default function ScriptLibraryManager({
         <button
           onClick={() => setIsAddingScript(!isAddingScript)}
           disabled={isAddingScript || editingId !== null}
-          className="bg-[#D4AF37]/20 hover:bg-[#D4AF37]/30 disabled:opacity-50 text-[#D4AF37] px-4 py-2 rounded-lg font-bold text-sm uppercase tracking-wider transition"
+          className="bg-[#C9A86A]/20 hover:bg-[#C9A86A]/30 disabled:opacity-50 text-[#C9A86A] px-4 py-2 rounded-lg font-bold text-sm uppercase tracking-wider transition"
         >
           {isAddingScript ? "✕ Cancel" : "+ Add Script"}
         </button>
@@ -156,7 +156,7 @@ export default function ScriptLibraryManager({
 
       {/* Add/Edit Form */}
       {(isAddingScript || editingId !== null) && (
-        <div className="bg-black/40 p-6 rounded-xl border border-[#D4AF37]/20 space-y-4">
+        <div className="bg-black/40 p-6 rounded-xl border border-[#C9A86A]/20 space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
               Script Title
@@ -168,7 +168,7 @@ export default function ScriptLibraryManager({
                 setFormData({ ...formData, title: e.target.value })
               }
               placeholder="e.g., Welcome Greeting"
-              className="w-full bg-black/60 border border-[#D4AF37]/30 rounded-lg px-4 py-2 text-sm text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#D4AF37]"
+              className="w-full bg-black/60 border border-[#C9A86A]/30 rounded-lg px-4 py-2 text-sm text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#C9A86A]"
               disabled={isLoading}
             />
           </div>
@@ -183,7 +183,7 @@ export default function ScriptLibraryManager({
                 setFormData({ ...formData, scriptContent: e.target.value })
               }
               placeholder="Enter the communication script..."
-              className="w-full h-32 bg-black/60 border border-[#D4AF37]/30 rounded-lg px-4 py-2 text-sm text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] resize-none"
+              className="w-full h-32 bg-black/60 border border-[#C9A86A]/30 rounded-lg px-4 py-2 text-sm text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#C9A86A] resize-none"
               disabled={isLoading}
             />
           </div>
@@ -201,7 +201,7 @@ export default function ScriptLibraryManager({
                     category: e.target.value as ScriptLibraryItem["category"],
                   })
                 }
-                className="w-full bg-black/60 border border-[#D4AF37]/30 rounded-lg px-4 py-2 text-sm text-[#F3E5AB] focus:outline-none focus:ring-2 focus:ring-[#D4AF37]"
+                className="w-full bg-black/60 border border-[#C9A86A]/30 rounded-lg px-4 py-2 text-sm text-[#E2C48A] focus:outline-none focus:ring-2 focus:ring-[#C9A86A]"
                 disabled={isLoading}
               >
                 <option value="greeting">Greeting</option>
@@ -223,7 +223,7 @@ export default function ScriptLibraryManager({
                     isGlobal: e.target.value === "global",
                   })
                 }
-                className="w-full bg-black/60 border border-[#D4AF37]/30 rounded-lg px-4 py-2 text-sm text-[#F3E5AB] focus:outline-none focus:ring-2 focus:ring-[#D4AF37]"
+                className="w-full bg-black/60 border border-[#C9A86A]/30 rounded-lg px-4 py-2 text-sm text-[#E2C48A] focus:outline-none focus:ring-2 focus:ring-[#C9A86A]"
                 disabled={isLoading}
               >
                 <option value="global">Global</option>
@@ -238,7 +238,7 @@ export default function ScriptLibraryManager({
                 editingId ? handleUpdateScript(editingId) : handleAddScript()
               }
               disabled={isLoading}
-              className="flex-1 bg-gradient-to-r from-[#D4AF37] to-[#F3E5AB] text-[#0A0A0A] py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-sm hover:shadow-lg hover:shadow-[#D4AF37]/50 disabled:opacity-50 transition"
+              className="flex-1 bg-gradient-to-r from-[#C9A86A] to-[#E2C48A] text-[#0A0A0A] py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-sm hover:shadow-lg hover:shadow-[#C9A86A]/50 disabled:opacity-50 transition"
             >
               {isLoading ? "🔄 Saving..." : editingId ? "✓ Update" : "✓ Add"}
             </button>
@@ -264,19 +264,19 @@ export default function ScriptLibraryManager({
       {/* Scripts List */}
       <div className="space-y-3">
         {globalScripts.length === 0 ? (
-          <div className="bg-black/40 p-8 rounded-xl border border-[#8A6D3F]/10 text-center text-slate-400">
+          <div className="bg-black/40 p-8 rounded-xl border border-[#9C7A3D]/10 text-center text-slate-400">
             <p className="text-sm">No scripts in library yet. Create one to get started!</p>
           </div>
         ) : (
           globalScripts.map((script) => (
             <div
               key={script.id}
-              className="bg-black/40 p-4 rounded-lg border border-[#8A6D3F]/10 space-y-3"
+              className="bg-black/40 p-4 rounded-lg border border-[#9C7A3D]/10 space-y-3"
             >
               <div className="flex justify-between items-start gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <h4 className="text-sm font-bold text-[#F3E5AB]">
+                    <h4 className="text-sm font-bold text-[#E2C48A]">
                       {script.title}
                     </h4>
                     <span
@@ -311,7 +311,7 @@ export default function ScriptLibraryManager({
                       });
                       setEditingId(script.id);
                     }}
-                    className="text-[#D4AF37] hover:text-[#F3E5AB] text-sm font-bold transition"
+                    className="text-[#C9A86A] hover:text-[#E2C48A] text-sm font-bold transition"
                   >
                     ✏️
                   </button>

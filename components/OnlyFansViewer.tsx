@@ -215,29 +215,29 @@ export function OnlyFansViewer({
   // Fan CRM panel below now uses instead of sitting empty.
   const videoArea = (
     <div
-      className="relative h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] rounded-lg overflow-hidden border border-[#D4AF37]/10 mx-auto"
+      className="relative h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] rounded-lg overflow-hidden border border-[#C9A86A]/10 mx-auto"
       style={{ aspectRatio: "1280 / 800" }}
     >
       {phase === "connecting" && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/60 to-[#0A0A0A]/80 z-10 backdrop-blur-sm">
           <div className="text-center">
             <div className="animate-spin mb-4 text-3xl">⏳</div>
-            <p className="text-[#F3E5AB] font-bold text-lg">Verbinde...</p>
+            <p className="text-[#E2C48A] font-bold text-lg">Verbinde...</p>
           </div>
         </div>
       )}
 
       {phase === "no-session" && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/80 to-[#0A0A0A]/90 z-20 backdrop-blur-sm p-4">
-          <div className="bg-gradient-to-br from-[#2D1A0A] to-[#1A0F05] border-2 border-[#D4AF37]/40 rounded-xl p-6 text-[#F3E5AB] max-w-md shadow-2xl text-center">
+          <div className="bg-gradient-to-br from-[#2D1A0A] to-[#1A0F05] border-2 border-[#C9A86A]/40 rounded-xl p-6 text-[#E2C48A] max-w-md shadow-2xl text-center">
             <div className="text-4xl mb-3">🔒</div>
-            <p className="font-black mb-2 text-lg text-[#D4AF37] uppercase tracking-wider">Nicht verbunden</p>
+            <p className="font-black mb-2 text-lg text-[#C9A86A] uppercase tracking-wider">Nicht verbunden</p>
             <p className="text-sm text-slate-300 mb-5">
               Für {modelName} läuft gerade keine aktive Sitzung. Bitte im Connection Hub verbinden.
             </p>
             <Link
               href="/management/crm-connect"
-              className="inline-block px-5 py-3 bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/40"
+              className="inline-block px-5 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#C9A86A]/40"
             >
               🔗 Zum Connection Hub
             </Link>
@@ -247,13 +247,13 @@ export function OnlyFansViewer({
 
       {phase === "error" && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/80 to-[#0A0A0A]/90 z-10 backdrop-blur-sm p-4">
-          <div className="bg-gradient-to-br from-[#2D1A0A] to-[#1A0F05] border-2 border-[#D4AF37]/40 rounded-xl p-6 text-[#F3E5AB] max-w-md shadow-2xl text-center">
-            <p className="font-black mb-3 text-lg text-[#D4AF37] uppercase tracking-wider">⚠️ Verbindungsfehler</p>
+          <div className="bg-gradient-to-br from-[#2D1A0A] to-[#1A0F05] border-2 border-[#C9A86A]/40 rounded-xl p-6 text-[#E2C48A] max-w-md shadow-2xl text-center">
+            <p className="font-black mb-3 text-lg text-[#C9A86A] uppercase tracking-wider">⚠️ Verbindungsfehler</p>
             <p className="text-sm text-slate-300 mb-5">{error}</p>
             <div className="flex gap-3 justify-center">
               <button
                 onClick={start}
-                className="px-4 py-3 bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#D4AF37]/40"
+                className="px-4 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] hover:to-[#BB8C21] text-black font-bold rounded-lg text-sm transition shadow-lg hover:shadow-[#C9A86A]/40"
               >
                 🔄 Erneut versuchen
               </button>
@@ -283,7 +283,7 @@ export function OnlyFansViewer({
             🟢 Live
           </div>
 
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-[92%] overflow-x-auto flex gap-1.5 px-3 py-2 rounded-full bg-black/80 border border-[#D4AF37]/40 backdrop-blur-sm shadow-2xl">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-[92%] overflow-x-auto flex gap-1.5 px-3 py-2 rounded-full bg-black/80 border border-[#C9A86A]/40 backdrop-blur-sm shadow-2xl">
             {emojis.map((emoji, i) => (
               <button
                 key={i}
@@ -327,9 +327,9 @@ export function OnlyFansViewer({
               isAdmin={isAdmin}
             />
           ) : (
-            <div className="w-80 flex-shrink-0 h-full bg-black/40 border-l border-[#D4AF37]/20 flex flex-col">
-              <div className="sticky top-0 bg-black/60 p-4 border-b border-[#D4AF37]/20">
-                <h2 className="text-sm font-black text-[#D4AF37] uppercase tracking-wider">👤 Fan CRM</h2>
+            <div className="w-80 flex-shrink-0 h-full bg-black/40 border-l border-[#C9A86A]/20 flex flex-col">
+              <div className="sticky top-0 bg-black/60 p-4 border-b border-[#C9A86A]/20">
+                <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">👤 Fan CRM</h2>
                 <p className="text-[11px] text-slate-500 mt-1">Öffne einen Fan-Chat in OnlyFans für Fan-Details.</p>
               </div>
               <ModelNotesPanel modelId={modelId} isAdmin={isAdmin} />
@@ -343,7 +343,7 @@ export function OnlyFansViewer({
   if (isModal) {
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-40 flex items-center justify-center p-4">
-        <div className="w-full max-w-[1900px] h-[92vh] rounded-xl overflow-hidden shadow-2xl border-2 border-[#D4AF37]/40 bg-[#050505]">
+        <div className="w-full max-w-[1900px] h-[92vh] rounded-xl overflow-hidden shadow-2xl border-2 border-[#C9A86A]/40 bg-[#050505]">
           {viewerContent}
         </div>
       </div>
@@ -352,7 +352,7 @@ export function OnlyFansViewer({
 
   if (isEmbedded) {
     return (
-      <div className="w-full h-full bg-[#0A0A0A] overflow-hidden border border-[#D4AF37]/20">
+      <div className="w-full h-full bg-[#0A0A0A] overflow-hidden border border-[#C9A86A]/20">
         {viewerContent}
       </div>
     );

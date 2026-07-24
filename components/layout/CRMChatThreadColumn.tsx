@@ -58,10 +58,10 @@ export default function ChatThreadColumn({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#0A0A0A] border-r border-[#D4AF37]/20">
+    <div className="h-full flex flex-col bg-[#0A0A0A] border-r border-[#C9A86A]/20">
       {/* Header */}
-      <div className="bg-black/60 p-4 border-b border-[#D4AF37]/20">
-        <h2 className="text-sm font-black text-[#D4AF37] uppercase tracking-wider">
+      <div className="bg-black/60 p-4 border-b border-[#C9A86A]/20">
+        <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">
           💬 Chat Thread
         </h2>
       </div>
@@ -71,7 +71,7 @@ export default function ChatThreadColumn({
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <div className="w-8 h-8 rounded-full border-2 border-[#D4AF37] border-t-transparent animate-spin mx-auto mb-2"></div>
+              <div className="w-8 h-8 rounded-full border-2 border-[#C9A86A] border-t-transparent animate-spin mx-auto mb-2"></div>
               <p className="text-xs text-slate-400">Loading messages...</p>
             </div>
           </div>
@@ -93,8 +93,8 @@ export default function ChatThreadColumn({
                 <div
                   className={`max-w-xs px-4 py-3 rounded-lg ${
                     msg.sender === "chatter"
-                      ? "bg-gradient-to-r from-[#D4AF37] to-[#F3E5AB] text-[#0A0A0A]"
-                      : "bg-black/60 border border-[#8A6D3F]/20 text-[#F3E5AB]"
+                      ? "bg-gradient-to-r from-[#C9A86A] to-[#E2C48A] text-[#0A0A0A]"
+                      : "bg-black/60 border border-[#9C7A3D]/20 text-[#E2C48A]"
                   }`}
                 >
                   <p className="text-sm break-words">{msg.message_text}</p>
@@ -120,18 +120,18 @@ export default function ChatThreadColumn({
       </div>
 
       {/* Emoji Bar */}
-      <div className="px-4 py-3 border-t border-[#8A6D3F]/20">
+      <div className="px-4 py-3 border-t border-[#9C7A3D]/20">
         <SmileLeiste emojis={emojis} onEmojiClick={handleEmojiClick} />
       </div>
 
       {/* Message Input */}
-      <div className="p-4 bg-black/40 border-t border-[#D4AF37]/20 space-y-3">
+      <div className="p-4 bg-black/40 border-t border-[#C9A86A]/20 space-y-3">
         <textarea
           ref={textareaRef}
           value={currentMessage}
           onChange={(e) => onMessageChange(e.target.value)}
           placeholder="Type a message... (Emojis available above)"
-          className="w-full h-24 bg-black/60 border border-[#D4AF37]/30 rounded-lg px-4 py-3 text-sm text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] resize-none"
+          className="w-full h-24 bg-black/60 border border-[#C9A86A]/30 rounded-lg px-4 py-3 text-sm text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#C9A86A] resize-none"
           disabled={isSending}
         />
 
@@ -141,7 +141,7 @@ export default function ChatThreadColumn({
           className={`w-full py-3 px-4 rounded-lg font-bold uppercase tracking-wider text-sm transition ${
             !currentMessage.trim() || isSending
               ? "bg-slate-600/30 text-slate-500 cursor-not-allowed"
-              : "bg-gradient-to-r from-[#D4AF37] to-[#F3E5AB] text-[#0A0A0A] hover:shadow-lg hover:shadow-[#D4AF37]/50"
+              : "bg-gradient-to-r from-[#C9A86A] to-[#E2C48A] text-[#0A0A0A] hover:shadow-lg hover:shadow-[#C9A86A]/50"
           }`}
         >
           {isSending ? "📤 Sending..." : "✓ Send Message"}

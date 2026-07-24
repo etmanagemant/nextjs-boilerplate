@@ -67,8 +67,8 @@ export default function SubmissionsTable({ submissions }: { submissions: any[] }
             boxSizing: 'border-box'
           }}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = '#D4AF37'
-            e.currentTarget.style.boxShadow = '0 0 12px rgba(212, 175, 55, 0.2)'
+            e.currentTarget.style.borderColor = '#C9A86A'
+            e.currentTarget.style.boxShadow = '0 0 12px rgba(201, 168, 106, 0.2)'
           }}
           onBlur={(e) => {
             e.currentTarget.style.borderColor = '#333'
@@ -120,9 +120,9 @@ export default function SubmissionsTable({ submissions }: { submissions: any[] }
             gridColumn: '1 / -1',
             padding: '40px 32px',
             textAlign: 'center',
-            backgroundColor: 'rgba(212, 175, 55, 0.05)',
+            backgroundColor: 'rgba(201, 168, 106, 0.05)',
             borderRadius: '12px',
-            border: '1px dashed #D4AF37'
+            border: '1px dashed #C9A86A'
           }}>
             <p style={{ color: '#888', margin: 0, fontSize: '1rem' }}>
               Keine Bewerbungen gefunden
@@ -149,8 +149,8 @@ export default function SubmissionsTable({ submissions }: { submissions: any[] }
                 }}
                 onMouseEnter={(e) => {
                   if (!isLoading) {
-                    e.currentTarget.style.borderColor = '#D4AF37'
-                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(212, 175, 55, 0.15)'
+                    e.currentTarget.style.borderColor = '#C9A86A'
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(201, 168, 106, 0.15)'
                   }
                 }}
                 onMouseLeave={(e) => {
@@ -169,7 +169,7 @@ export default function SubmissionsTable({ submissions }: { submissions: any[] }
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <h3 style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: 700, color: '#F3E5AB' }}>
+                      <h3 style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: 700, color: '#E2C48A' }}>
                         {submission.name}
                       </h3>
                       <p style={{ margin: '4px 0', fontSize: '0.85rem', color: '#888' }}>
@@ -270,7 +270,7 @@ export default function SubmissionsTable({ submissions }: { submissions: any[] }
                     {submission.social && (
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ color: '#666', fontSize: '0.9rem', marginBottom: 4 }}>📱 Social Media:</div>
-                        <div style={{ color: '#ccc', fontSize: '0.85rem', padding: '8px 12px', backgroundColor: 'rgba(212, 175, 55, 0.05)', borderRadius: '6px', borderLeft: '2px solid #D4AF37' }}>
+                        <div style={{ color: '#ccc', fontSize: '0.85rem', padding: '8px 12px', backgroundColor: 'rgba(201, 168, 106, 0.05)', borderRadius: '6px', borderLeft: '2px solid #C9A86A' }}>
                           {submission.social}
                         </div>
                       </div>
@@ -286,7 +286,7 @@ export default function SubmissionsTable({ submissions }: { submissions: any[] }
                     {submission.message && (
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ color: '#666', fontSize: '0.9rem', marginBottom: 4 }}>💭 Nachricht:</div>
-                        <div style={{ color: '#ccc', fontSize: '0.85rem', padding: '8px 12px', backgroundColor: 'rgba(212, 175, 55, 0.05)', borderRadius: '6px', maxHeight: '120px', overflow: 'auto' }}>
+                        <div style={{ color: '#ccc', fontSize: '0.85rem', padding: '8px 12px', backgroundColor: 'rgba(201, 168, 106, 0.05)', borderRadius: '6px', maxHeight: '120px', overflow: 'auto' }}>
                           {submission.message}
                         </div>
                       </div>
@@ -295,7 +295,7 @@ export default function SubmissionsTable({ submissions }: { submissions: any[] }
                     {submission.goals && (
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ color: '#666', fontSize: '0.9rem', marginBottom: 4 }}>🎪 Ziele:</div>
-                        <div style={{ color: '#ccc', fontSize: '0.85rem', padding: '8px 12px', backgroundColor: 'rgba(212, 175, 55, 0.05)', borderRadius: '6px' }}>
+                        <div style={{ color: '#ccc', fontSize: '0.85rem', padding: '8px 12px', backgroundColor: 'rgba(201, 168, 106, 0.05)', borderRadius: '6px' }}>
                           {submission.goals}
                         </div>
                       </div>

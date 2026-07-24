@@ -65,7 +65,7 @@ export function ModelNotesPanel({ modelId, isAdmin, compact = false }: ModelNote
           <p className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-2">
             🏢 Model-Notizen
           </p>
-          <p className="text-xs text-[#F3E5AB] whitespace-pre-wrap">
+          <p className="text-xs text-[#E2C48A] whitespace-pre-wrap">
             {loaded && notes ? notes : <span className="text-slate-600">Noch keine Notizen vom Admin</span>}
           </p>
         </div>
@@ -81,7 +81,7 @@ export function ModelNotesPanel({ modelId, isAdmin, compact = false }: ModelNote
         onChange={handleChange}
         onBlur={() => save(notes)}
         placeholder="Allgemeine Notizen zu diesem Model (für Chatter sichtbar)..."
-        className={`w-full bg-black/60 border border-[#D4AF37]/30 rounded p-2 text-xs text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none ${
+        className={`w-full bg-black/60 border border-[#C9A86A]/30 rounded p-2 text-xs text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A] resize-none ${
           compact ? "h-16" : "h-32"
         }`}
       />

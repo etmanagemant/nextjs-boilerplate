@@ -203,7 +203,7 @@ export default function CRMInboxClient({
     // site header's reserved space), so 100vh here would be 8rem taller
     // than what's actually left in the viewport, forcing the whole page
     // to scroll just to reach the bottom of the OnlyFans view.
-    <div className="flex h-[calc(100vh-8rem)] bg-[#0A0A0A] text-[#F3E5AB] overflow-hidden">
+    <div className="flex h-[calc(100vh-8rem)] bg-[#0A0A0A] text-[#E2C48A] overflow-hidden">
       {/* SIDEBAR */}
       <WorkspaceSidebar
         connectedModels={connectedModels}
@@ -228,7 +228,7 @@ export default function CRMInboxClient({
             <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
               <div className="text-center mb-8">
                 <h1 className="text-4xl font-black mb-3 uppercase tracking-wider">
-                  <span>💬</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">CRM Live Inbox</span>
+                  <span>💬</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">CRM Live Inbox</span>
                 </h1>
                 <p className="text-slate-400">Wähle ein Model aus der Sidebar aus</p>
               </div>
@@ -267,7 +267,7 @@ export default function CRMInboxClient({
             // OnlyFans, if open, stays as a reference column alongside it.
             <>
               {/* Column 1: Chat List */}
-              <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-r border-[#D4AF37]/20 transition-all duration-200`}>
+              <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-r border-[#C9A86A]/20 transition-all duration-200`}>
                 <ChatListColumn
                   fans={fans}
                   selectedFanId={selectedFanId}
@@ -291,7 +291,7 @@ export default function CRMInboxClient({
               </div>
 
               {/* Column 3: Sales Cockpit */}
-              <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-l border-[#D4AF37]/20 transition-all duration-200`}>
+              <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-l border-[#C9A86A]/20 transition-all duration-200`}>
                 <SalesCockpitColumn
                   fanMetadata={fanMetadata}
                   scripts={scripts}
@@ -307,7 +307,7 @@ export default function CRMInboxClient({
 
               {/* Column 4: OnlyFans (only when selected) */}
               {selectedOnlyFansModel && (
-                <div className="w-1/5 border-l border-[#D4AF37]/20 overflow-hidden bg-black transition-all duration-200">
+                <div className="w-1/5 border-l border-[#C9A86A]/20 overflow-hidden bg-black transition-all duration-200">
                   <OnlyFansViewer
                     modelId={selectedOnlyFansModel}
                     modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}

@@ -143,7 +143,7 @@ export default function CRMConnectClient({
   };
 
   return (
-    <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB]">
+    <div className="flex h-screen bg-[#0A0A0A] text-[#E2C48A]">
       <WorkspaceSidebar
         connectedModels={connectedModels}
         selectedModel={null}
@@ -155,11 +155,11 @@ export default function CRMConnectClient({
         <div className="max-w-7xl mx-auto min-h-screen">
       {/* Hero Section */}
       <div className="mb-12">
-        <div className="flex items-center justify-between mb-6 pb-6 border-b border-[#8A6D3F]/20 flex-wrap gap-4">
+        <div className="flex items-center justify-between mb-6 pb-6 border-b border-[#9C7A3D]/20 flex-wrap gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-black uppercase tracking-wider flex items-center gap-2">
               <span>🔗</span> 
-              <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Creator Connection Hub</span>
+              <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Creator Connection Hub</span>
             </h1>
             <p className="text-sm text-slate-400 mt-2">
               Manage OnlyFans model sessions and configure communication
@@ -167,7 +167,7 @@ export default function CRMConnectClient({
             </p>
           </div>
           <div className="text-center">
-            <div className="text-3xl font-black text-[#D4AF37]">
+            <div className="text-3xl font-black text-[#C9A86A]">
               {models.length}
             </div>
             <p className="text-xs text-slate-400 uppercase tracking-widest">
@@ -179,8 +179,8 @@ export default function CRMConnectClient({
 
       {/* Creator Overview Grid */}
       <section className="mb-12">
-        <div className="mb-6 pb-4 border-b border-[#8A6D3F]/20">
-          <h2 className="text-xl font-bold text-[#D4AF37] uppercase tracking-wider">
+        <div className="mb-6 pb-4 border-b border-[#9C7A3D]/20">
+          <h2 className="text-xl font-bold text-[#C9A86A] uppercase tracking-wider">
             👥 Creator Connection Grid
           </h2>
           <p className="text-xs text-slate-400 mt-1">
@@ -200,11 +200,11 @@ export default function CRMConnectClient({
                 return (
                   <div
                     key={model.id}
-                    className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 hover:border-[#D4AF37]/30 transition hover:shadow-lg hover:shadow-[#D4AF37]/20 group"
+                    className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 hover:border-[#C9A86A]/30 transition hover:shadow-lg hover:shadow-[#C9A86A]/20 group"
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h3 className="text-lg font-bold text-[#F3E5AB] group-hover:text-[#D4AF37] transition">
+                        <h3 className="text-lg font-bold text-[#E2C48A] group-hover:text-[#C9A86A] transition">
                           {model.name}
                         </h3>
                         <p className="text-xs text-slate-500 mt-1">
@@ -253,7 +253,7 @@ export default function CRMConnectClient({
                       ) : (
                         <button
                           onClick={() => handleOpenBrowserLogin(model)}
-                          className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] text-black hover:shadow-lg hover:shadow-[#D4AF37]/40"
+                          className="w-full py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-xs transition bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black hover:shadow-lg hover:shadow-[#C9A86A]/40"
                         >
                           <span>🌐</span> Model verbinden
                         </button>
@@ -268,7 +268,7 @@ export default function CRMConnectClient({
       {/* Script Library & Chatter Config Section */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Script Library */}
-        <div className="lg:col-span-2 bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10">
+        <div className="lg:col-span-2 bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10">
           {isLoadingScripts ? (
             <ScriptLibrarySkeleton />
           ) : (
@@ -281,13 +281,13 @@ export default function CRMConnectClient({
         </div>
 
         {/* Chatter Configuration Quick Panel */}
-        <div className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10">
-          <h3 className="text-lg font-bold text-[#D4AF37] uppercase tracking-wider mb-4">
+        <div className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10">
+          <h3 className="text-lg font-bold text-[#C9A86A] uppercase tracking-wider mb-4">
             👥 Team Configuration
           </h3>
 
           <div className="space-y-3">
-            <div className="bg-black/60 p-4 rounded-lg border border-[#8A6D3F]/10">
+            <div className="bg-black/60 p-4 rounded-lg border border-[#9C7A3D]/10">
               <p className="text-xs text-slate-400 uppercase tracking-widest mb-2">
                 Active Chatters
               </p>
@@ -299,9 +299,9 @@ export default function CRMConnectClient({
                     .map((chatter) => (
                       <div
                         key={chatter.user_id}
-                        className="text-sm text-[#F3E5AB] flex items-center gap-2"
+                        className="text-sm text-[#E2C48A] flex items-center gap-2"
                       >
-                        <span className="w-2 h-2 bg-[#D4AF37] rounded-full"></span>
+                        <span className="w-2 h-2 bg-[#C9A86A] rounded-full"></span>
                         {chatter.full_name}
                       </div>
                     ))
@@ -311,7 +311,7 @@ export default function CRMConnectClient({
               </div>
             </div>
 
-            <div className="bg-black/60 p-4 rounded-lg border border-[#8A6D3F]/10">
+            <div className="bg-black/60 p-4 rounded-lg border border-[#9C7A3D]/10">
               <p className="text-xs text-slate-400 uppercase tracking-widest mb-2">
                 Active Moderators
               </p>
@@ -323,7 +323,7 @@ export default function CRMConnectClient({
                     .map((mod) => (
                       <div
                         key={mod.user_id}
-                        className="text-sm text-[#F3E5AB] flex items-center gap-2"
+                        className="text-sm text-[#E2C48A] flex items-center gap-2"
                       >
                         <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
                         {mod.full_name}

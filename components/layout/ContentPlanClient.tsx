@@ -304,8 +304,8 @@ export default function ContentPlanClient({
       {/* ========================================
           COMMUNITY MANAGER
           ======================================== */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg">
-        <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">
+      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg">
+        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">
           📌 Community-Manager
         </h2>
         <div className="flex gap-3 mb-6">
@@ -315,11 +315,11 @@ export default function ContentPlanClient({
               placeholder="Neue Community/Subreddit..."
               value={newCommunityName}
               onChange={(e) => setNewCommunityName(e.target.value)}
-              className="flex-1 px-3 py-2 border border-[#8A6D3F]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#D4AF37] outline-none"
+              className="flex-1 px-3 py-2 border border-[#9C7A3D]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#C9A86A] outline-none"
             />
             <button
               type="submit"
-              className="bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black px-4 py-2 rounded-md text-sm font-bold hover:from-[#E5C158] transition cursor-pointer"
+              className="bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black px-4 py-2 rounded-md text-sm font-bold hover:from-[#E5C158] transition cursor-pointer"
             >
               Hinzufügen
             </button>
@@ -330,7 +330,7 @@ export default function ContentPlanClient({
           {communities.map((community) => (
             <div
               key={community.id}
-              className="bg-[#050505] border border-[#8A6D3F]/20 rounded p-2 flex justify-between items-center"
+              className="bg-[#050505] border border-[#9C7A3D]/20 rounded p-2 flex justify-between items-center"
             >
               <span className="text-xs text-white truncate">{community.name}</span>
               <button
@@ -347,8 +347,8 @@ export default function ContentPlanClient({
       {/* ========================================
           CONTENT PLAN POSTS (EXPLORER GRID)
           ======================================== */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg">
-        <h2 className="text-sm font-bold mb-6 text-[#D4AF37] uppercase tracking-wider">
+      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg">
+        <h2 className="text-sm font-bold mb-6 text-[#C9A86A] uppercase tracking-wider">
           🖼️ Content-Fotos & Plan
         </h2>
 
@@ -359,8 +359,8 @@ export default function ContentPlanClient({
           onDrop={handleUploadDrop}
           className={`mb-6 p-8 border-2 border-dashed rounded-lg transition cursor-pointer text-center ${
             dragOverUpload
-              ? "border-[#D4AF37] bg-[#D4AF37]/10"
-              : "border-[#8A6D3F]/30 bg-[#050505] hover:border-[#8A6D3F]/50"
+              ? "border-[#C9A86A] bg-[#C9A86A]/10"
+              : "border-[#9C7A3D]/30 bg-[#050505] hover:border-[#9C7A3D]/50"
           }`}
         >
           <input
@@ -408,8 +408,8 @@ export default function ContentPlanClient({
                 onDrop={() => handleDrop(post.id)}
                 className={`bg-[#050505] border-2 rounded-lg overflow-hidden transition cursor-move transform hover:scale-105 ${
                   draggedItem === post.id
-                    ? "border-[#D4AF37] opacity-50"
-                    : "border-[#8A6D3F]/20 hover:border-[#D4AF37]/50"
+                    ? "border-[#C9A86A] opacity-50"
+                    : "border-[#9C7A3D]/20 hover:border-[#C9A86A]/50"
                 }`}
               >
                 {/* PHOTO */}
@@ -426,7 +426,7 @@ export default function ContentPlanClient({
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                     <button
                       onClick={() => startEditingPost(post)}
-                      className="bg-[#D4AF37] text-black px-3 py-1 rounded text-xs font-bold hover:bg-[#E5C158] cursor-pointer"
+                      className="bg-[#C9A86A] text-black px-3 py-1 rounded text-xs font-bold hover:bg-[#E5C158] cursor-pointer"
                     >
                       ✏️ Bearbeiten
                     </button>
@@ -438,25 +438,25 @@ export default function ContentPlanClient({
                   // EDIT MODE
                   <div className="p-3 space-y-2 text-xs bg-[#0A0A0A]">
                     <div>
-                      <label className="text-[#D4AF37] font-semibold block mb-1">Datum</label>
+                      <label className="text-[#C9A86A] font-semibold block mb-1">Datum</label>
                       <input
                         type="date"
                         value={editValues.post_date || ""}
                         onChange={(e) =>
                           setEditValues({ ...editValues, post_date: e.target.value })
                         }
-                        className="w-full bg-[#050505] border border-[#8A6D3F]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
+                        className="w-full bg-[#050505] border border-[#9C7A3D]/30 rounded px-2 py-1 text-white outline-none focus:border-[#C9A86A]"
                       />
                     </div>
 
                     <div>
-                      <label className="text-[#D4AF37] font-semibold block mb-1">Typ</label>
+                      <label className="text-[#C9A86A] font-semibold block mb-1">Typ</label>
                       <select
                         value={editValues.content_type || ""}
                         onChange={(e) =>
                           setEditValues({ ...editValues, content_type: e.target.value })
                         }
-                        className="w-full bg-[#050505] border border-[#8A6D3F]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
+                        className="w-full bg-[#050505] border border-[#9C7A3D]/30 rounded px-2 py-1 text-white outline-none focus:border-[#C9A86A]"
                       >
                         <option value="">Wählen...</option>
                         <option value="photo">Foto</option>
@@ -467,7 +467,7 @@ export default function ContentPlanClient({
                     </div>
 
                     <div>
-                      <label className="text-[#D4AF37] font-semibold block mb-1">Titel-Idee</label>
+                      <label className="text-[#C9A86A] font-semibold block mb-1">Titel-Idee</label>
                       <div className="flex gap-2">
                         <input
                           type="text"
@@ -476,7 +476,7 @@ export default function ContentPlanClient({
                             setEditValues({ ...editValues, title_idea: e.target.value })
                           }
                           placeholder="Titel..."
-                          className="flex-1 bg-[#050505] border border-[#8A6D3F]/30 rounded px-2 py-1 text-white outline-none focus:border-[#D4AF37]"
+                          className="flex-1 bg-[#050505] border border-[#9C7A3D]/30 rounded px-2 py-1 text-white outline-none focus:border-[#C9A86A]"
                         />
                         {editValues.title_idea && (
                           <button
@@ -485,7 +485,7 @@ export default function ContentPlanClient({
                             className={`${
                               copiedTitle === editValues.title_idea
                                 ? "bg-emerald-500 text-white"
-                                : "bg-[#8A6D3F]/20 text-[#D4AF37] hover:bg-[#8A6D3F]/40"
+                                : "bg-[#9C7A3D]/20 text-[#C9A86A] hover:bg-[#9C7A3D]/40"
                             } px-3 py-1 rounded text-xs font-bold cursor-pointer transition flex-shrink-0`}
                             title="Titel kopieren"
                           >
@@ -504,13 +504,13 @@ export default function ContentPlanClient({
                         }
                         className="cursor-pointer"
                       />
-                      <label className="text-[#D4AF37] font-semibold cursor-pointer">
+                      <label className="text-[#C9A86A] font-semibold cursor-pointer">
                         Veröffentlicht
                       </label>
                     </div>
 
                     <div>
-                      <label className="text-[#D4AF37] font-semibold block mb-2">
+                      <label className="text-[#C9A86A] font-semibold block mb-2">
                         Communities
                       </label>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -534,7 +534,7 @@ export default function ContentPlanClient({
                       </div>
                     </div>
 
-                    <div className="flex gap-2 pt-2 border-t border-[#8A6D3F]/10">
+                    <div className="flex gap-2 pt-2 border-t border-[#9C7A3D]/10">
                       <button
                         onClick={savePostEdits}
                         disabled={isSaving}
@@ -560,16 +560,16 @@ export default function ContentPlanClient({
                   // VIEW MODE
                   <div className="p-3 space-y-1 text-xs bg-[#0A0A0A]">
                     <div className="flex items-center justify-between">
-                      <span className="text-[#D4AF37] font-semibold">Datum:</span>
+                      <span className="text-[#C9A86A] font-semibold">Datum:</span>
                       <span className="text-white">{post.post_date || "—"}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[#D4AF37] font-semibold">Typ:</span>
+                      <span className="text-[#C9A86A] font-semibold">Typ:</span>
                       <span className="text-white">{post.content_type || "—"}</span>
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[#D4AF37] font-semibold">Titel:</span>
+                        <span className="text-[#C9A86A] font-semibold">Titel:</span>
                       </div>
                       <div className="flex gap-2 items-center">
                         <span className="text-white flex-1 break-words text-sm">
@@ -584,7 +584,7 @@ export default function ContentPlanClient({
                               ? "bg-slate-700/30 text-slate-500 cursor-not-allowed"
                               : copiedTitle === post.title_idea
                               ? "bg-emerald-500 text-white"
-                              : "bg-[#D4AF37] text-black hover:bg-[#E5C158]"
+                              : "bg-[#C9A86A] text-black hover:bg-[#E5C158]"
                           } px-3 py-1 rounded text-xs font-bold transition flex-shrink-0 cursor-pointer`}
                           title={post.title_idea ? "Titel kopieren" : "Kein Titel vorhanden"}
                         >
@@ -593,15 +593,15 @@ export default function ContentPlanClient({
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[#D4AF37] font-semibold">Status:</span>
+                      <span className="text-[#C9A86A] font-semibold">Status:</span>
                       <span className={post.published ? "text-emerald-400" : "text-slate-500"}>
                         {post.published ? "✓ Online" : "○ Entwurf"}
                       </span>
                     </div>
 
                     {(post.communities || []).length > 0 && (
-                      <div className="pt-2 border-t border-[#8A6D3F]/10">
-                        <span className="text-[#D4AF37] font-semibold text-xs">Communities:</span>
+                      <div className="pt-2 border-t border-[#9C7A3D]/10">
+                        <span className="text-[#C9A86A] font-semibold text-xs">Communities:</span>
                         <div className="text-[10px] text-slate-400 mt-1">
                           {post.communities
                             ?.map(
@@ -613,10 +613,10 @@ export default function ContentPlanClient({
                       </div>
                     )}
 
-                    <div className="flex gap-2 pt-2 border-t border-[#8A6D3F]/10">
+                    <div className="flex gap-2 pt-2 border-t border-[#9C7A3D]/10">
                       <button
                         onClick={() => startEditingPost(post)}
-                        className="flex-1 bg-[#D4AF37]/10 text-[#D4AF37] px-2 py-1 rounded text-xs font-bold hover:bg-[#D4AF37]/20 cursor-pointer"
+                        className="flex-1 bg-[#C9A86A]/10 text-[#C9A86A] px-2 py-1 rounded text-xs font-bold hover:bg-[#C9A86A]/20 cursor-pointer"
                       >
                         ✏️ Bearbeiten
                       </button>

@@ -227,14 +227,14 @@ export default function DashboardPage() {
     if (!error) { ladeLiveDaten(); }
   }
 
-  if (loading) return <div className="text-center pt-24 font-bold text-[#D4AF37] animate-pulse">Lade Live-Dashboard...</div>;
+  if (loading) return <div className="text-center pt-24 font-bold text-[#C9A86A] animate-pulse">Lade Live-Dashboard...</div>;
   
   // MODERATOR-SPEZIFISCHES DASHBOARD
   if (currentUserRole === "moderator" && moderatorStriptchatStats) {
     return (
-      <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#8A6D3F]/20 shadow-2xl">
-        <div className="mb-6 border-b border-[#8A6D3F]/20 pb-4">
-          <h1 className="text-2xl font-black uppercase tracking-wider"><span>🎭</span> <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">Stripchat Dashboard</span></h1>
+      <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
+        <div className="mb-6 border-b border-[#9C7A3D]/20 pb-4">
+          <h1 className="text-2xl font-black uppercase tracking-wider"><span>🎭</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Stripchat Dashboard</span></h1>
           <p className="text-xs text-slate-400 mt-1">Deine persönlichen Stripchat-Session-Daten & Umsätze</p>
         </div>
 
@@ -264,19 +264,19 @@ export default function DashboardPage() {
   
   // ADMIN DASHBOARD (Original)
   return (
-    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#F3E5AB] rounded-xl my-6 border border-[#8A6D3F]/20 shadow-2xl">
-      <div className="mb-6 border-b border-[#8A6D3F]/20 pb-4">
-        <h1 className="text-2xl font-black bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase tracking-wider">ET Performance Dashboard</h1>
+    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
+      <div className="mb-6 border-b border-[#9C7A3D]/20 pb-4">
+        <h1 className="text-2xl font-black bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase tracking-wider">ET Performance Dashboard</h1>
         <p className="text-xs text-slate-400 mt-1">Echtzeit-Umsatzauswertungen & Performancedaten</p>
       </div>
 
       {/* Zuweisungsbox */}
       {isAdmin && unassignedRevenues.length > 0 && (
-        <section className="mb-8 bg-amber-950/20 p-5 rounded-xl border-2 border-[#D4AF37]/40 shadow-xl">
-          <h2 className="text-xs font-black text-[#D4AF37] uppercase tracking-widest mb-3"><span>⚠️</span> <span>Offene Einnahmen & Tips Pool ({unassignedRevenues.length})</span></h2>
+        <section className="mb-8 bg-gold-950/20 p-5 rounded-xl border-2 border-[#C9A86A]/40 shadow-xl">
+          <h2 className="text-xs font-black text-[#C9A86A] uppercase tracking-widest mb-3"><span>⚠️</span> <span>Offene Einnahmen & Tips Pool ({unassignedRevenues.length})</span></h2>
           <div className="space-y-2">
             {unassignedRevenues.map((r) => (
-              <div key={r.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#050505] p-3 rounded-lg border border-[#8A6D3F]/20 gap-3 text-xs">
+              <div key={r.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#050505] p-3 rounded-lg border border-[#9C7A3D]/20 gap-3 text-xs">
                 <div>
                   <span className="font-bold text-white block">Eingegangener Tip: ${Number(r.amount).toFixed(2)}</span>
                   <span className="text-[10px] text-slate-400 block font-mono">Model-Herkunft: {r.modelName}</span>
@@ -285,7 +285,7 @@ export default function DashboardPage() {
                   <select 
                     value={selectedChatterForTransfer[r.id] || ""} 
                     onChange={(e) => setSelectedChatterForTransfer({...selectedChatterForTransfer, [r.id]: e.target.value})}
-                    className="bg-black border border-[#8A6D3F]/30 rounded p-1.5 text-xs text-white outline-none cursor-pointer"
+                    className="bg-black border border-[#9C7A3D]/30 rounded p-1.5 text-xs text-white outline-none cursor-pointer"
                   >
                     <option value="">Chatter wählen...</option>
                     {userStatsArray.filter(u => u.name !== "Tobias").map((u: any) => (
@@ -304,15 +304,15 @@ export default function DashboardPage() {
       {isAdmin && (
         <section className="mb-8">
           <Link href="/management/crm-connect" className="group block">
-            <div className="bg-gradient-to-br from-[#1a1a1a] to-black p-6 rounded-xl border-2 border-[#D4AF37]/40 shadow-2xl hover:border-[#D4AF37]/80 hover:shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all duration-300 transform hover:scale-102">
+            <div className="bg-gradient-to-br from-[#1a1a1a] to-black p-6 rounded-xl border-2 border-[#C9A86A]/40 shadow-2xl hover:border-[#C9A86A]/80 hover:shadow-[0_0_20px_rgba(201, 168, 106,0.3)] transition-all duration-300 transform hover:scale-102">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-black uppercase tracking-widest transition"><span>🖥️</span> <span className="text-[#D4AF37] group-hover:text-[#F3E5AB]">CRM Model-Verbindung & Settings</span></h2>
+                  <h2 className="text-lg font-black uppercase tracking-widest transition"><span>🖥️</span> <span className="text-[#C9A86A] group-hover:text-[#E2C48A]">CRM Model-Verbindung & Settings</span></h2>
                   <p className="text-xs text-slate-400 mt-2">Verwalte OnlyFans Session-Daten, Script-Bibliotheken und Chatter-Emoji-Konfiguration</p>
                 </div>
                 <div className="text-4xl group-hover:scale-110 transition">⚙️</div>
               </div>
-              <div className="mt-4 inline-flex items-center gap-2 text-[#D4AF37] font-bold text-sm group-hover:translate-x-2 transition">
+              <div className="mt-4 inline-flex items-center gap-2 text-[#C9A86A] font-bold text-sm group-hover:translate-x-2 transition">
                 Zum Admin-Panel <span>→</span>
               </div>
             </div>
@@ -324,20 +324,20 @@ export default function DashboardPage() {
       {(currentUserRole === "chatter" || currentUserRole === "moderator" || isAdmin) && (
         <section className="mb-8">
           <Link href="/crm-inbox" className="group block">
-            <div className="bg-gradient-to-br from-amber-900/30 to-black p-8 rounded-xl border-2 border-[#D4AF37]/60 shadow-2xl hover:border-[#F3E5AB]/80 hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-300 transform hover:scale-105">
+            <div className="bg-gradient-to-br from-gold-900/30 to-black p-8 rounded-xl border-2 border-[#C9A86A]/60 shadow-2xl hover:border-[#E2C48A]/80 hover:shadow-[0_0_30px_rgba(201, 168, 106,0.5)] transition-all duration-300 transform hover:scale-105">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-black uppercase tracking-widest animate-pulse"><span>💬</span> <span className="text-[#F3E5AB] group-hover:text-[#D4AF37] transition">Live-Inbox & Chat-Zentrale (CRM)</span></h2>
+                  <h2 className="text-2xl font-black uppercase tracking-widest animate-pulse"><span>💬</span> <span className="text-[#E2C48A] group-hover:text-[#C9A86A] transition">Live-Inbox & Chat-Zentrale (CRM)</span></h2>
                   <p className="text-sm text-slate-300 mt-3 font-semibold">Verwalte Fan-Konversationen • Injiziere Sales-Scripts • Nutze personalisierte Emoji-Leiste</p>
-                  <div className="mt-3 flex gap-3 text-xs font-bold text-[#D4AF37]">
-                    <span className="bg-[#D4AF37]/20 px-3 py-1 rounded">📨 Live-Messaging</span>
-                    <span className="bg-[#D4AF37]/20 px-3 py-1 rounded">🔥 Script-Injector</span>
-                    <span className="bg-[#D4AF37]/20 px-3 py-1 rounded">😊 Emoji-Leiste</span>
+                  <div className="mt-3 flex gap-3 text-xs font-bold text-[#C9A86A]">
+                    <span className="bg-[#C9A86A]/20 px-3 py-1 rounded">📨 Live-Messaging</span>
+                    <span className="bg-[#C9A86A]/20 px-3 py-1 rounded">🔥 Script-Injector</span>
+                    <span className="bg-[#C9A86A]/20 px-3 py-1 rounded">😊 Emoji-Leiste</span>
                   </div>
                 </div>
                 <div className="text-6xl group-hover:scale-125 transition animate-bounce">📱</div>
               </div>
-              <div className="mt-6 inline-flex items-center gap-2 text-[#D4AF37] font-black text-base group-hover:translate-x-2 transition bg-[#D4AF37]/10 px-4 py-2 rounded-lg border border-[#D4AF37]/30 hover:bg-[#D4AF37]/20">
+              <div className="mt-6 inline-flex items-center gap-2 text-[#C9A86A] font-black text-base group-hover:translate-x-2 transition bg-[#C9A86A]/10 px-4 py-2 rounded-lg border border-[#C9A86A]/30 hover:bg-[#C9A86A]/20">
                 Zur Chat-Zentrale öffnen <span>→</span>
               </div>
             </div>
@@ -347,40 +347,40 @@ export default function DashboardPage() {
 
       {/* Kacheln */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        <div className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg text-center">
+        <div className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg text-center">
           {isAdmin ? (
             <>
               <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Live Agentur-Umsatz (Admin)</div>
-              <div className="text-3xl font-black text-[#D4AF37] mt-2 font-mono">${gesamtBruttoAgentur.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Brutto</span></div>
+              <div className="text-3xl font-black text-[#C9A86A] mt-2 font-mono">${gesamtBruttoAgentur.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Brutto</span></div>
               <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">${gesamtNettoAgentur.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Netto</span></div>
             </>
           ) : (
             <>
               <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Deine Umsatz-Leistung</div>
-              <div className="text-3xl font-black text-[#D4AF37] mt-2 font-mono">${chatterBrutto.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Brutto</span></div>
+              <div className="text-3xl font-black text-[#C9A86A] mt-2 font-mono">${chatterBrutto.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Brutto</span></div>
               <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">${chatterNetto.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Netto</span></div>
             </>
           )}
         </div>
-        <div className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg text-center flex flex-col justify-center items-center">
+        <div className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg text-center flex flex-col justify-center items-center">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Agentur Ranglisten-Platz</div>
-          <div className="text-4xl font-black text-[#D4AF37] mt-2 font-mono">
+          <div className="text-4xl font-black text-[#C9A86A] mt-2 font-mono">
             🏆 #{userStatsArray.findIndex(u => u.brutto === chatterBrutto) + 1} / {userStatsArray.length}
           </div>
         </div>
       </div>
 
       {/* Rangliste Mitarbeiter */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg mb-8">
-        <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">Mitarbeiter Live-Rangliste</h2>
+      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg mb-8">
+        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Mitarbeiter Live-Rangliste</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[#8A6D3F]/10 bg-[#050505] text-[#D4AF37] font-semibold text-xs uppercase tracking-wider">
+              <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
                 <th className="p-3 w-12">Rang</th>
                 <th className="p-3">Mitarbeiter</th>
                 <th className="p-3">Arbeitszeit</th>
-                <th className="p-3 text-amber-200">Umsatz Brutto</th>
+                <th className="p-3 text-gold-200">Umsatz Brutto</th>
                 <th className="p-3 text-emerald-400">Umsatz Netto</th>
                 <th className="p-3 text-slate-400">Ø Netto / h</th>
               </tr>
@@ -389,11 +389,11 @@ export default function DashboardPage() {
               {userStatsArray.map((user, idx) => {
                 const usdPerHr = user.hours > 0 ? user.netto / user.hours : 0;
                 return (
-                  <tr key={idx} className="border-b border-[#8A6D3F]/5 hover:bg-black/20 transition">
-                    <td className="p-3 font-mono font-black text-[#D4AF37]">#{idx + 1}</td>
+                  <tr key={idx} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
+                    <td className="p-3 font-mono font-black text-[#C9A86A]">#{idx + 1}</td>
                     <td className="p-3 font-semibold text-white tracking-wide">{user.name}</td>
                     <td className="p-3 font-mono text-slate-400">{user.hours.toFixed(2)} h</td>
-                    <td className="p-3 font-mono text-amber-200/80">${user.brutto.toFixed(2)}</td>
+                    <td className="p-3 font-mono text-gold-200/80">${user.brutto.toFixed(2)}</td>
                     <td className="p-3 font-mono font-bold text-emerald-400">${user.netto.toFixed(2)}</td>
                     <td className="p-3 font-mono text-slate-300">${usdPerHr.toFixed(2)}/h</td>
                   </tr>
@@ -405,24 +405,24 @@ export default function DashboardPage() {
       </section>
 
       {/* 👑 NEUE MODEL RANGLISTE (Vollautomatisch basierend auf der Herkunft der Einnahmen!) */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 shadow-lg mb-8">
-        <h2 className="text-sm font-bold mb-4 text-[#8A6D3F] uppercase tracking-wider">Model Live-Umsatz-Performance</h2>
+      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg mb-8">
+        <h2 className="text-sm font-bold mb-4 text-[#9C7A3D] uppercase tracking-wider">Model Live-Umsatz-Performance</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[#8A6D3F]/10 bg-[#050505] text-[#8A6D3F] font-semibold text-xs uppercase tracking-wider">
+              <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#9C7A3D] font-semibold text-xs uppercase tracking-wider">
                 <th className="p-3 w-12">Platz</th>
                 <th className="p-3">Model Name</th>
-                <th className="p-3 text-amber-200">Generiert Brutto</th>
+                <th className="p-3 text-gold-200">Generiert Brutto</th>
                 <th className="p-3 text-emerald-400">Netto Account-Eingang</th>
               </tr>
             </thead>
             <tbody>
               {modelStatsArray.map((model, idx) => (
-                <tr key={idx} className="border-b border-[#8A6D3F]/5 hover:bg-black/20 transition">
-                  <td className="p-3 font-mono font-black text-[#D4AF37]">#{idx + 1}</td>
+                <tr key={idx} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
+                  <td className="p-3 font-mono font-black text-[#C9A86A]">#{idx + 1}</td>
                   <td className="p-3 font-semibold text-white tracking-wide">✨ {model.name}</td>
-                  <td className="p-3 font-mono text-amber-200/80">${model.brutto.toFixed(2)}</td>
+                  <td className="p-3 font-mono text-gold-200/80">${model.brutto.toFixed(2)}</td>
                   <td className="p-3 font-mono font-bold text-emerald-400">${model.netto.toFixed(2)}</td>
                 </tr>
               ))}
@@ -433,12 +433,12 @@ export default function DashboardPage() {
 
       {/* ⚠️ UNVOLLSTÄNDIGE BEWERBUNGEN (ABBRÜCHE) */}
       {abandonedLeads.length > 0 && (
-        <section className="bg-black/40 p-6 rounded-xl border border-amber-600/30 shadow-lg">
-          <h2 className="text-sm font-bold mb-4 text-amber-500 uppercase tracking-wider"><span>⚠️</span> <span>Unvollständige Bewerbungen (Abbrüche) ({abandonedLeads.length})</span></h2>
+        <section className="bg-black/40 p-6 rounded-xl border border-gold-600/30 shadow-lg">
+          <h2 className="text-sm font-bold mb-4 text-gold-500 uppercase tracking-wider"><span>⚠️</span> <span>Unvollständige Bewerbungen (Abbrüche) ({abandonedLeads.length})</span></h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
               <thead>
-                <tr className="border-b border-amber-600/20 bg-[#050505] text-amber-500 font-semibold text-xs uppercase tracking-wider">
+                <tr className="border-b border-gold-600/20 bg-[#050505] text-gold-500 font-semibold text-xs uppercase tracking-wider">
                   <th className="p-3">Name</th>
                   <th className="p-3">Handynummer</th>
                   <th className="p-3">Abgebrochen am</th>
@@ -456,12 +456,12 @@ export default function DashboardPage() {
                     minute: "2-digit"
                   });
                   return (
-                    <tr key={lead.id} className="border-b border-amber-600/10 hover:bg-amber-950/10 transition">
+                    <tr key={lead.id} className="border-b border-gold-600/10 hover:bg-gold-950/10 transition">
                       <td className="p-3 font-semibold text-white tracking-wide">{lead.name || "Unbekannt"}</td>
                       <td className="p-3 font-mono text-slate-300">{lead.phone || "—"}</td>
                       <td className="p-3 text-slate-400 text-xs">{formattedDate}</td>
                       <td className="p-3">
-                        <span className="inline-flex items-center gap-1 bg-amber-900/30 text-amber-400 px-3 py-1 rounded-full text-xs font-semibold border border-amber-600/20">
+                        <span className="inline-flex items-center gap-1 bg-gold-900/30 text-gold-400 px-3 py-1 rounded-full text-xs font-semibold border border-gold-600/20">
                           📝 Beim Tippen abgebrochen
                         </span>
                       </td>

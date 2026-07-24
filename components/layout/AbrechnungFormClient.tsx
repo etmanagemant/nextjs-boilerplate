@@ -20,16 +20,16 @@ export default function AbrechnungFormClient({ profile, actionTarget }: { profil
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-slate-400 font-bold mb-1 uppercase text-[10px]">Rechnungsadresse (Dein Name & Anschrift)</label>
-          <textarea name="rechnungs_adresse" defaultValue={profile?.rechnungs_adresse || ""} placeholder="Max Mustermann&#10;Musterstraße 1&#10;12345 Stadt" rows={3} className="w-full bg-[#050505] border border-[#8A6D3F]/30 rounded p-2 text-white outline-none focus:border-[#D4AF37] resize-none" />
+          <textarea name="rechnungs_adresse" defaultValue={profile?.rechnungs_adresse || ""} placeholder="Max Mustermann&#10;Musterstraße 1&#10;12345 Stadt" rows={3} className="w-full bg-[#050505] border border-[#9C7A3D]/30 rounded p-2 text-white outline-none focus:border-[#C9A86A] resize-none" />
         </div>
         <div className="space-y-3">
           <div>
             <label className="block text-slate-400 font-bold mb-1 uppercase text-[10px]">Steuernummer / Steuer-ID (Falls vorhanden)</label>
-            <input type="text" name="steuer_id" defaultValue={profile?.steuer_id || ""} placeholder="Steuernummer eintragen" className="w-full bg-[#050505] border border-[#8A6D3F]/30 rounded p-2 text-white outline-none focus:border-[#D4AF37]" />
+            <input type="text" name="steuer_id" defaultValue={profile?.steuer_id || ""} placeholder="Steuernummer eintragen" className="w-full bg-[#050505] border border-[#9C7A3D]/30 rounded p-2 text-white outline-none focus:border-[#C9A86A]" />
           </div>
           <div>
             <label className="block text-slate-400 font-bold mb-1 uppercase text-[10px]">Auszahlungsmethode</label>
-            <select name="zahlungs_methode" value={methode} onChange={(e) => setMethode(e.target.value)} className="w-full bg-[#050505] border border-[#8A6D3F]/30 rounded p-2 text-white outline-none focus:border-[#D4AF37] cursor-pointer">
+            <select name="zahlungs_methode" value={methode} onChange={(e) => setMethode(e.target.value)} className="w-full bg-[#050505] border border-[#9C7A3D]/30 rounded p-2 text-white outline-none focus:border-[#C9A86A] cursor-pointer">
               <option value="Banküberweisung">Banküberweisung (SEPA)</option>
               <option value="USDT (Tether)">USDT (Tether - TRC20)</option>
               <option value="Ethereum (ETH)">Ethereum (ETH)</option>
@@ -42,10 +42,10 @@ export default function AbrechnungFormClient({ profile, actionTarget }: { profil
       </div>
       <div>
         <label className="block text-slate-400 font-bold mb-1 uppercase text-[10px]">Auszahlungsdetails (Wallet oder Kontodaten)</label>
-        <input type="text" name="zahlungs_details" defaultValue={profile?.zahlungs_details || ""} placeholder={detailPlaceholder} required className="w-full bg-[#050505] border border-[#8A6D3F]/30 rounded p-2 text-white outline-none focus:border-[#D4AF37] font-mono" />
+        <input type="text" name="zahlungs_details" defaultValue={profile?.zahlungs_details || ""} placeholder={detailPlaceholder} required className="w-full bg-[#050505] border border-[#9C7A3D]/30 rounded p-2 text-white outline-none focus:border-[#C9A86A] font-mono" />
       </div>
       <div className="flex justify-end">
-        <button type="submit" className="bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black px-4 py-2 rounded-md font-bold hover:from-[#E5C158] transition cursor-pointer">Zahlungsdaten speichern</button>
+        <button type="submit" className="bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black px-4 py-2 rounded-md font-bold hover:from-[#E5C158] transition cursor-pointer">Zahlungsdaten speichern</button>
       </div>
     </form>
   );

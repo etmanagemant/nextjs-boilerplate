@@ -37,8 +37,8 @@ export default function ContentUploader({
 
   if (!isInitialized) {
     return (
-      <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 mb-8 shadow-lg">
-        <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">
+      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 shadow-lg">
+        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">
           📸 Bilder hochladen
         </h2>
         <div className="text-yellow-400 text-xs text-center py-4">
@@ -128,8 +128,8 @@ export default function ContentUploader({
   };
 
   return (
-    <section className="bg-black/40 p-6 rounded-xl border border-[#8A6D3F]/10 mb-8 shadow-lg">
-      <h2 className="text-sm font-bold mb-4 text-[#D4AF37] uppercase tracking-wider">
+    <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 shadow-lg">
+      <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">
         📸 Bilder hochladen
       </h2>
 
@@ -140,8 +140,8 @@ export default function ContentUploader({
         onDrop={handleDrop}
         className={`relative border-2 border-dashed rounded-xl p-8 text-center transition cursor-pointer ${
           isDragActive
-            ? "border-[#D4AF37] bg-[#D4AF37]/10"
-            : "border-[#8A6D3F]/30 bg-[#050505]/50 hover:border-[#8A6D3F]/60"
+            ? "border-[#C9A86A] bg-[#C9A86A]/10"
+            : "border-[#9C7A3D]/30 bg-[#050505]/50 hover:border-[#9C7A3D]/60"
         }`}
       >
         <input
@@ -154,10 +154,10 @@ export default function ContentUploader({
 
         {isLoading && uploadProgress !== null ? (
           <div className="space-y-3">
-            <div className="text-[#D4AF37] font-semibold text-sm"><span>⬆️</span> Lädt...</div>
+            <div className="text-[#C9A86A] font-semibold text-sm"><span>⬆️</span> Lädt...</div>
             <div className="w-full bg-[#050505] rounded-full h-2">
               <div
-                className="bg-gradient-to-r from-[#D4AF37] to-[#8A6D3F] h-full transition-all"
+                className="bg-gradient-to-r from-[#C9A86A] to-[#9C7A3D] h-full transition-all"
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>
@@ -170,7 +170,7 @@ export default function ContentUploader({
         ) : (
           <div className="space-y-2">
             <div className="text-3xl">📤</div>
-            <div className="text-sm text-[#D4AF37] font-bold">
+            <div className="text-sm text-[#C9A86A] font-bold">
               Zieh Bilder hier hin oder klick
             </div>
             <div className="text-xs text-slate-400">JPG, PNG, GIF (max 10MB)</div>

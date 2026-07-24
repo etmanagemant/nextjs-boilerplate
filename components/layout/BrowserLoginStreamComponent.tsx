@@ -173,10 +173,10 @@ export default function BrowserLoginStreamComponent({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#0f0f0f] border border-[#D4AF37]/30 rounded-lg shadow-2xl w-[98vw] max-w-[1900px] p-4">
+      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#0f0f0f] border border-[#C9A86A]/30 rounded-lg shadow-2xl w-[98vw] max-w-[1900px] p-4">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-xl font-bold text-[#D4AF37] flex items-center gap-2">
+            <h2 className="text-xl font-bold text-[#C9A86A] flex items-center gap-2">
               🌐 Live Browser-Login
               {phase === "live" && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
@@ -185,10 +185,10 @@ export default function BrowserLoginStreamComponent({
               )}
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              <span className="font-bold text-[#D4AF37]">Model:</span> {modelName}
+              <span className="font-bold text-[#C9A86A]">Model:</span> {modelName}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-[#D4AF37] transition text-xl">
+          <button onClick={onClose} className="text-gray-400 hover:text-[#C9A86A] transition text-xl">
             ✕
           </button>
         </div>
@@ -212,12 +212,12 @@ export default function BrowserLoginStreamComponent({
                   value={pasteText}
                   onChange={(e) => setPasteText(e.target.value)}
                   placeholder="Sonderzeichen wie @ hier eingeben (mit deiner normalen Tastatur)..."
-                  className="flex-1 bg-black/50 border border-[#D4AF37]/30 rounded px-3 py-1.5 text-sm text-[#F3E5AB] placeholder:text-slate-500 focus:outline-none focus:border-[#D4AF37]"
+                  className="flex-1 bg-black/50 border border-[#C9A86A]/30 rounded px-3 py-1.5 text-sm text-[#E2C48A] placeholder:text-slate-500 focus:outline-none focus:border-[#C9A86A]"
                 />
                 <button
                   onClick={handlePasteToVnc}
                   disabled={!pasteText}
-                  className="py-1.5 px-3 rounded text-xs font-bold bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37]/30 disabled:opacity-40 disabled:cursor-not-allowed transition whitespace-nowrap"
+                  className="py-1.5 px-3 rounded text-xs font-bold bg-[#C9A86A]/20 border border-[#C9A86A]/50 text-[#C9A86A] hover:bg-[#C9A86A]/30 disabled:opacity-40 disabled:cursor-not-allowed transition whitespace-nowrap"
                 >
                   {pasteStatus === "done" ? "✓ Kopiert" : pasteStatus === "error" ? "✗ Fehler" : "📋 Übertragen"}
                 </button>
@@ -230,16 +230,16 @@ export default function BrowserLoginStreamComponent({
             )}
 
             <div
-              className="relative bg-black rounded-lg overflow-hidden border border-[#D4AF37]/30"
+              className="relative bg-black rounded-lg overflow-hidden border border-[#C9A86A]/30"
               style={{ height: "85vh" }}
             >
               <div ref={vncContainerRef} className="w-full h-full" />
               {(phase === "opening" || phase === "connecting") && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
                   <div className="animate-spin mb-4">
-                    <div className="w-8 h-8 border-4 border-[#D4AF37] border-t-transparent rounded-full"></div>
+                    <div className="w-8 h-8 border-4 border-[#C9A86A] border-t-transparent rounded-full"></div>
                   </div>
-                  <p className="text-[#D4AF37] font-semibold">
+                  <p className="text-[#C9A86A] font-semibold">
                     {phase === "opening" ? "Browser wird gestartet..." : "VNC-Verbindung wird aufgebaut..."}
                   </p>
                 </div>
@@ -278,13 +278,13 @@ export default function BrowserLoginStreamComponent({
             <div className="flex gap-3 justify-center">
               <button
                 onClick={start}
-                className="py-2 px-4 rounded-lg font-bold bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black hover:from-[#F3E5AB] transition"
+                className="py-2 px-4 rounded-lg font-bold bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black hover:from-[#E2C48A] transition"
               >
                 🔄 Erneut versuchen
               </button>
               <button
                 onClick={onClose}
-                className="py-2 px-4 rounded-lg font-semibold text-gray-400 hover:text-[#D4AF37] transition border border-gray-600 hover:border-[#D4AF37]"
+                className="py-2 px-4 rounded-lg font-semibold text-gray-400 hover:text-[#C9A86A] transition border border-gray-600 hover:border-[#C9A86A]"
               >
                 Schließen
               </button>

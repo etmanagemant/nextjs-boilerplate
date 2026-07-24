@@ -175,7 +175,7 @@ export default function UploadVaultClient({
   };
 
   return (
-    <div className="flex h-screen bg-[#0A0A0A] text-[#F3E5AB]">
+    <div className="flex h-screen bg-[#0A0A0A] text-[#E2C48A]">
       <WorkspaceSidebar
         connectedModels={connectedModels}
         selectedModel={null}
@@ -189,7 +189,7 @@ export default function UploadVaultClient({
         <div className="mb-8">
           <h1 className="text-3xl font-black uppercase tracking-wider mb-2">
             <span>📤</span>{" "}
-            <span className="bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">
               Upload Vault
             </span>
           </h1>
@@ -199,13 +199,13 @@ export default function UploadVaultClient({
         </div>
 
         {/* Upload Area */}
-        <section className="mb-8 p-8 rounded-xl border-2 border-dashed border-[#8A6D3F]/50 bg-black/40 hover:border-[#D4AF37]/70 transition cursor-pointer"
+        <section className="mb-8 p-8 rounded-xl border-2 border-dashed border-[#9C7A3D]/50 bg-black/40 hover:border-[#C9A86A]/70 transition cursor-pointer"
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDragDrop}
         >
           <div className="text-center">
             <div className="text-5xl mb-4">📁</div>
-            <h2 className="text-lg font-bold text-[#D4AF37] mb-2 uppercase">
+            <h2 className="text-lg font-bold text-[#C9A86A] mb-2 uppercase">
               Datei hochladen
             </h2>
             <p className="text-slate-400 mb-4">
@@ -226,7 +226,7 @@ export default function UploadVaultClient({
                 accept="image/*,video/*,.pdf"
               />
               <button
-                className="px-6 py-3 bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg disabled:opacity-50"
+                className="px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg disabled:opacity-50"
                 disabled={isUploading}
               >
                 {isUploading ? `Uploading... ${uploadProgress}%` : "➕ Datei wählen"}
@@ -236,7 +236,7 @@ export default function UploadVaultClient({
             {isUploading && uploadProgress > 0 && (
               <div className="mt-4 w-full bg-[#050505] rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-[#D4AF37] h-full transition-all"
+                  className="bg-[#C9A86A] h-full transition-all"
                   style={{ width: `${uploadProgress}%` }}
                 ></div>
               </div>
@@ -245,15 +245,15 @@ export default function UploadVaultClient({
         </section>
 
         {/* Filter Tabs */}
-        <div className="mb-6 flex gap-2 border-b border-[#8A6D3F]/20 pb-4 flex-wrap">
+        <div className="mb-6 flex gap-2 border-b border-[#9C7A3D]/20 pb-4 flex-wrap">
           {(["all", "image", "video", "document"] as const).map((filterType) => (
             <button
               key={filterType}
               onClick={() => setFilter(filterType)}
               className={`px-4 py-2 rounded-lg font-bold uppercase text-xs tracking-wider transition ${
                 filter === filterType
-                  ? "bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]"
-                  : "bg-[#050505] text-slate-400 hover:text-[#F3E5AB]"
+                  ? "bg-[#C9A86A]/20 text-[#C9A86A] border border-[#C9A86A]"
+                  : "bg-[#050505] text-slate-400 hover:text-[#E2C48A]"
               }`}
             >
               {filterType === "all"
@@ -270,7 +270,7 @@ export default function UploadVaultClient({
 
         {/* Media Grid */}
         {filteredMedia.length === 0 ? (
-          <div className="bg-black/40 p-12 rounded-xl border border-[#8A6D3F]/10 text-center text-slate-400">
+          <div className="bg-black/40 p-12 rounded-xl border border-[#9C7A3D]/10 text-center text-slate-400">
             <p className="text-lg">
               {media.length === 0
                 ? "Noch keine Dateien hochgeladen. Starten Sie mit einem Upload!"
@@ -282,7 +282,7 @@ export default function UploadVaultClient({
             {filteredMedia.map((item) => (
               <div
                 key={item.id}
-                className="bg-black/40 rounded-lg border border-[#8A6D3F]/10 overflow-hidden hover:border-[#D4AF37]/30 transition"
+                className="bg-black/40 rounded-lg border border-[#9C7A3D]/10 overflow-hidden hover:border-[#C9A86A]/30 transition"
               >
                 {/* Media Preview */}
                 <div className="w-full h-32 bg-[#050505] flex items-center justify-center overflow-hidden">
@@ -301,7 +301,7 @@ export default function UploadVaultClient({
                 <div className="p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-lg">{getMediaIcon(item.media_type)}</span>
-                    <span className="text-xs font-bold bg-[#8A6D3F]/20 px-2 py-1 rounded uppercase">
+                    <span className="text-xs font-bold bg-[#9C7A3D]/20 px-2 py-1 rounded uppercase">
                       {item.media_type}
                     </span>
                   </div>
@@ -320,7 +320,7 @@ export default function UploadVaultClient({
                       href={item.media_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 px-2 py-2 bg-[#D4AF37]/20 text-[#D4AF37] font-bold rounded text-xs hover:bg-[#D4AF37]/30 transition text-center"
+                      className="flex-1 px-2 py-2 bg-[#C9A86A]/20 text-[#C9A86A] font-bold rounded text-xs hover:bg-[#C9A86A]/30 transition text-center"
                     >
                       🔗 Öffnen
                     </a>

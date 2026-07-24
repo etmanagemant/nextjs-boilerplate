@@ -83,7 +83,7 @@ export default async function Bewerbungen() {
           margin:0,
           fontSize:'2.5rem',
           fontWeight:700,
-          color:'#F3E5AB',
+          color:'#E2C48A',
           letterSpacing:'-0.5px'
         }}>
           Bewerbungen Dashboard

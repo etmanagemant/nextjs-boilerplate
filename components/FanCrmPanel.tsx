@@ -171,13 +171,13 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
   const isSpender = (metadata.lifetime_value || 0) > 0;
 
   return (
-    <div className="w-80 flex-shrink-0 h-full bg-black/40 border-l border-[#D4AF37]/20 overflow-y-auto flex flex-col">
-      <div className="sticky top-0 bg-black/60 p-4 border-b border-[#D4AF37]/20 z-10 flex items-center justify-between">
-        <h2 className="text-sm font-black text-[#D4AF37] uppercase tracking-wider">👤 Fan CRM</h2>
+    <div className="w-80 flex-shrink-0 h-full bg-black/40 border-l border-[#C9A86A]/20 overflow-y-auto flex flex-col">
+      <div className="sticky top-0 bg-black/60 p-4 border-b border-[#C9A86A]/20 z-10 flex items-center justify-between">
+        <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">👤 Fan CRM</h2>
         <button
           onClick={handleFillWithAi}
           disabled={aiStatus === "loading"}
-          className="text-[10px] font-bold px-2.5 py-1.5 rounded-full bg-gradient-to-r from-[#D4AF37] to-[#8A6D3F] text-black hover:from-[#F3E5AB] disabled:opacity-50 transition"
+          className="text-[10px] font-bold px-2.5 py-1.5 rounded-full bg-gradient-to-r from-[#C9A86A] to-[#9C7A3D] text-black hover:from-[#E2C48A] disabled:opacity-50 transition"
         >
           {aiStatus === "loading" ? "⏳ Analysiere..." : "✨ Fill with AI"}
         </button>
@@ -198,7 +198,7 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
             onChange={withAutoSave(setRealName, "real_name")}
             onBlur={() => saveField({ real_name: realName })}
             placeholder="Name eingeben..."
-            className="w-full bg-black/60 border border-[#D4AF37]/30 rounded px-2 py-1.5 text-sm text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+            className="w-full bg-black/60 border border-[#C9A86A]/30 rounded px-2 py-1.5 text-sm text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A]"
           />
         </div>
 
@@ -211,7 +211,7 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
               onChange={withAutoSave(setLocation, "location")}
               onBlur={() => saveField({ location })}
               placeholder="-"
-              className="w-full bg-black/60 border border-[#D4AF37]/30 rounded px-2 py-1.5 text-sm text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+              className="w-full bg-black/60 border border-[#C9A86A]/30 rounded px-2 py-1.5 text-sm text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A]"
             />
           </div>
           <div>
@@ -222,7 +222,7 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
               onChange={withAutoSave(setAge, "age")}
               onBlur={() => saveField({ age })}
               placeholder="-"
-              className="w-full bg-black/60 border border-[#D4AF37]/30 rounded px-2 py-1.5 text-sm text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+              className="w-full bg-black/60 border border-[#C9A86A]/30 rounded px-2 py-1.5 text-sm text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A]"
             />
           </div>
         </div>
@@ -246,7 +246,7 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
             {preferences.map((pref, i) => (
               <span
                 key={i}
-                className="text-xs px-2 py-1 rounded bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30 flex items-center gap-1"
+                className="text-xs px-2 py-1 rounded bg-[#C9A86A]/20 text-[#C9A86A] border border-[#C9A86A]/30 flex items-center gap-1"
               >
                 {pref}
                 <button onClick={() => handleRemovePreference(i)} className="hover:text-red-400">
@@ -262,11 +262,11 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
               onChange={(e) => setNewPreference(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddPreference()}
               placeholder="Hinzufügen..."
-              className="flex-1 bg-black/60 border border-[#D4AF37]/30 rounded px-2 py-1 text-xs text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+              className="flex-1 bg-black/60 border border-[#C9A86A]/30 rounded px-2 py-1 text-xs text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A]"
             />
             <button
               onClick={handleAddPreference}
-              className="text-xs px-2 py-1 rounded bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30 hover:bg-[#D4AF37]/30"
+              className="text-xs px-2 py-1 rounded bg-[#C9A86A]/20 text-[#C9A86A] border border-[#C9A86A]/30 hover:bg-[#C9A86A]/30"
             >
               +
             </button>
@@ -280,27 +280,27 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
             onChange={withAutoSave(setNotes, "notes")}
             onBlur={() => saveField({ notes })}
             placeholder="Notizen zu diesem Fan..."
-            className="w-full h-20 bg-black/60 border border-[#D4AF37]/30 rounded p-2 text-xs text-[#F3E5AB] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37] resize-none"
+            className="w-full h-20 bg-black/60 border border-[#C9A86A]/30 rounded p-2 text-xs text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A] resize-none"
           />
         </div>
 
-        <div className="border-t border-[#8A6D3F]/20 pt-3 space-y-1.5">
+        <div className="border-t border-[#9C7A3D]/20 pt-3 space-y-1.5">
           <p className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-2">Info</p>
           <div className="flex justify-between text-xs">
             <span className="text-slate-500">Fan seit</span>
-            <span className="text-[#F3E5AB]">{formatDate(metadata.created_at)}</span>
+            <span className="text-[#E2C48A]">{formatDate(metadata.created_at)}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-slate-500">Letztes Abo</span>
-            <span className="text-[#F3E5AB]">{formatDate(metadata.last_subscription_at)}</span>
+            <span className="text-[#E2C48A]">{formatDate(metadata.last_subscription_at)}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-slate-500">Gesamtausgaben</span>
-            <span className="text-[#D4AF37] font-bold">${(metadata.lifetime_value || 0).toFixed(2)}</span>
+            <span className="text-[#C9A86A] font-bold">${(metadata.lifetime_value || 0).toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-slate-500">Zuletzt bezahlt</span>
-            <span className="text-[#F3E5AB]">{formatDate(metadata.last_paid_at)}</span>
+            <span className="text-[#E2C48A]">{formatDate(metadata.last_paid_at)}</span>
           </div>
           <div className="flex justify-between text-xs items-center">
             <span className="text-slate-500">Herkunft</span>
@@ -310,12 +310,12 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
               onChange={withAutoSave(setCameFrom, "came_from")}
               onBlur={() => saveField({ came_from: cameFrom })}
               placeholder="-"
-              className="w-24 bg-black/60 border border-[#D4AF37]/20 rounded px-1.5 py-0.5 text-xs text-[#F3E5AB] text-right placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
+              className="w-24 bg-black/60 border border-[#C9A86A]/20 rounded px-1.5 py-0.5 text-xs text-[#E2C48A] text-right placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A]"
             />
           </div>
         </div>
 
-        <div className="border-t border-[#8A6D3F]/20 pt-3">
+        <div className="border-t border-[#9C7A3D]/20 pt-3">
           <ModelNotesPanel modelId={modelId} isAdmin={isAdmin} compact />
         </div>
       </div>

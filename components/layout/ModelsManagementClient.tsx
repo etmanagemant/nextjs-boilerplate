@@ -98,7 +98,7 @@ export default function ModelsManagementClient({
         {models.map((model) => (
           <div
             key={model.id}
-            className="flex justify-between items-center p-3 border border-[#8A6D3F]/20 rounded-md bg-[#050505]/40 hover:border-[#D4AF37]/50 transition"
+            className="flex justify-between items-center p-3 border border-[#9C7A3D]/20 rounded-md bg-[#050505]/40 hover:border-[#C9A86A]/50 transition"
           >
             <div className="flex items-center gap-3 flex-1">
               {editingAvatarId === model.id ? (
@@ -115,9 +115,9 @@ export default function ModelsManagementClient({
                     onChange={(e) => setEditingAvatarUrl(e.target.value)}
                     autoFocus
                     placeholder="Bild-URL (OnlyFans Profilbild)"
-                    className="w-48 px-2 py-1 border border-[#8A6D3F]/30 rounded-md text-xs text-white bg-[#050505] focus:border-[#D4AF37] outline-none"
+                    className="w-48 px-2 py-1 border border-[#9C7A3D]/30 rounded-md text-xs text-white bg-[#050505] focus:border-[#C9A86A] outline-none"
                   />
-                  <button type="submit" className="text-[11px] bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer">OK</button>
+                  <button type="submit" className="text-[11px] bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer">OK</button>
                   <button type="button" onClick={() => setEditingAvatarId(null)} className="text-[11px] bg-slate-600 text-white px-2 py-1 rounded font-bold hover:bg-slate-700 transition cursor-pointer">✕</button>
                 </form>
               ) : (
@@ -131,10 +131,10 @@ export default function ModelsManagementClient({
                     <img
                       src={model.avatar_url}
                       alt={model.name}
-                      className="w-8 h-8 rounded-full object-cover border border-[#D4AF37]/40 hover:border-[#D4AF37] transition"
+                      className="w-8 h-8 rounded-full object-cover border border-[#C9A86A]/40 hover:border-[#C9A86A] transition"
                     />
                   ) : (
-                    <span className="w-8 h-8 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/40 hover:border-[#D4AF37] transition flex items-center justify-center text-sm">👤</span>
+                    <span className="w-8 h-8 rounded-full bg-[#C9A86A]/10 border border-[#C9A86A]/40 hover:border-[#C9A86A] transition flex items-center justify-center text-sm">👤</span>
                   )}
                 </button>
               )}
@@ -151,11 +151,11 @@ export default function ModelsManagementClient({
                     value={editingName}
                     onChange={(e) => setEditingName(e.target.value)}
                     autoFocus
-                    className="flex-1 px-2 py-1 border border-[#8A6D3F]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#D4AF37] outline-none"
+                    className="flex-1 px-2 py-1 border border-[#9C7A3D]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#C9A86A] outline-none"
                   />
                   <button
                     type="submit"
-                    className="text-[11px] bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer"
+                    className="text-[11px] bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer"
                   >
                     OK
                   </button>
@@ -198,13 +198,13 @@ export default function ModelsManagementClient({
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0A0A0A] border border-[#8A6D3F]/30 rounded-lg shadow-2xl max-w-md w-full p-6">
+          <div className="bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-lg shadow-2xl max-w-md w-full p-6">
             <div className="text-center">
               <div className="text-4xl mb-3">⚠️</div>
-              <h3 className="text-lg font-bold text-[#D4AF37] mb-3">ACHTUNG</h3>
+              <h3 className="text-lg font-bold text-[#C9A86A] mb-3">ACHTUNG</h3>
               <p className="text-sm text-white/80 mb-6 leading-relaxed">
                 Bist du dir absolut sicher, dass du dieses Model{" "}
-                <span className="font-semibold text-[#D4AF37]">{deleteConfirm.name}</span> löschen willst? Dadurch können
+                <span className="font-semibold text-[#C9A86A]">{deleteConfirm.name}</span> löschen willst? Dadurch können
                 wichtige Verknüpfungen getrennt werden!
               </p>
               <div className="flex gap-3 justify-center">

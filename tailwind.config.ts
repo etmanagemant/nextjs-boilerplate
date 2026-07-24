@@ -25,7 +25,8 @@ export default {
           strong: "#343842",
         },
 
-        // “Luxury Gold”: soft, nicht neon
+        // “Luxury Gold”: soft, nicht neon - matched to the logo's muted
+        // brass/bronze tone (low saturation) rather than a vivid amber.
         gold: {
           primary: "#C9A86A",
           // für Text/Buttons: etwas matter
@@ -35,6 +36,19 @@ export default {
           // für aktive/hover Zustände
           deep: "#9C7A3D",
           soft: "#E2C48A",
+          // numbered scale so gold-50..950 can be used like any Tailwind
+          // color (drop-in replacement for the old stock amber-* classes)
+          50: "#fbf8f4",
+          100: "#f4ede1",
+          200: "#e9dcc3",
+          300: "#dcc69e",
+          400: "#ceb078",
+          500: "#c49f5a",
+          600: "#b08940",
+          700: "#927135",
+          800: "#745a2a",
+          900: "#5e4922",
+          950: "#3c2f16",
         },
 
         // Schrift: helles Beige statt hartes Weiß

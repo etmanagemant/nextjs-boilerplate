@@ -51,20 +51,20 @@ export default function LoginPage() {
     }
   }
   return (
-    <div className="max-w-md mx-auto pt-28 px-4 text-[#F3E5AB]">
+    <div className="max-w-md mx-auto pt-28 px-4 text-[#E2C48A]">
       {/* Überschrift im edlen Marken-Look */}
-      <h1 className="text-3xl font-black mb-6 text-center tracking-wider bg-gradient-to-r from-[#F3E5AB] to-[#D4AF37] bg-clip-text text-transparent uppercase">
+      <h1 className="text-3xl font-black mb-6 text-center tracking-wider bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase">
         {isRegister ? "Registrieren" : "Login"}
       </h1>
       
-      <form onSubmit={onSubmit} className="space-y-4 bg-[#0A0A0A] border border-[#8A6D3F]/30 p-6 rounded-xl shadow-2xl shadow-black/80">
+      <form onSubmit={onSubmit} className="space-y-4 bg-[#0A0A0A] border border-[#9C7A3D]/30 p-6 rounded-xl shadow-2xl shadow-black/80">
         <div>
           <label className="text-xs uppercase font-bold tracking-wider text-slate-400 block mb-1">E-Mail Adresse</label>
           <input 
             value={email} 
             onChange={(e) => setEmail(e.target.value)} 
             type="email" 
-            className="w-full rounded-md border border-[#8A6D3F]/30 p-2 text-white bg-[#050505] focus:border-[#D4AF37] outline-none text-sm transition-all" 
+            className="w-full rounded-md border border-[#9C7A3D]/30 p-2 text-white bg-[#050505] focus:border-[#C9A86A] outline-none text-sm transition-all" 
             required 
           />
         </div>
@@ -74,7 +74,7 @@ export default function LoginPage() {
             value={password} 
             onChange={(e) => setPassword(e.target.value)} 
             type="password" 
-            className="w-full rounded-md border border-[#8A6D3F]/30 p-2 text-white bg-[#050505] focus:border-[#D4AF37] outline-none text-sm transition-all" 
+            className="w-full rounded-md border border-[#9C7A3D]/30 p-2 text-white bg-[#050505] focus:border-[#C9A86A] outline-none text-sm transition-all" 
             required 
           />
         </div>
@@ -85,7 +85,7 @@ export default function LoginPage() {
         <button 
           type="submit" 
           disabled={loading} 
-          className="w-full rounded-lg bg-gradient-to-b from-[#D4AF37] to-[#8A6D3F] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-sm font-bold text-black shadow-md shadow-amber-950/20 transition-all cursor-pointer disabled:opacity-40"
+          className="w-full rounded-lg bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] hover:to-[#C59B27] px-4 py-2 text-sm font-bold text-black shadow-md shadow-gold-950/20 transition-all cursor-pointer disabled:opacity-40"
         >
           {loading ? "Bitte warten..." : isRegister ? "Konto erstellen" : "Einloggen"}
         </button>
@@ -95,7 +95,7 @@ export default function LoginPage() {
         <button 
           type="button" 
           onClick={() => { setIsRegister(!isRegister); setErrorMsg(null); setSuccessMsg(null); }} 
-          className="text-[#D4AF37] hover:text-[#E5C158] transition font-semibold cursor-pointer outline-none"
+          className="text-[#C9A86A] hover:text-[#E5C158] transition font-semibold cursor-pointer outline-none"
         >
           {isRegister ? "Bereits ein Konto? Hier einloggen" : "Noch kein Zugang? Jetzt registrieren"}
         </button>
