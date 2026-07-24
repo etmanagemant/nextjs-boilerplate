@@ -52,14 +52,17 @@ export default function EmojiPicker({
         </button>
       </div>
 
-      <div className="grid grid-cols-8 gap-1 p-3 overflow-y-auto">
+      <div className="grid grid-cols-7 gap-1.5 p-3 overflow-y-auto">
         {category.emojis.map((emoji) => {
           const isQuick = quickEmojis.includes(emoji);
           return (
-            <div key={emoji} className="relative group">
+            <div
+              key={emoji}
+              className="relative flex flex-col items-center rounded-lg hover:bg-white/10 transition pt-1"
+            >
               <button
                 onClick={() => onSelect(emoji)}
-                className="text-xl w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition"
+                className="text-xl w-9 h-9 flex items-center justify-center"
                 title={emoji}
               >
                 {emoji}
@@ -67,8 +70,8 @@ export default function EmojiPicker({
               <button
                 onClick={() => onToggleQuick(emoji)}
                 title={isQuick ? "Aus Schnellauswahl entfernen" : "Zur Schnellauswahl hinzufügen"}
-                className={`absolute -top-1 -right-1 text-[10px] w-3.5 h-3.5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition ${
-                  isQuick ? "opacity-100 text-[#E2C48A]" : "text-slate-500"
+                className={`text-sm w-full h-5 flex items-center justify-center rounded-b-lg transition ${
+                  isQuick ? "text-[#E2C48A] bg-[#C9A86A]/15" : "text-slate-500 hover:text-[#C9A86A] hover:bg-white/5"
                 }`}
               >
                 {isQuick ? "★" : "☆"}

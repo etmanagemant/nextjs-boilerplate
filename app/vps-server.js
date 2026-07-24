@@ -137,13 +137,19 @@ async function enableDarkMode(page) {
 // message list scrolls within its own shorter box instead of running all
 // the way to the bottom of the frame. ".b-chat__messages" confirmed live
 // via /debug-dom as the actual scrollable message container.
+// Also hides OnlyFans' own native scrollbars (visually only, scrolling
+// still works via wheel/drag) - a visible native scrollbar right at the
+// video's edge, next to the CRM's own Fan panel, reads as a seam between
+// "the real site" and "our overlay" rather than one integrated view.
 const RESERVE_OVERLAY_SPACE_SCRIPT = `
 (function() {
   function inject() {
     if (document.getElementById('__crm_reserve_space__')) return;
     var style = document.createElement('style');
     style.id = '__crm_reserve_space__';
-    style.textContent = '.b-chat__messages { padding-bottom: 90px !important; }';
+    style.textContent = '.b-chat__messages { padding-bottom: 90px !important; } ' +
+      '* { scrollbar-width: none !important; } ' +
+      '*::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
   if (document.head) inject();
@@ -159,29 +165,33 @@ async function reserveOverlaySpace(page) {
   }
 }
 
-// Hides specific OnlyFans nav items for chatter-role slots only (never the
-// admin's own session) - matched by their visible text rather than CSS
-// classes, same "fragile but functional, no reliance on OnlyFans' own
+// Compacts the left sidebar to icon-only for EVERY role (admin included) -
+// originally this was chatter-only, but the icon-only look is a general
+// space-saving preference, not a permission restriction. Actual permission
+// restrictions (fully hiding Home/Queue/Statements/My profile/More/
+// Statistics/New Post) still only apply to chatters - admins see and can
+// click everything, just without the text labels taking up width. Also
+// hides OnlyFans' own floating "Help & support" widget (the "contact_button"
+// bubble near the bottom-right of the page) for everyone - confirmed live
+// via /debug-dom, it's a separate element from the sidebar's own "Help and
+// support" link (which just gets icon-only'd like the rest of the sidebar).
+// Text-matched (case-insensitive) rather than CSS classes for the sidebar
+// items, same "fragile but functional, no reliance on OnlyFans' own
 // unstable class names" trade-off as the dark-mode injection above. A
-// MutationObserver re-applies this as OnlyFans' own SPA re-renders the nav
-// (a one-time run wouldn't survive its internal client-side routing).
-// Statistics is hidden outright for now rather than partially - splitting
-// "mass-message stats" from "revenue stats" within that page needs to be
-// confirmed against the real DOM first.
-const CHATTER_RESTRICTIONS_SCRIPT = `
+// MutationObserver re-applies this as OnlyFans' own SPA re-renders the nav.
+// %%ROLE%% is substituted per slot before injection.
+const NAV_SCRIPT_TEMPLATE = `
 (function() {
-  var HIDDEN_LABELS = ['home', 'queue', 'statements', 'my profile', 'more', 'statistics', 'new post'];
-  // Kept visible, but stripped down to just the icon - matches the
-  // compact left-rail look already used elsewhere in the CRM (SuperCreator
-  // reference), and frees up width the Fan CRM panel can use instead.
-  var ICON_ONLY_LABELS = ['notifications', 'messages', 'collections', 'vault'];
+  var ROLE = "%%ROLE%%";
+  var HIDDEN_LABELS = ROLE === 'admin'
+    ? []
+    : ['home', 'queue', 'statements', 'my profile', 'more', 'statistics', 'new post'];
+  var ICON_ONLY_LABELS = ROLE === 'admin'
+    ? ['home', 'notifications', 'messages', 'collections', 'vault', 'queue', 'statements', 'statistics', 'my profile', 'more', 'help and support']
+    : ['notifications', 'messages', 'collections', 'vault', 'help and support'];
 
   function norm(s) { return (s || '').trim().toLowerCase(); }
 
-  // Text-only match (case-insensitive) rather than CSS classes, same
-  // "fragile but functional" trade-off as the dark-mode injection - not
-  // reliant on OnlyFans' own unstable class names, at the cost of breaking
-  // if they ever change these exact labels.
   function stripTrailingText(el) {
     for (var i = el.childNodes.length - 1; i >= 0; i--) {
       var node = el.childNodes[i];
@@ -200,6 +210,8 @@ const CHATTER_RESTRICTIONS_SCRIPT = `
         stripTrailingText(el);
       }
     }
+    var contactBtn = document.querySelector('.contact_button, a[aria-label*="Help" i][aria-label*="support" i]');
+    if (contactBtn && contactBtn.style.display !== 'none') contactBtn.style.display = 'none';
   }
   function start() {
     scan();
@@ -210,11 +222,12 @@ const CHATTER_RESTRICTIONS_SCRIPT = `
 })();
 `;
 
-async function applyChatterRestrictions(page) {
+async function applyNavRestrictions(page, role) {
   try {
-    await page.evaluateOnNewDocument(CHATTER_RESTRICTIONS_SCRIPT);
+    const script = NAV_SCRIPT_TEMPLATE.replace('%%ROLE%%', role === 'admin' ? 'admin' : 'chatter');
+    await page.evaluateOnNewDocument(script);
   } catch (e) {
-    console.warn('[CHATTER-RESTRICTIONS] Could not register:', e.message);
+    console.warn('[NAV-RESTRICTIONS] Could not register:', e.message);
   }
 }
 
@@ -592,9 +605,7 @@ async function ensureSlotBrowser(slot, modelId, role, chatterName) {
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9' });
   await enableDarkMode(page);
   await reserveOverlaySpace(page);
-  if (role !== 'admin') {
-    await applyChatterRestrictions(page);
-  }
+  await applyNavRestrictions(page, role);
   await applySentByOverlay(page, chatterName);
 
   // The filesystem copy above can still be stale even when the main
@@ -1242,7 +1253,13 @@ app.post('/insert-emoji', async (req, res) => {
       return res.json({ status: 'no_input', message: 'Kein offenes Nachrichtenfeld gefunden' });
     }
 
-    await slot.page.keyboard.insertText(emoji);
+    // keyboard.insertText() isn't available on this Puppeteer version
+    // ("is not a function", confirmed live) - keyboard.type() is the older,
+    // universally-available API and internally uses the same CDP
+    // Input.insertText command for characters (like emoji) it can't map to
+    // a physical key, so it inserts at the current cursor position the
+    // same way.
+    await slot.page.keyboard.type(emoji);
     slot.lastActivity = Date.now();
     res.json({ status: 'success' });
   } catch (error) {
@@ -1317,6 +1334,51 @@ app.post('/debug-network-stop', (req, res) => {
     page._networkCaptureHandler = null;
   }
   res.json({ status: 'success', calls, pageUrl: page.url() });
+});
+
+// Diagnostic-only: navigates a slot's page to an arbitrary OnlyFans URL,
+// so a specific chat can be opened for testing without clicking through
+// the VNC feed (unreliable to hit blind given the CRM's own display
+// scaling).
+app.post('/debug-goto', async (req, res) => {
+  const page = resolveDebugPage(req);
+  if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
+  const url = req.body && req.body.url;
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    res.json({ status: 'success', pageUrl: page.url() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Diagnostic-only: types real text into the compose box and presses Enter,
+// entirely server-side via Puppeteer - used to verify the sent-by overlay's
+// local-send-trigger detection without needing to click through the VNC
+// feed at the right pixel (which the CRM's own display scaling makes
+// unreliable to hit blind).
+app.post('/debug-send-test', async (req, res) => {
+  const page = resolveDebugPage(req);
+  if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
+  const text = (req.body && req.body.text) || 'debugsendtest';
+
+  try {
+    const focused = await page.evaluate(() => {
+      var el = document.querySelector('textarea[placeholder*="message" i], div[contenteditable="true"]');
+      if (!el) return false;
+      el.focus();
+      return true;
+    });
+    if (!focused) return res.json({ status: 'no_input' });
+
+    await page.keyboard.type(text);
+    await page.keyboard.press('Enter');
+    res.json({ status: 'success' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // One-off DOM inspection - finds the real compose-box position and the

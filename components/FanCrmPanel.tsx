@@ -58,8 +58,6 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
   const [notes, setNotes] = useState(metadata.notes || "");
   const [preferences, setPreferences] = useState<string[]>(metadata.preferences || []);
   const [newPreference, setNewPreference] = useState("");
-  const [aiStatus, setAiStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
-  const [aiMessage, setAiMessage] = useState("");
 
   // Re-sync local editable state whenever a different fan's metadata comes
   // in (switching chats in OnlyFans itself) - but not on every poll tick
@@ -72,7 +70,6 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
     setCameFrom(metadata.came_from || "");
     setNotes(metadata.notes || "");
     setPreferences(metadata.preferences || []);
-    setAiStatus("idle");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanId]);
 
@@ -118,76 +115,13 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
     saveField({ preferences: updated });
   };
 
-  const handleFillWithAi = async () => {
-    setAiStatus("loading");
-    setAiMessage("");
-    try {
-      const res = await fetch("/api/crm/fan-ai-suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId }),
-      });
-      const data = await res.json();
-      if (data.status === "not_configured") {
-        setAiStatus("error");
-        setAiMessage(data.message || "KI nicht konfiguriert");
-        return;
-      }
-      if (data.status !== "success") {
-        setAiStatus("error");
-        setAiMessage(data.message || data.error || "Fehler bei der KI-Analyse");
-        return;
-      }
-      const s = data.suggestions || {};
-      if (s.real_name) setRealName(s.real_name);
-      if (s.age) setAge(String(s.age));
-      if (s.location) setLocation(s.location);
-      if (s.came_from) setCameFrom(s.came_from);
-      if (Array.isArray(s.preferences) && s.preferences.length) {
-        setPreferences((prev) => Array.from(new Set([...prev, ...s.preferences])));
-      }
-      // These two are read-only Info fields (not manual inputs), so save
-      // directly rather than setting editable state - only if it's a
-      // genuinely valid date, since an unparseable string would fail the
-      // save outright (timestamptz column).
-      const dateFields: Record<string, unknown> = {};
-      for (const key of ["last_subscription_at", "last_paid_at"] as const) {
-        const value = s[key];
-        if (value && !Number.isNaN(new Date(value).getTime())) {
-          dateFields[key] = new Date(value).toISOString();
-        }
-      }
-      if (Object.keys(dateFields).length > 0) {
-        saveField(dateFields);
-      }
-      setAiStatus("done");
-      setAiMessage("Vorschläge übernommen - bitte prüfen und speichern.");
-    } catch (err) {
-      setAiStatus("error");
-      setAiMessage("Fehler bei der KI-Analyse");
-    }
-  };
-
   const isSpender = (metadata.lifetime_value || 0) > 0;
 
   return (
     <div className="w-80 flex-shrink-0 h-full bg-black/40 overflow-y-auto scrollbar-hide flex flex-col">
       <div className="sticky top-0 bg-black/60 p-4 border-b border-[#C9A86A]/20 z-10 flex items-center justify-between">
         <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">👤 Fan CRM</h2>
-        <button
-          onClick={handleFillWithAi}
-          disabled={aiStatus === "loading"}
-          className="text-[10px] font-bold px-2.5 py-1.5 rounded-full bg-gradient-to-r from-[#C9A86A] to-[#9C7A3D] text-black hover:from-[#E2C48A] disabled:opacity-50 transition"
-        >
-          {aiStatus === "loading" ? "⏳ Analysiere..." : "✨ Fill with AI"}
-        </button>
       </div>
-
-      {aiMessage && (
-        <p className={`text-[11px] px-4 pt-2 ${aiStatus === "error" ? "text-red-400" : "text-emerald-400"}`}>
-          {aiMessage}
-        </p>
-      )}
 
       <div className="p-4 space-y-4">
         <div>
