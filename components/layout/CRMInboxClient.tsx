@@ -23,7 +23,6 @@ import {
 import ChatListColumn from "./CRMChatListColumn";
 import ChatThreadColumn from "./CRMChatThreadColumn";
 import SalesCockpitColumn from "./CRMSalesCockpitColumn";
-import WorkspaceSidebar from "./WorkspaceSidebar";
 import { OnlyFansViewer } from "@/components/OnlyFansViewer";
 import NextShiftsWidget from "./NextShiftsWidget";
 
@@ -90,6 +89,21 @@ export default function CRMInboxClient({
     };
     loadEmojis();
   }, [chatterId]);
+
+  // GlobalSidebar's model links navigate to /crm-inbox?model=X - since
+  // selectedModel/selectedOnlyFansModel were only ever set from the URL
+  // once (via useState's initializer), clicking a different model link
+  // while already on this page changed the URL but nothing re-read it.
+  // This is what used to be the second, page-local sidebar's model click
+  // handler (removed - it duplicated GlobalSidebar once that existed too).
+  useEffect(() => {
+    if (modelFromUrl) {
+      setSelectedModel(modelFromUrl);
+      setSelectedOnlyFansModel(modelFromUrl);
+      setSelectedFanId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelFromUrl]);
 
   useEffect(() => {
     if (!selectedModel) {
@@ -204,21 +218,6 @@ export default function CRMInboxClient({
     // what's actually left in the viewport, forcing the whole page to
     // scroll just to reach the bottom of the OnlyFans view.
     <div className="flex h-[calc(100vh-8rem)] bg-[#0A0A0A] text-[#E2C48A] overflow-hidden">
-      {/* SIDEBAR */}
-      <WorkspaceSidebar
-        connectedModels={connectedModels}
-        selectedModel={selectedModel}
-        onSelectModel={(modelId) => {
-          setSelectedModel(modelId);
-          setSelectedFanId(null);
-        }}
-        currentHub="crm"
-        userRole={userRole}
-        onOpenOnlyFans={(modelId) => {
-          setSelectedOnlyFansModel(modelId);
-        }}
-      />
-
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* MAIN CONTENT AREA - Flex Layout */}

@@ -91,3 +91,30 @@ body {
   animation-duration: 1s;
   box-shadow: 0 0 20px rgba(201, 168, 106, 0.85), 0 0 6px rgba(226, 196, 138, 0.8) inset;
 }
+
+/* Same shimmer/glow, but dormant until hovered - for the sidebar, where
+   every item animating at once (the header's always-on treatment) would
+   be a lot of constant motion in one place instead of a deliberate accent. */
+.btn-gold-hover-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-gold-hover-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, rgba(226, 196, 138, 0.35) 50%, transparent 65%);
+  background-size: 300% 100%;
+  background-position: 200% 0;
+  pointer-events: none;
+}
+
+.btn-gold-hover-shimmer:hover {
+  animation: gold-glow-breathe 1s ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(201, 168, 106, 0.85), 0 0 6px rgba(226, 196, 138, 0.8) inset;
+}
+
+.btn-gold-hover-shimmer:hover::after {
+  animation: gold-shimmer-sweep 1s linear infinite;
+}

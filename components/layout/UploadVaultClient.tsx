@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
-import WorkspaceSidebar from "./WorkspaceSidebar";
 
 interface MediaItem {
   id: string;
@@ -36,7 +34,6 @@ export default function UploadVaultClient({
   userName,
   connectedModels = [],
 }: UploadVaultClientProps) {
-  const router = useRouter();
   const [media, setMedia] = useState<MediaItem[]>(initialMedia);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -176,13 +173,6 @@ export default function UploadVaultClient({
 
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#E2C48A]">
-      <WorkspaceSidebar
-        connectedModels={connectedModels}
-        selectedModel={null}
-        onSelectModel={(modelId) => router.push(`/crm-inbox?model=${modelId}`)}
-        currentHub="upload"
-        userRole={userRole}
-      />
       <main className="flex-1 overflow-auto">
         <div className="max-w-6xl mx-auto p-6">
         {/* Header */}

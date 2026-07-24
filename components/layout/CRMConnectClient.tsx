@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
-import WorkspaceSidebar from "./WorkspaceSidebar";
-import { ModelCardSkeleton, ScriptLibrarySkeleton } from "./CRMSkeletonLoaders";
-import ScriptLibraryManager from "./ScriptLibraryManager";
+import { ModelCardSkeleton } from "./CRMSkeletonLoaders";
 import BrowserLoginStreamComponent from "./BrowserLoginStreamComponent";
+import RoleSelect from "./RoleSelect";
 
 interface Model {
   id: string;
@@ -22,15 +20,6 @@ interface CreatorSession {
   created_at: string;
 }
 
-interface Script {
-  id: string;
-  title: string;
-  script_content: string;
-  category: "greeting" | "offer" | "follow_up" | "custom";
-  is_global: boolean;
-  assigned_to_user: string | null;
-}
-
 interface Chatter {
   user_id: string;
   full_name: string;
@@ -42,33 +31,45 @@ interface ConnectedModel {
   name: string;
 }
 
+interface StaffProfile {
+  user_id: string;
+  role: string;
+  email: string | null;
+  full_name: string | null;
+  provision_rate: number | null;
+  hourly_rate: number | null;
+}
+
 interface CRMConnectClientProps {
   initialModels: Model[];
   initialChatters: Chatter[];
   connectedModels?: ConnectedModel[];
+  staffProfiles: StaffProfile[];
+  updateMitarbeiterRolle: (formData: FormData) => Promise<void>;
+  updateMitarbeiterName: (formData: FormData) => Promise<void>;
+  updateMitarbeiterCompensation: (formData: FormData) => Promise<void>;
+  deleteMitarbeiter: (formData: FormData) => Promise<void>;
 }
 
 export default function CRMConnectClient({
   initialModels,
-  initialChatters,
-  connectedModels = [],
+  staffProfiles,
+  updateMitarbeiterRolle,
+  updateMitarbeiterName,
+  updateMitarbeiterCompensation,
+  deleteMitarbeiter,
 }: CRMConnectClientProps) {
-  const router = useRouter();
   const [models, setModels] = useState<Model[]>(initialModels);
   const [sessions, setSessions] = useState<Map<string, CreatorSession>>(
     new Map()
   );
-  const [scripts, setScripts] = useState<Script[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
-  const [isLoadingScripts, setIsLoadingScripts] = useState(true);
   const [modelBeingConnected, setModelBeingConnected] = useState<Model | null>(null);
 
   const supabase = createClient();
 
-  // Fetch sessions on mount
   useEffect(() => {
     fetchSessions();
-    fetchScripts();
   }, []);
 
   const fetchSessions = async () => {
@@ -90,22 +91,6 @@ export default function CRMConnectClient({
       console.error("Error fetching sessions:", err);
     } finally {
       setIsLoadingSessions(false);
-    }
-  };
-
-  const fetchScripts = async () => {
-    setIsLoadingScripts(true);
-    try {
-      const { data } = await supabase
-        .from("crm_script_library")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      setScripts(data || []);
-    } catch (err) {
-      console.error("Error fetching scripts:", err);
-    } finally {
-      setIsLoadingScripts(false);
     }
   };
 
@@ -144,13 +129,6 @@ export default function CRMConnectClient({
 
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#E2C48A]">
-      <WorkspaceSidebar
-        connectedModels={connectedModels}
-        selectedModel={null}
-        onSelectModel={(modelId) => router.push(`/crm-inbox?model=${modelId}`)}
-        currentHub="connection"
-        userRole="admin"
-      />
       <main className="flex-1 overflow-auto p-6">
         <div className="max-w-7xl mx-auto min-h-screen">
       {/* Hero Section */}
@@ -158,7 +136,7 @@ export default function CRMConnectClient({
         <div className="flex items-center justify-between mb-6 pb-6 border-b border-[#9C7A3D]/20 flex-wrap gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-black uppercase tracking-wider flex items-center gap-2">
-              <span>🔗</span> 
+              <span>🔗</span>
               <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Creator Connection Hub</span>
             </h1>
             <p className="text-sm text-slate-400 mt-2">
@@ -265,84 +243,74 @@ export default function CRMConnectClient({
         </div>
       </section>
 
-      {/* Script Library & Chatter Config Section */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Script Library */}
-        <div className="lg:col-span-2 bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10">
-          {isLoadingScripts ? (
-            <ScriptLibrarySkeleton />
-          ) : (
-            <ScriptLibraryManager
-              globalScripts={scripts.filter((s) => s.is_global)}
-              teamChatters={initialChatters}
-              onRefresh={fetchScripts}
-            />
-          )}
-        </div>
+      {/* Mitarbeiter & Rollen modifizieren - moved here from the Management
+          page so staff/role changes live alongside the model connections
+          they affect. */}
+      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg">
+        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Mitarbeiter & Rollen modifizieren</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
+                <th className="p-3">Name</th>
+                <th className="p-3">E-Mail</th>
+                <th className="p-3 w-[140px]">Provision %</th>
+                <th className="p-3 w-[150px]">Rolle ändern</th>
+                <th className="p-3 w-[80px] text-center">Löschen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {staffProfiles.map((p) => (
+                <tr key={p.user_id} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
+                  <td className="p-3">
+                    <form action={updateMitarbeiterName} className="flex gap-2">
+                      <input type="hidden" name="user_id" value={p.user_id} />
+                      <input type="text" name="full_name" defaultValue={p.full_name || ""} required className="bg-[#050505] border border-[#9C7A3D]/30 rounded px-2 py-1 text-sm text-white focus:border-[#C9A86A] outline-none w-full max-w-[140px]" />
+                      <button type="submit" className="text-[11px] bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer">OK</button>
+                    </form>
+                  </td>
+                  <td className="p-3 text-slate-400 font-mono text-xs">{p.email || "keine E-Mail"}</td>
 
-        {/* Chatter Configuration Quick Panel */}
-        <div className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10">
-          <h3 className="text-lg font-bold text-[#C9A86A] uppercase tracking-wider mb-4">
-            👥 Team Configuration
-          </h3>
+                  <td className="p-3">
+                    {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
+                      <form action={updateMitarbeiterCompensation} className="flex gap-1.5 items-center flex-wrap">
+                        <input type="hidden" name="user_id" value={p.user_id} />
+                        <input type="hidden" name="role" value={p.role} />
+                        {p.role === "moderator" ? (
+                          <>
+                            <input type="number" step="0.01" name="hourly_rate" defaultValue={p.hourly_rate || 0} placeholder="EUR/h" className="w-20 bg-[#050505] border border-[#9C7A3D]/30 text-white rounded p-1 text-xs text-center outline-none focus:border-[#C9A86A]" />
+                            <span className="text-[10px] text-slate-500">EUR/h</span>
+                          </>
+                        ) : (
+                          <>
+                            <input type="number" step="0.1" name="provision_rate" defaultValue={p.provision_rate || 20} placeholder="20" className="w-14 bg-[#050505] border border-[#9C7A3D]/30 text-white rounded p-1 text-xs text-center outline-none focus:border-[#C9A86A]" />
+                            <span className="text-[10px] text-slate-500">%</span>
+                          </>
+                        )}
+                        <button type="submit" className="text-[10px] bg-emerald-600 text-white font-bold px-1.5 py-1 rounded hover:bg-emerald-700 transition cursor-pointer">✓</button>
+                      </form>
+                    ) : (
+                      <span className="text-xs text-slate-500 font-mono">Admin</span>
+                    )}
+                  </td>
 
-          <div className="space-y-3">
-            <div className="bg-black/60 p-4 rounded-lg border border-[#9C7A3D]/10">
-              <p className="text-xs text-slate-400 uppercase tracking-widest mb-2">
-                Active Chatters
-              </p>
-              <div className="space-y-2">
-                {initialChatters.filter((c) => c.role === "chatter").length >
-                0 ? (
-                  initialChatters
-                    .filter((c) => c.role === "chatter")
-                    .map((chatter) => (
-                      <div
-                        key={chatter.user_id}
-                        className="text-sm text-[#E2C48A] flex items-center gap-2"
-                      >
-                        <span className="w-2 h-2 bg-[#C9A86A] rounded-full"></span>
-                        {chatter.full_name}
-                      </div>
-                    ))
-                ) : (
-                  <p className="text-xs text-slate-500">No chatters assigned</p>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-black/60 p-4 rounded-lg border border-[#9C7A3D]/10">
-              <p className="text-xs text-slate-400 uppercase tracking-widest mb-2">
-                Active Moderators
-              </p>
-              <div className="space-y-2">
-                {initialChatters.filter((c) => c.role === "moderator").length >
-                0 ? (
-                  initialChatters
-                    .filter((c) => c.role === "moderator")
-                    .map((mod) => (
-                      <div
-                        key={mod.user_id}
-                        className="text-sm text-[#E2C48A] flex items-center gap-2"
-                      >
-                        <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
-                        {mod.full_name}
-                      </div>
-                    ))
-                ) : (
-                  <p className="text-xs text-slate-500">No moderators assigned</p>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mt-4">
-              <p className="text-xs text-blue-200">
-                <span className="font-bold">💡 Tip:</span> Configure emoji
-                leisten and script templates for each team member via the admin
-                settings.
-              </p>
-            </div>
-          </div>
+                  <td className="p-3">
+                    <RoleSelect userId={p.user_id} defaultRole={p.role} onUpdateAction={updateMitarbeiterRolle} />
+                  </td>
+                  <td className="p-3 text-center">
+                    {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
+                      <form action={deleteMitarbeiter}>
+                        <input type="hidden" name="user_id" value={p.user_id} />
+                        <button type="submit" className="text-red-400 hover:text-red-300 text-sm font-bold transition cursor-pointer">Löschen</button>
+                      </form>
+                    ) : (
+                      <span className="text-xs text-slate-500">-</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
 

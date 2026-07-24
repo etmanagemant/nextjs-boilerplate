@@ -10,6 +10,7 @@ export async function updateMitarbeiterRolle(formData: FormData) {
     const supabaseServer = await createClient();
     await supabaseServer.from("profiles").update({ role: neueRolle }).eq("user_id", targetUserId);
     revalidatePath("/management");
+    revalidatePath("/management/crm-connect");
   }
 }
 
@@ -21,6 +22,7 @@ export async function updateMitarbeiterName(formData: FormData) {
     const supabaseServer = await createClient();
     await supabaseServer.from("profiles").update({ full_name: neuerName.trim() }).eq("user_id", targetUserId);
     revalidatePath("/management");
+    revalidatePath("/management/crm-connect");
   }
 }
 
@@ -68,6 +70,7 @@ export async function deleteMitarbeiter(formData: FormData) {
     const supabaseServer = await createClient();
     await supabaseServer.from("profiles").delete().eq("user_id", userId);
     revalidatePath("/management");
+    revalidatePath("/management/crm-connect");
   }
 }
 
@@ -88,8 +91,9 @@ export async function updateMitarbeiterCompensation(formData: FormData) {
       // Chatter: Speichere Provision
       await supabaseServer.from("profiles").update({ provision_rate: Number(provision) }).eq("user_id", userId);
     }
-    
+
     revalidatePath("/management");
+    revalidatePath("/management/crm-connect");
   }
 }
 

@@ -243,7 +243,7 @@ export function OnlyFansViewer({
   // Fan CRM panel below now uses instead of sitting empty.
   const videoArea = (
     <div
-      className="relative h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] rounded-lg overflow-hidden border border-[#C9A86A]/10 mx-auto"
+      className="relative h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] overflow-hidden mx-auto"
       style={{ aspectRatio: "1280 / 800" }}
     >
       {phase === "connecting" && (

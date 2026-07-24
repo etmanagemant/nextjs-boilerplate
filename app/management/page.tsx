@@ -1,13 +1,11 @@
 import { createClient } from "@/utils/supabase/server";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
-import { updateMitarbeiterRolle, updateMitarbeiterName, addModel, deleteModel, deleteMitarbeiter, updateMitarbeiterCompensation, updateModelName, updateModelAvatar } from "./actions";
+import { addModel, deleteModel, updateModelName, updateModelAvatar } from "./actions";
 import { revalidatePath } from "next/cache";
 // 🟢 IMPORTE EXAKT BEIBEHALTEN
-import CreateShiftForm from "@/components/layout/CreateShiftForm"; 
-import RoleSelect from "@/components/layout/RoleSelect";
-import ModelPlatformSelect from "@/components/layout/ModelPlatformSelect"; 
-import ModelsManagementClient from "@/components/layout/ModelsManagementClient"; 
+import CreateShiftForm from "@/components/layout/CreateShiftForm";
+import ModelsManagementClient from "@/components/layout/ModelsManagementClient";
 
 export const dynamic = "force-dynamic";
 
@@ -85,75 +83,9 @@ export default async function ManagementPage() {
         <CreateShiftForm sichereProfile={sichereProfile} sichereModels={sichereModels} />
       </section>
 
-      {/* MITARBEITER-VERWALTUNG */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 shadow-lg">
-        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Mitarbeiter & Rollen modifizieren</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
-                <th className="p-3">Name</th>
-                <th className="p-3">E-Mail</th>
-                <th className="p-3 w-[140px] text-gold-300">Provision %</th>
-                <th className="p-3 w-[150px]">Rolle ändern</th>
-                <th className="p-3 w-[80px] text-center">Löschen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sichereProfile.map((p) => (
-                <tr key={p.user_id} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
-                  <td className="p-3">
-                    <form action={updateMitarbeiterName} className="flex gap-2">
-                      <input type="hidden" name="user_id" value={p.user_id} />
-                      <input type="text" name="full_name" defaultValue={p.full_name || ""} required className="bg-[#050505] border border-[#9C7A3D]/30 rounded px-2 py-1 text-sm text-white focus:border-[#C9A86A] outline-none w-full max-w-[140px]" />
-                      <button type="submit" className="text-[11px] bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black px-2 py-1 rounded font-bold hover:from-[#E5C158] transition cursor-pointer">OK</button>
-                    </form>
-                  </td>
-                  <td className="p-3 text-slate-400 font-mono text-xs">{p.email || "keine E-Mail"}</td>
-                  
-                  {/* 👑 NEUE SPALTE: Provision (Chatter) oder Stundenhonorar (Moderator) */}
-                  <td className="p-3">
-                    {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
-                      <form action={updateMitarbeiterCompensation} className="flex gap-1.5 items-center flex-wrap">
-                        <input type="hidden" name="user_id" value={p.user_id} />
-                        <input type="hidden" name="role" value={p.role} />
-                        {p.role === "moderator" ? (
-                          <>
-                            <input type="number" step="0.01" name="hourly_rate" defaultValue={p.hourly_rate || 0} placeholder="EUR/h" className="w-20 bg-[#050505] border border-[#9C7A3D]/30 text-white rounded p-1 text-xs text-center outline-none focus:border-[#C9A86A]" />
-                            <span className="text-[10px] text-slate-500">EUR/h</span>
-                          </>
-                        ) : (
-                          <>
-                            <input type="number" step="0.1" name="provision_rate" defaultValue={p.provision_rate || 20} placeholder="20" className="w-14 bg-[#050505] border border-[#9C7A3D]/30 text-white rounded p-1 text-xs text-center outline-none focus:border-[#C9A86A]" />
-                            <span className="text-[10px] text-slate-500">%</span>
-                          </>
-                        )}
-                        <button type="submit" className="text-[10px] bg-emerald-600 text-white font-bold px-1.5 py-1 rounded hover:bg-emerald-700 transition cursor-pointer">✓</button>
-                      </form>
-                    ) : (
-                      <span className="text-xs text-slate-500 font-mono">Admin</span>
-                    )}
-                  </td>
-
-                  <td className="p-3">
-                    <RoleSelect userId={p.user_id} defaultRole={p.role} onUpdateAction={updateMitarbeiterRolle} />
-                  </td>
-                  <td className="p-3 text-center">
-                    {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
-                      <form action={deleteMitarbeiter}>
-                        <input type="hidden" name="user_id" value={p.user_id} />
-                        <button type="submit" className="text-red-400 hover:text-red-300 text-sm font-bold transition cursor-pointer">Löschen</button>
-                      </form>
-                    ) : (
-                      <span className="text-xs text-slate-500">-</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      {/* Mitarbeiter & Rollen modifizieren moved to Connection Hub
+          (/management/crm-connect), alongside the model connections it
+          affects. */}
       {/* MODELS VERWALTEN */}
       <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg">
         <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Models (Schichtplanung)</h2>

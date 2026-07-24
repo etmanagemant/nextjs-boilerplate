@@ -1,6 +1,12 @@
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import CRMConnectClient from "@/components/layout/CRMConnectClient";
+import {
+  updateMitarbeiterRolle,
+  updateMitarbeiterName,
+  updateMitarbeiterCompensation,
+  deleteMitarbeiter,
+} from "@/app/management/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +20,15 @@ interface Chatter {
   user_id: string;
   full_name: string;
   role: string;
+}
+
+interface StaffProfile {
+  user_id: string;
+  role: string;
+  email: string | null;
+  full_name: string | null;
+  provision_rate: number | null;
+  hourly_rate: number | null;
 }
 
 export default async function CRMConnectPage() {
@@ -79,11 +94,13 @@ export default async function CRMConnectPage() {
     console.error("Migration error:", err);
   }
 
-  // Now fetch from crm_model_sessions (both active and inactive) and the
-  // chatter list in parallel - they don't depend on each other.
-  const [{ data: connectedModels, error: fetchError }, { data: chatters }] = await Promise.all([
+  // Now fetch from crm_model_sessions (both active and inactive), the
+  // chatter list, and the full staff/roles table (moved here from the
+  // Management page) in parallel - none of these depend on each other.
+  const [{ data: connectedModels, error: fetchError }, { data: chatters }, { data: staffProfiles }] = await Promise.all([
     supabase.from("crm_model_sessions").select("model_id, is_active").order("model_id", { ascending: true }),
     supabase.from("profiles").select("user_id, full_name, role").in("role", ["chatter", "moderator"]).order("full_name", { ascending: true }),
+    supabase.from("profiles").select("user_id, role, email, full_name, provision_rate, hourly_rate"),
   ]);
 
   if (fetchError) {
@@ -143,12 +160,18 @@ export default async function CRMConnectPage() {
   }
 
   const typedChatters: Chatter[] = chatters || [];
+  const typedStaffProfiles: StaffProfile[] = staffProfiles || [];
 
   return (
     <CRMConnectClient
       initialModels={typedModels}
       initialChatters={typedChatters}
       connectedModels={sidebarModels}
+      staffProfiles={typedStaffProfiles}
+      updateMitarbeiterRolle={updateMitarbeiterRolle}
+      updateMitarbeiterName={updateMitarbeiterName}
+      updateMitarbeiterCompensation={updateMitarbeiterCompensation}
+      deleteMitarbeiter={deleteMitarbeiter}
     />
   );
 }
