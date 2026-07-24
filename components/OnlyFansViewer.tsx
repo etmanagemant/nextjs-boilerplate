@@ -40,13 +40,26 @@ export function OnlyFansViewer({
   const rfbRef = useRef<any>(null);
 
   const connectVnc = async (): Promise<void> => {
-    // Side-effect-free: just "does a live browser exist for this model at
-    // all" - VNC itself has no concept of that, and if there's genuinely no
-    // session, opening a VNC connection would just fail with a generic
-    // error instead of a clear "please reconnect" prompt.
+    // "Does a live browser exist for this model at all" - VNC itself has no
+    // concept of that, and if there's genuinely no session, opening a VNC
+    // connection would just fail with a generic error instead of a clear
+    // "please reconnect" prompt.
     const statusRes = await fetch(`/api/crm/browser-login/status?modelId=${encodeURIComponent(modelId)}`);
     const statusData = statusRes.ok ? await statusRes.json() : {};
     if (!statusData.hasSession) {
+      // The VPS browser can disappear for reasons that have nothing to do
+      // with the admin explicitly disconnecting (a VPS deploy/restart, a
+      // crash, the idle timeout) - Supabase's is_active flag has no way to
+      // learn that on its own, so without this the Connection Hub keeps
+      // showing "verbunden" for a model that's actually completely dead.
+      // Best-effort: this view just noticed the mismatch, so it's the one
+      // fixing it, but a failure here shouldn't block showing the correct
+      // "not connected" prompt either way.
+      fetch("/api/crm/browser-login/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId }),
+      }).catch(() => {});
       setPhase("no-session");
       return;
     }
