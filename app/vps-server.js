@@ -189,11 +189,11 @@ async function launchBrowser(modelId, display) {
         // screen) but very visible over VNC as a chunk of dead black
         // desktop next to a smaller window. Must match xvfb-login.service's
         // screen size exactly. Was 1920x1080 - OnlyFans' desktop layout
-        // stays exactly the same at 1600x900 (well above any responsive
+        // stays exactly the same at 1366x768 (well above any responsive
         // breakpoint), but with fewer physical pixels for the same layout,
         // noVNC's scaleViewport has less to shrink to fit a given on-screen
         // video size, so text and buttons end up visibly larger/readable.
-        '--window-size=1600,900',
+        '--window-size=1366,768',
         '--window-position=0,0',
         `--user-data-dir=/tmp/chromium-${modelId}`,
       ],
@@ -239,10 +239,10 @@ async function getOrCreateSession(modelId) {
   // average 15+, heavy swapping) since Chrome renders it entirely in
   // software with --disable-gpu - that turned out to mostly be a
   // concurrent-launch race (fixed by withModelLock), not the resolution
-  // alone. Now at 1600x900, chosen for VNC readability (see the
+  // alone. Now at 1366x768, chosen for VNC readability (see the
   // --window-size comment in launchBrowser), which also happens to be
   // lighter than Full HD.
-  await page.setViewport({ width: 1600, height: 900 });
+  await page.setViewport({ width: 1366, height: 768 });
   // Chrome's --lang flag covers its own UI chrome; sites pick their content
   // language from the Accept-Language header, so both are needed for
   // OnlyFans itself to render in German.

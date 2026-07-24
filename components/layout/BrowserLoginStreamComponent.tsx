@@ -173,7 +173,7 @@ export default function BrowserLoginStreamComponent({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#0f0f0f] border border-[#D4AF37]/30 rounded-lg shadow-2xl w-[95vw] max-w-[1600px] p-6">
+      <div className="bg-gradient-to-b from-[#1a1a1a] to-[#0f0f0f] border border-[#D4AF37]/30 rounded-lg shadow-2xl w-[98vw] max-w-[1900px] p-4">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-xl font-bold text-[#D4AF37] flex items-center gap-2">
@@ -231,7 +231,7 @@ export default function BrowserLoginStreamComponent({
 
             <div
               className="relative bg-black rounded-lg overflow-hidden border border-[#D4AF37]/30"
-              style={{ height: "70vh" }}
+              style={{ height: "85vh" }}
             >
               <div ref={vncContainerRef} className="w-full h-full" />
               {(phase === "opening" || phase === "connecting") && (

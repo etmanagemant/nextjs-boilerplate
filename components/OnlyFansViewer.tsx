@@ -234,7 +234,7 @@ export function OnlyFansViewer({
   if (isModal) {
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-40 flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl h-[90vh] rounded-xl overflow-hidden shadow-2xl border-2 border-[#D4AF37]/40 bg-[#050505]">
+        <div className="w-full max-w-[1900px] h-[92vh] rounded-xl overflow-hidden shadow-2xl border-2 border-[#D4AF37]/40 bg-[#050505]">
           {viewerContent}
         </div>
       </div>
