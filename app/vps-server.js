@@ -394,12 +394,15 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
         if (sentLog[j].message_text === text) {
           logIdx = j + 1;
           if (!alreadyLabeled) {
-            var body = el.querySelector('.b-chat__message__body') || el;
+            // Appended to the whole message container (el), not just its
+            // .b-chat__message__body - OnlyFans' own timestamp renders as a
+            // later sibling outside body, so appending inside body put our
+            // label ABOVE the timestamp instead of below it as requested.
             var tag = document.createElement('div');
             tag.className = LABEL_CLASS;
             tag.textContent = 'gesendet von ' + sentLog[j].chatter_name;
             tag.style.cssText = 'font-size:10px;opacity:0.55;text-align:right;margin-top:2px;color:inherit;';
-            body.appendChild(tag);
+            el.appendChild(tag);
           }
           break;
         }
