@@ -2,7 +2,6 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const fs = require('fs/promises');
 const path = require('path');
-const crypto = require('crypto');
 
 // ============================================================================
 // PROCESS HARDENING - Global Exception Shield
@@ -33,12 +32,12 @@ app.use((req, res, next) => {
 
 // This server has no auth of its own beyond this shared secret - anyone who
 // knows it can control every connected model's live browser. /health stays
-// open so uptime monitors can hit it without the secret. /stream is hit
-// directly by the browser (via <img src>, not fetch, so it can't attach the
-// secret header) and instead checks its own short-lived per-request token -
-// see streamTokens below.
+// open so uptime monitors can hit it without the secret. The live view
+// itself goes over VNC (x11vnc + websockify, reverse-proxied by Caddy
+// directly to port 6080) rather than through this Express app at all, so
+// its own password auth is what actually gates that traffic.
 app.use((req, res, next) => {
-  if (req.path === '/health' || req.path === '/stream') return next();
+  if (req.path === '/health') return next();
   const expected = process.env.VPS_SHARED_SECRET;
   if (!expected) return next(); // not configured - fail open rather than lock everyone out
   if (req.headers['x-vps-secret'] !== expected) {
@@ -64,18 +63,6 @@ const modelSessions = {}; // modelId -> { browser, page, lastActivity, createdAt
 // "reconnected, but still see a login page" reports.
 const IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000; // close a session after 6h of no requests
 
-// Short-lived, single-use tokens for /stream (see the auth middleware above
-// for why that route can't use the shared secret). Next.js mints one via
-// POST /stream-token (which IS shared-secret protected) right before the
-// browser opens the stream, so the permanent secret never reaches the
-// client - only this one-shot, 60-second-lived token does.
-const streamTokens = {}; // token -> { modelId, expiresAt }
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, entry] of Object.entries(streamTokens)) {
-    if (entry.expiresAt < now) delete streamTokens[token];
-  }
-}, 60 * 1000);
 // Your Vultr box (ETMANAGEMENT, 80.240.30.188) has 1GB RAM - a single headful
 // Chromium session already uses 300-500MB, so default to ONE at a time.
 // Bump via MAX_CONCURRENT_SESSIONS env var if you upgrade the VPS.
@@ -175,14 +162,14 @@ async function launchBrowser(modelId, display) {
       // Uses Puppeteer's own managed Chrome (downloaded into ~/.cache/puppeteer
       // by `npm install`) unless CHROMIUM_PATH points somewhere else.
       executablePath: process.env.CHROMIUM_PATH || puppeteer.executablePath(),
-      // The login flow (getOrCreateSession) points this at :1, the
-      // dedicated display an admin can view directly over VNC - real
-      // remote-desktop control instead of screenshot polling, which is what
-      // made typing/clicking during login (and especially CAPTCHAs) feel
-      // so laggy. Anything reviving an existing connected model purely for
-      // ongoing screenshot-based chatter viewing (restoreSession) doesn't
-      // pass this and stays on the main shared display - it was never
-      // going to be VNC-viewed anyway.
+      // getOrCreateSession always points this at :1, the single display
+      // both the admin's login flow and the ongoing CRM Inbox live view are
+      // VNC-viewed on - the same persistent browser serves both. NOTE: with
+      // only one shared display, two models connected at once would render
+      // overlapping Chrome windows on top of each other over VNC; fine for
+      // now (single test model), but running multiple models concurrently
+      // will need one Xvfb+x11vnc+websockify set per display slot instead
+      // of everything sharing :1.
       env: display ? { ...process.env, DISPLAY: display } : process.env,
       args: [
         '--no-sandbox',
@@ -195,12 +182,18 @@ async function launchBrowser(modelId, display) {
         '--disable-default-apps',
         '--disable-extensions',
         '--disable-blink-features=AutomationControlled',
+        '--lang=de-DE',
         // Without this, Chrome's outer window opens at its own default
-        // size, not the full 1920x1080 Xvfb display - invisible to
-        // page.screenshot() (which only captures the page content, not the
-        // whole virtual screen) but very visible over VNC as a chunk of
-        // dead black desktop next to a smaller window.
-        '--window-size=1920,1080',
+        // size, not the full Xvfb display - invisible to page.screenshot()
+        // (which only captures the page content, not the whole virtual
+        // screen) but very visible over VNC as a chunk of dead black
+        // desktop next to a smaller window. Must match xvfb-login.service's
+        // screen size exactly. Was 1920x1080 - OnlyFans' desktop layout
+        // stays exactly the same at 1600x900 (well above any responsive
+        // breakpoint), but with fewer physical pixels for the same layout,
+        // noVNC's scaleViewport has less to shrink to fit a given on-screen
+        // video size, so text and buttons end up visibly larger/readable.
+        '--window-size=1600,900',
         '--window-position=0,0',
         `--user-data-dir=/tmp/chromium-${modelId}`,
       ],
@@ -223,9 +216,16 @@ async function launchBrowser(modelId, display) {
 // Get an existing live session, or open a fresh one navigated to the login page
 async function getOrCreateSession(modelId) {
   const existing = modelSessions[modelId];
-  if (existing) {
+  if (existing && existing.browser.isConnected()) {
     existing.lastActivity = Date.now();
     return existing;
+  }
+  if (existing) {
+    // Browser process died (crash, killed display, OOM, etc.) but the map
+    // entry survived - reusing it silently would mean /connect keeps
+    // returning success while showing a blank/dead window forever.
+    console.warn(`[SESSION] Stale/disconnected browser for ${modelId}, relaunching`);
+    delete modelSessions[modelId];
   }
 
   await enforceSessionCap(modelId);
@@ -234,12 +234,19 @@ async function getOrCreateSession(modelId) {
 
   const browser = await launchBrowser(modelId, ':1');
   const page = await browser.newPage();
-  // 1920x1080 briefly overloaded this 1-vCPU/1GB VPS (load average 15+,
-  // heavy swapping) since Chrome renders it entirely in software with
-  // --disable-gpu. Was 1280x800 - the earlier 1920x1080 meltdown was mostly
-  // the concurrent-launch race (fixed by withModelLock now), not the
-  // resolution alone. Trying Full HD again with that lock in place.
-  await page.setViewport({ width: 1920, height: 1080 });
+  // Must match the --window-size Chrome launch arg and xvfb-login.service's
+  // screen size. 1920x1080 briefly overloaded this 1-vCPU/1GB VPS (load
+  // average 15+, heavy swapping) since Chrome renders it entirely in
+  // software with --disable-gpu - that turned out to mostly be a
+  // concurrent-launch race (fixed by withModelLock), not the resolution
+  // alone. Now at 1600x900, chosen for VNC readability (see the
+  // --window-size comment in launchBrowser), which also happens to be
+  // lighter than Full HD.
+  await page.setViewport({ width: 1600, height: 900 });
+  // Chrome's --lang flag covers its own UI chrome; sites pick their content
+  // language from the Accept-Language header, so both are needed for
+  // OnlyFans itself to render in German.
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9' });
   await enableDarkMode(page);
 
   try {
@@ -251,73 +258,6 @@ async function getOrCreateSession(modelId) {
     });
   } catch (navErr) {
     console.warn(`[SESSION] Initial navigation warning for ${modelId}: ${navErr.message}`);
-  }
-
-  const session = { browser, page, lastActivity: Date.now(), createdAt: new Date() };
-  modelSessions[modelId] = session;
-  return session;
-}
-
-// Re-launch a session from previously saved cookies (used when the chatter
-// live-view is opened but no live browser is currently running for the model)
-async function restoreSession(modelId, cookies, localStorageData) {
-  // A previous call (queued behind the same lock) may have already restored
-  // this model - reuse it instead of tearing down a working session.
-  const existing = modelSessions[modelId];
-  if (existing) {
-    existing.lastActivity = Date.now();
-    return existing;
-  }
-
-  await closeSession(modelId, 'restoring from saved cookies', true);
-  await enforceSessionCap(modelId);
-
-  const browser = await launchBrowser(modelId);
-  const page = await browser.newPage();
-  // 1920x1080 briefly overloaded this 1-vCPU/1GB VPS (load average 15+,
-  // heavy swapping) since Chrome renders it entirely in software with
-  // --disable-gpu. Was 1280x800 - the earlier 1920x1080 meltdown was mostly
-  // the concurrent-launch race (fixed by withModelLock now), not the
-  // resolution alone. Trying Full HD again with that lock in place.
-  await page.setViewport({ width: 1920, height: 1080 });
-  await enableDarkMode(page);
-
-  try {
-    await page.setCookie(...cookies);
-  } catch (e) {
-    console.warn(`[RESTORE] Cookie set error for ${modelId}:`, e.message);
-  }
-
-  try {
-    await page.goto('https://www.onlyfans.com', {
-      waitUntil: 'domcontentloaded',
-      timeout: 15000,
-    });
-  } catch (navErr) {
-    console.warn(`[RESTORE] Navigation warning for ${modelId}: ${navErr.message}`);
-  }
-
-  // Some sites keep auth-relevant tokens in localStorage, not just cookies -
-  // restore it too. Needs the page already navigated to the right origin
-  // first (localStorage is origin-scoped), then reloaded so the site's own
-  // init logic actually picks up the restored values, same as a normal
-  // page load would.
-  if (localStorageData) {
-    try {
-      await page.evaluate((dataStr) => {
-        const data = JSON.parse(dataStr);
-        for (const [key, value] of Object.entries(data)) {
-          try {
-            localStorage.setItem(key, value);
-          } catch (e) {
-            /* ignore individual key failures */
-          }
-        }
-      }, localStorageData);
-      await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
-    } catch (e) {
-      console.warn(`[RESTORE] localStorage restore error for ${modelId}:`, e.message);
-    }
   }
 
   const session = { browser, page, lastActivity: Date.now(), createdAt: new Date() };
@@ -360,21 +300,26 @@ async function getLoginState(page) {
   return { isLoggedIn, cookieCount: cookies.length, pageUrl, checkFailed };
 }
 
-async function takeScreenshot(page) {
-  try {
-    return await Promise.race([
-      page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Screenshot timeout')), 8000)),
-    ]);
-  } catch (e) {
-    console.warn('[SCREENSHOT] Quality 80 failed:', e.message);
-    try {
-      return await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 60 });
-    } catch (e2) {
-      console.warn('[SCREENSHOT] Quality 60 failed:', e2.message);
-      return null;
-    }
+// A Chrome renderer can crash/get killed on its own (e.g. OOM) while the
+// main browser process stays connected - browser.isConnected() stays true,
+// but every read against session.page then fails with Puppeteer's "Session
+// closed. Most likely the page has been closed." forever. Without this,
+// every route just silently re-fails against the same dead page on every
+// single poll (confirmed: this VPS's log was almost entirely this one
+// repeated error, meaning a session had likely been stuck dead for a very
+// long time), and the client never learns the session actually died -
+// it just keeps seeing isLoggedIn:false, which looks exactly like "back to
+// the login page" from the CRM Inbox. A single failed read can also just be
+// a mid-navigation blip, so this only declares a session dead after a few
+// consecutive failures, not the first one.
+const DEAD_SESSION_THRESHOLD = 3;
+function recordPageHealth(session, ok) {
+  if (ok) {
+    session.consecutiveFailures = 0;
+    return false;
   }
+  session.consecutiveFailures = (session.consecutiveFailures || 0) + 1;
+  return session.consecutiveFailures >= DEAD_SESSION_THRESHOLD;
 }
 
 // Idle sweep - free RAM on the $5 VPS from abandoned sessions
@@ -443,6 +388,11 @@ app.get('/status', async (req, res) => {
 
     session.lastActivity = Date.now();
     const state = await getLoginState(session.page);
+    if (recordPageHealth(session, !state.checkFailed)) {
+      console.warn(`[STATUS] Page dead for ${modelId} after ${DEAD_SESSION_THRESHOLD} consecutive failures, closing session`);
+      await closeSession(modelId, 'page crashed independently of browser');
+      return res.json({ hasSession: false, isLoggedIn: false });
+    }
     res.json({ hasSession: true, ...state });
   } catch (error) {
     console.error('[STATUS] Error:', error.message);
@@ -450,104 +400,39 @@ app.get('/status', async (req, res) => {
   }
 });
 
-// Live screenshot of a model's session (login flow OR ongoing chatter view)
-app.get('/frame', async (req, res) => {
-  try {
-    const { modelId } = req.query;
-    if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
-
-    const session = modelSessions[modelId];
-    if (!session) return res.json({ hasSession: false, screenshot: null });
-
-    session.lastActivity = Date.now();
-    // These don't depend on each other - running them one after another was
-    // adding the full screenshot-encode time on top of the login-state
-    // check time on every single poll.
-    const [screenshot, state] = await Promise.all([
-      takeScreenshot(session.page),
-      getLoginState(session.page),
-    ]);
-
-    res.json({ hasSession: true, screenshot, hasScreenshot: !!screenshot, ...state });
-  } catch (error) {
-    console.error('[FRAME] Error:', error.message);
-    res.status(200).json({ hasSession: false, screenshot: null, error: error.message });
-  }
-});
-
-// Forward a click / keypress / scroll / navigate / reload to the live session,
-// then return a fresh frame. Click focuses a field, keypress types into
-// whatever is currently focused - no selector guessing needed.
+// Force-reload a model's live session (e.g. the sidebar's "refresh session"
+// context menu action). Mouse/keyboard/scroll all go over VNC directly now
+// (native protocol-level forwarding, no relay needed) - this is the one
+// thing VNC can't do from outside the video itself, since it's triggered
+// from elsewhere in the CRM UI, not from inside the live view.
 app.post('/interact', async (req, res) => {
-  const { modelId, action, data } = req.body || {};
+  const { modelId, action } = req.body || {};
 
   try {
     if (!modelId || !action) {
       return res.status(400).json({ error: 'Missing modelId or action' });
+    }
+    if (action !== 'reload') {
+      return res.status(400).json({ error: `Unsupported action: ${action}` });
     }
 
     const session = modelSessions[modelId];
     if (!session) return res.status(404).json({ error: 'No active session for this model' });
 
     session.lastActivity = Date.now();
-    // Tells the continuous /stream capture loop (if one is running for this
-    // model) to back off while a real click/keypress is being executed -
-    // both were hitting the same Puppeteer page/CDP connection at once on a
-    // single CPU core, which queued the actual keystroke behind however
-    // many pending stream-frame captures, turning "type a character" into
-    // a many-second wait. See the check in the /stream loop below.
-    session.interactionPending = true;
-    const { page } = session;
 
-    let result = 'ok';
     try {
-      switch (action) {
-        case 'click':
-          await page.mouse.click(data?.x || 0, data?.y || 0);
-          result = 'clicked';
-          break;
-        case 'keypress':
-          await page.keyboard.type(String(data?.text ?? ''), { delay: 30 });
-          result = 'typed';
-          break;
-        case 'key':
-          await page.keyboard.press(data?.key || 'Enter');
-          result = 'key-pressed';
-          break;
-        case 'navigate':
-          await page.goto(data?.url || 'https://www.onlyfans.com', {
-            waitUntil: 'domcontentloaded',
-            timeout: 15000,
-          });
-          result = 'navigated';
-          break;
-        case 'scroll':
-          await page.evaluate((v) => window.scrollBy(0, v), data?.amount || 500);
-          result = 'scrolled';
-          break;
-        case 'reload':
-          await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
-          result = 'reloaded';
-          break;
-        default:
-          result = 'unknown action';
-      }
+      await session.page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
     } catch (actionErr) {
-      console.warn(`[INTERACT] Action error (${action}):`, actionErr.message);
-      result = `action error: ${actionErr.message}`;
-    } finally {
-      session.interactionPending = false;
+      console.warn('[INTERACT] Reload error:', actionErr.message);
+      return res.json({ status: 'error', action, error: actionErr.message });
     }
 
-    const [screenshot, state] = await Promise.all([
-      takeScreenshot(page),
-      getLoginState(page),
-    ]);
-
-    res.json({ status: 'success', action, result, screenshot, hasScreenshot: !!screenshot, ...state });
+    const state = await getLoginState(session.page);
+    res.json({ status: 'success', action, result: 'reloaded', ...state });
   } catch (error) {
     console.error('[INTERACT] Fatal error:', error.message);
-    res.status(200).json({ status: 'error', action, error: error.message, screenshot: null });
+    res.status(200).json({ status: 'error', action, error: error.message });
   }
 });
 
@@ -618,25 +503,6 @@ app.get('/profile-info', async (req, res) => {
     res.json({ status: 'success', modelId, data });
   } catch (error) {
     console.error(`[PROFILE-INFO] Error for ${modelId}:`, error.message);
-    res.status(200).json({ status: 'error', error: error.message });
-  }
-});
-
-// Re-launch a session from cookies saved earlier (used when the live browser
-// already got closed by the idle timeout but the chatter wants to view it)
-app.post('/restore', async (req, res) => {
-  try {
-    const { modelId, cookies, localStorageData } = req.body || {};
-    if (!modelId || !Array.isArray(cookies)) {
-      return res.status(400).json({ error: 'Missing modelId or cookies array' });
-    }
-
-    const session = await withModelLock(modelId, () => restoreSession(modelId, cookies, localStorageData));
-    const state = await getLoginState(session.page);
-
-    res.json({ status: 'success', modelId, ...state });
-  } catch (error) {
-    console.error('[RESTORE] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message });
   }
 });
@@ -774,87 +640,12 @@ app.post('/send-message', async (req, res) => {
   }
 });
 
-// Mint a one-shot token for /stream. Called by Next.js (shared-secret
-// protected), never directly by the browser.
-app.post('/stream-token', (req, res) => {
-  const { modelId } = req.body || {};
-  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
-
-  const token = crypto.randomBytes(24).toString('hex');
-  streamTokens[token] = { modelId, expiresAt: Date.now() + 60 * 1000 };
-  res.json({ status: 'success', token });
-});
-
-// Continuous MJPEG stream of a model's live session - the polling
-// screenshot-per-request approach meant every frame paid for a full
-// HTTP round-trip, which made typing/clicking (and especially CAPTCHAs)
-// feel like a slideshow. This pushes frames from a tight server-side loop
-// over one long-lived connection instead, and is hit directly by the
-// browser (bypassing Vercel, whose serverless functions would kill a
-// connection this long-lived after a few seconds) - see the /stream-token
-// route and the auth middleware above for how that's kept safe without
-// exposing the permanent shared secret to the client.
-app.get('/stream', (req, res) => {
-  const { modelId, token } = req.query;
-  const entry = token && streamTokens[token];
-  if (!entry || entry.modelId !== modelId || entry.expiresAt < Date.now()) {
-    return res.status(401).end('Unauthorized or expired token');
-  }
-  delete streamTokens[token]; // single-use
-
-  const session = modelSessions[modelId];
-  if (!session) return res.status(404).end('No active session for this model');
-
-  res.writeHead(200, {
-    'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
-    Connection: 'keep-alive',
-  });
-
-  let closed = false;
-  req.on('close', () => {
-    closed = true;
-  });
-
-  const pushFrame = async () => {
-    if (closed) return;
-    const current = modelSessions[modelId];
-    if (!current) {
-      return res.end();
-    }
-    // A click/keypress is being executed against this same page right now -
-    // don't contend with it for the CDP connection on a single CPU core.
-    // Back off and check again shortly instead of queuing up behind it.
-    if (current.interactionPending) {
-      if (!closed) setTimeout(pushFrame, 50);
-      return;
-    }
-    current.lastActivity = Date.now();
-    try {
-      const jpeg = await Promise.race([
-        current.page.screenshot({ encoding: 'binary', type: 'jpeg', quality: 70 }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
-      ]);
-      if (!closed) {
-        res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`);
-        res.write(jpeg);
-        res.write('\r\n');
-      }
-    } catch (e) {
-      // Page mid-navigation or a slow frame - just skip it, the next one
-      // will usually succeed.
-    }
-    if (!closed) setTimeout(pushFrame, 150);
-  };
-
-  pushFrame();
-});
-
-// Hands the admin's browser what it needs to open a real VNC connection to
-// the login display (:1) - the password itself, since VNC auth happens
-// client-side in the browser via noVNC. Shared-secret protected like every
+// Hands a CRM user's browser what it needs to open a real VNC connection -
+// the password itself, since VNC auth happens client-side via noVNC. Used
+// for both the admin login flow and the CRM Inbox live view (both connect
+// to the same display :1 VNC service). Shared-secret protected like every
 // other route here; the browser never talks to this directly, only
-// Next.js does, which is itself gated to admins.
+// Next.js does, which gates who's allowed to ask for it.
 app.get('/vnc-info', (req, res) => {
   const password = process.env.VNC_LOGIN_PASSWORD;
   if (!password) {
