@@ -187,27 +187,33 @@ export default function BrowserLoginStreamComponent({
           </button>
         </div>
 
-        {(phase === "opening" || phase === "connecting") && (
-          <div className="aspect-video flex flex-col items-center justify-center bg-black/60 rounded-lg border border-[#D4AF37]/20">
-            <div className="animate-spin mb-4">
-              <div className="w-8 h-8 border-4 border-[#D4AF37] border-t-transparent rounded-full"></div>
-            </div>
-            <p className="text-[#D4AF37] font-semibold">
-              {phase === "opening" ? "Browser wird gestartet..." : "VNC-Verbindung wird aufgebaut..."}
-            </p>
-          </div>
-        )}
-
-        {(phase === "live" || phase === "confirming") && (
+        {/* The VNC container stays mounted for the whole opening/connecting/
+            live/confirming lifecycle - connectVnc() runs during "connecting",
+            before the phase ever becomes "live", so this ref has to already
+            exist by then or every attempt fails immediately (that was the
+            actual bug, not a timing/patience issue). The spinner overlays
+            on top instead of replacing it. */}
+        {phase !== "error" && (
           <>
             <p className="text-xs text-slate-400 mb-2">
               Klicke in das Fenster und logge dich mit den Model-Zugangsdaten bei OnlyFans ein.
             </p>
             <div
-              ref={vncContainerRef}
               className="relative bg-black rounded-lg overflow-hidden border border-[#D4AF37]/30"
               style={{ height: "70vh" }}
-            />
+            >
+              <div ref={vncContainerRef} className="w-full h-full" />
+              {(phase === "opening" || phase === "connecting") && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
+                  <div className="animate-spin mb-4">
+                    <div className="w-8 h-8 border-4 border-[#D4AF37] border-t-transparent rounded-full"></div>
+                  </div>
+                  <p className="text-[#D4AF37] font-semibold">
+                    {phase === "opening" ? "Browser wird gestartet..." : "VNC-Verbindung wird aufgebaut..."}
+                  </p>
+                </div>
+              )}
+            </div>
 
             <div className="mt-4 flex items-center justify-between gap-3">
               <div className="text-sm">
