@@ -101,16 +101,6 @@ export default function ModelsManagementClient({
             className="flex justify-between items-center p-3 border border-[#8A6D3F]/20 rounded-md bg-[#050505]/40 hover:border-[#D4AF37]/50 transition"
           >
             <div className="flex items-center gap-3 flex-1">
-              {model.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={model.avatar_url}
-                  alt={model.name}
-                  className="w-8 h-8 rounded-full object-cover border border-[#D4AF37]/40 flex-shrink-0"
-                />
-              ) : (
-                <span className="w-8 h-8 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/40 flex items-center justify-center text-sm flex-shrink-0">👤</span>
-              )}
               {editingAvatarId === model.id ? (
                 <form
                   onSubmit={(e) => {
@@ -133,10 +123,19 @@ export default function ModelsManagementClient({
               ) : (
                 <button
                   onClick={() => handleAvatarStart(model.id, model.avatar_url)}
-                  className="text-[11px] bg-[#D4AF37]/10 text-[#D4AF37] px-2 py-1 rounded font-bold hover:bg-[#D4AF37]/20 transition cursor-pointer"
                   title="Profilbild setzen"
+                  className="flex-shrink-0"
                 >
-                  🖼️
+                  {model.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={model.avatar_url}
+                      alt={model.name}
+                      className="w-8 h-8 rounded-full object-cover border border-[#D4AF37]/40 hover:border-[#D4AF37] transition"
+                    />
+                  ) : (
+                    <span className="w-8 h-8 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/40 hover:border-[#D4AF37] transition flex items-center justify-center text-sm">👤</span>
+                  )}
                 </button>
               )}
               {editingId === model.id ? (
