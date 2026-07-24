@@ -171,7 +171,7 @@ export function FanCrmPanel({ modelId, fanId, metadata, onSaved, isAdmin }: FanC
   const isSpender = (metadata.lifetime_value || 0) > 0;
 
   return (
-    <div className="w-80 flex-shrink-0 h-full bg-black/40 border-l border-[#C9A86A]/20 overflow-y-auto flex flex-col">
+    <div className="w-80 flex-shrink-0 h-full bg-black/40 overflow-y-auto scrollbar-hide flex flex-col">
       <div className="sticky top-0 bg-black/60 p-4 border-b border-[#C9A86A]/20 z-10 flex items-center justify-between">
         <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">👤 Fan CRM</h2>
         <button

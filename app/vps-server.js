@@ -131,6 +131,34 @@ async function enableDarkMode(page) {
   }
 }
 
+// Reserves empty space at the bottom of the real chat message list so the
+// CRM's own floating emoji bar (drawn on top of the VNC feed, positioned
+// over the compose-box area) never covers actual OnlyFans content - the
+// message list scrolls within its own shorter box instead of running all
+// the way to the bottom of the frame. ".b-chat__messages" confirmed live
+// via /debug-dom as the actual scrollable message container.
+const RESERVE_OVERLAY_SPACE_SCRIPT = `
+(function() {
+  function inject() {
+    if (document.getElementById('__crm_reserve_space__')) return;
+    var style = document.createElement('style');
+    style.id = '__crm_reserve_space__';
+    style.textContent = '.b-chat__messages { padding-bottom: 90px !important; }';
+    (document.head || document.documentElement).appendChild(style);
+  }
+  if (document.head) inject();
+  else document.addEventListener('DOMContentLoaded', inject);
+})();
+`;
+
+async function reserveOverlaySpace(page) {
+  try {
+    await page.evaluateOnNewDocument(RESERVE_OVERLAY_SPACE_SCRIPT);
+  } catch (e) {
+    console.warn('[RESERVE-SPACE] Could not register:', e.message);
+  }
+}
+
 // Hides specific OnlyFans nav items for chatter-role slots only (never the
 // admin's own session) - matched by their visible text rather than CSS
 // classes, same "fragile but functional, no reliance on OnlyFans' own
@@ -190,21 +218,55 @@ async function applyChatterRestrictions(page) {
   }
 }
 
-// Labels every outgoing message bubble in the real OnlyFans chat with which
-// chatter's slot sent it. Confirmed live (via /debug-dom) that OnlyFans
-// marks the creator's own messages with the "m-from-me" class - since each
-// slot is one chatter's own dedicated window, every message that appears
-// while a given slot is open was unambiguously sent by that slot's chatter,
-// no per-message correlation needed. %%CHATTER_NAME%% is substituted per
-// slot before injection (evaluateOnNewDocument only accepts a plain string,
-// not a closure over a variable).
+// Labels an outgoing message bubble with which chatter sent it - but ONLY
+// the ones actually sent from THIS slot, not every "m-from-me" bubble.
+// Multiple chatters can have their own slot open on the exact same real
+// OnlyFans conversation at once (same underlying account, synced by
+// OnlyFans itself across all of them) - the first version of this labeled
+// EVERY outgoing bubble with whichever chatter happened to be viewing it,
+// which is wrong whenever more than one slot is open on the same chat
+// (confirmed live: a message actually sent by admin Tobias showed up
+// labeled with a different chatter's name in their own slot). Fixed by
+// only labeling a NEW bubble that appears shortly after a local send
+// action (Enter in the compose box, or a "send"-labeled button click) was
+// observed in THIS SPECIFIC page - a bubble that appears without a recent
+// local trigger came from a different slot/session and is left unlabeled
+// rather than guessed. %%CHATTER_NAME%% is substituted per slot before
+// injection (evaluateOnNewDocument only accepts a plain string).
 const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
 (function() {
   var CHATTER_NAME = "%%CHATTER_NAME%%";
   var LABEL_CLASS = 'etm-sent-by-label';
+  var SEND_WINDOW_MS = 6000;
+  var recentSendUntil = 0;
+
+  function armSendWindow() {
+    recentSendUntil = Date.now() + SEND_WINDOW_MS;
+  }
+
+  function attachSendListeners() {
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        var el = e.target;
+        if (el && (el.tagName === 'TEXTAREA' || el.isContentEditable)) armSendWindow();
+      }
+    }, true);
+    document.addEventListener('click', function(e) {
+      var btn = e.target && e.target.closest && e.target.closest('button, [role="button"]');
+      if (!btn) return;
+      var label = ((btn.textContent || '') + ' ' + (btn.getAttribute('aria-label') || '')).toLowerCase();
+      if (label.indexOf('send') !== -1) armSendWindow();
+    }, true);
+  }
 
   function label(el) {
-    if (el.querySelector('.' + LABEL_CLASS)) return;
+    // Every "m-from-me" bubble is only ever evaluated once, whether or not
+    // it gets labeled - a bubble that already existed on page load (real
+    // chat history, not something this slot just sent) must never light up
+    // later just because the send window happens to be open at that moment.
+    if (el.dataset.etmChecked) return;
+    el.dataset.etmChecked = '1';
+    if (Date.now() > recentSendUntil) return;
     var body = el.querySelector('.b-chat__message__body') || el;
     var tag = document.createElement('div');
     tag.className = LABEL_CLASS;
@@ -218,6 +280,7 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
     for (var i = 0; i < mine.length; i++) label(mine[i]);
   }
   function start() {
+    attachSendListeners();
     scan();
     new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
   }
@@ -528,6 +591,7 @@ async function ensureSlotBrowser(slot, modelId, role, chatterName) {
   await page.setViewport({ width: 1280, height: 800 });
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9' });
   await enableDarkMode(page);
+  await reserveOverlaySpace(page);
   if (role !== 'admin') {
     await applyChatterRestrictions(page);
   }
@@ -1145,6 +1209,44 @@ app.get('/chatter-slot-chat-text', async (req, res) => {
     res.json({ status: 'success', text: text.slice(0, 12000) });
   } catch (error) {
     console.error('[CHATTER-SLOT-CHAT-TEXT] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// Inserts an emoji directly into the real OnlyFans message box, at the
+// current cursor position - replaces the old clipboard-copy + manual
+// Strg+V flow (VNC's clipboard sync was the only option before this route
+// existed; now that we know the compose box's real selector, driving it
+// straight through Puppeteer is strictly better UX). Uses the DOM focus()
+// + keyboard.insertText() combo rather than page.keyboard.type(), since
+// insertText fires a proper input event at the current selection/caret
+// (preserving whatever the chatter already typed) and handles arbitrary
+// unicode (emoji) reliably, unlike simulating individual keydowns per char.
+app.post('/insert-emoji', async (req, res) => {
+  try {
+    const { userId, modelId, emoji } = req.body || {};
+    if (!userId || !modelId || !emoji) {
+      return res.status(400).json({ error: 'Missing userId, modelId, or emoji' });
+    }
+
+    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+
+    const focused = await slot.page.evaluate(() => {
+      var el = document.querySelector('textarea[placeholder*="message" i], div[contenteditable="true"]');
+      if (!el) return false;
+      el.focus();
+      return true;
+    });
+    if (!focused) {
+      return res.json({ status: 'no_input', message: 'Kein offenes Nachrichtenfeld gefunden' });
+    }
+
+    await slot.page.keyboard.insertText(emoji);
+    slot.lastActivity = Date.now();
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('[INSERT-EMOJI] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message });
   }
 });

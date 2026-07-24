@@ -24,6 +24,18 @@ body {
   height: 100%;
 }
 
+/* Hides the scrollbar visually while keeping the element scrollable - used
+   where a visible native scrollbar reads as a raw/unfinished web element
+   (e.g. the Fan CRM panel, meant to look native next to the embedded
+   OnlyFans view rather than like a separate web page bolted on). */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 body {
   background: var(--bg-base);
   color: var(--text-primary);

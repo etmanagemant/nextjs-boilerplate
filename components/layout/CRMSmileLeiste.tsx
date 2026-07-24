@@ -32,7 +32,7 @@ export default function SmileLeiste({
   };
 
   return (
-    <div className="relative flex items-center gap-2 overflow-x-auto pb-2">
+    <div className="relative flex items-center gap-2 overflow-x-auto scrollbar-hide pb-2">
       <p className="text-xs text-slate-500 uppercase tracking-widest whitespace-nowrap flex-shrink-0">
         Quick Emojis:
       </p>

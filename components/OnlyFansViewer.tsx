@@ -197,19 +197,27 @@ export function OnlyFansViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelId]);
 
-  // VNC has no way to inject text directly into whatever's focused on the
-  // remote page - clipboard paste (same trick as the login view's "@"
-  // workaround) is the only reliable path for arbitrary text, emoji
-  // included. One click copies it to the remote clipboard; a manual
-  // Strg+V after clicking into the chat field pastes it.
-  const handlePasteEmoji = (emoji: string) => {
-    if (!rfbRef.current) return;
+  // Inserts straight into the real OnlyFans compose box via the chatter's
+  // own slot (server-side Puppeteer focus + keyboard.insertText) - used to
+  // go through VNC clipboard-paste + a manual Strg+V, which the direct
+  // route makes unnecessary now that the compose box's real selector is
+  // known.
+  const handlePasteEmoji = async (emoji: string) => {
     try {
-      rfbRef.current.clipboardPasteFrom(emoji);
-      setPasteStatus("done");
-      setTimeout(() => setPasteStatus("idle"), 1200);
+      const res = await fetch("/api/crm/insert-emoji", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, emoji }),
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        setPasteStatus("done");
+        setTimeout(() => setPasteStatus("idle"), 900);
+      } else {
+        console.warn("[VIEWER] Emoji insert failed:", data);
+      }
     } catch (err) {
-      console.error("[VIEWER] Emoji paste error:", err);
+      console.error("[VIEWER] Emoji insert error:", err);
     }
   };
 
@@ -312,12 +320,14 @@ export function OnlyFansViewer({
             // centered on the whole 1280x800 frame - confirmed via a live
             // DOM measurement (the compose textarea sits at roughly
             // left 52.7%-97.6%, top 86.25% of the frame, not full-width).
+            // reserveOverlaySpace (VPS-side) pads the real message list so
+            // this never covers actual chat content.
             <div
               className="absolute z-20 flex flex-col items-center gap-1.5"
-              style={{ left: "75%", bottom: "14%", transform: "translateX(-50%)" }}
+              style={{ left: "75%", bottom: "14%", transform: "translateX(-50%)", width: "45%" }}
             >
               {emojiPickerOpen && (
-                <div className="relative w-72">
+                <div className="relative w-full">
                   <EmojiPicker
                     quickEmojis={emojis}
                     onSelect={(emoji) => {
@@ -329,13 +339,13 @@ export function OnlyFansViewer({
                   />
                 </div>
               )}
-              <div className="max-w-[40%] overflow-x-auto flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/80 border border-[#C9A86A]/40 backdrop-blur-sm shadow-2xl">
+              <div className="w-full max-h-16 overflow-y-auto scrollbar-hide flex flex-wrap items-center gap-1.5 px-2.5 py-2 rounded-xl bg-black/85 border border-[#C9A86A]/40 backdrop-blur-sm shadow-2xl">
                 {emojis.map((emoji, i) => (
                   <button
                     key={i}
                     onClick={() => handlePasteEmoji(emoji)}
-                    className="text-lg leading-none flex-shrink-0 hover:scale-125 transition-transform cursor-pointer"
-                    title="In Zwischenablage kopieren, dann Strg+V im Chat-Feld"
+                    title="In die Nachricht einfügen"
+                    className="text-lg leading-none flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-[#C9A86A]/20 hover:scale-110 transition-all"
                   >
                     {emoji}
                   </button>
@@ -343,7 +353,7 @@ export function OnlyFansViewer({
                 <button
                   onClick={() => setEmojiPickerOpen((v) => !v)}
                   title="Mehr Emojis"
-                  className="text-sm flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full border border-dashed border-[#9C7A3D]/60 text-[#C9A86A]"
+                  className="text-sm flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-dashed border-[#9C7A3D]/60 text-[#C9A86A] bg-white/5 hover:bg-[#C9A86A]/20 transition-all"
                 >
                   {emojiPickerOpen ? "▾" : "+"}
                 </button>
@@ -352,8 +362,8 @@ export function OnlyFansViewer({
           )}
 
           {pasteStatus === "done" && (
-            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 text-[11px] text-emerald-400 bg-black/80 px-3 py-1 rounded-full border border-emerald-500/30">
-              Kopiert — Strg+V im Chat-Feld zum Einfügen
+            <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 text-[11px] text-emerald-400 bg-black/80 px-3 py-1 rounded-full border border-emerald-500/30">
+              ✓ Eingefügt
             </div>
           )}
         </>
@@ -382,7 +392,7 @@ export function OnlyFansViewer({
               isAdmin={isAdmin}
             />
           ) : (
-            <div className="w-80 flex-shrink-0 h-full bg-black/40 border-l border-[#C9A86A]/20 flex flex-col">
+            <div className="w-80 flex-shrink-0 h-full bg-black/40 flex flex-col">
               <div className="sticky top-0 bg-black/60 p-4 border-b border-[#C9A86A]/20">
                 <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">👤 Fan CRM</h2>
                 <p className="text-[11px] text-slate-500 mt-1">Öffne einen Fan-Chat in OnlyFans für Fan-Details.</p>
