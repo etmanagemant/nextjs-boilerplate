@@ -168,13 +168,22 @@ async function enforceSessionCap(excludeModelId) {
   await closeSession(oldestModelId, 'session cap reached, evicted least recently used');
 }
 
-async function launchBrowser(modelId) {
+async function launchBrowser(modelId, display) {
   const launchOnce = () =>
     puppeteer.launch({
       headless: false,
       // Uses Puppeteer's own managed Chrome (downloaded into ~/.cache/puppeteer
       // by `npm install`) unless CHROMIUM_PATH points somewhere else.
       executablePath: process.env.CHROMIUM_PATH || puppeteer.executablePath(),
+      // The login flow (getOrCreateSession) points this at :1, the
+      // dedicated display an admin can view directly over VNC - real
+      // remote-desktop control instead of screenshot polling, which is what
+      // made typing/clicking during login (and especially CAPTCHAs) feel
+      // so laggy. Anything reviving an existing connected model purely for
+      // ongoing screenshot-based chatter viewing (restoreSession) doesn't
+      // pass this and stays on the main shared display - it was never
+      // going to be VNC-viewed anyway.
+      env: display ? { ...process.env, DISPLAY: display } : process.env,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -216,7 +225,7 @@ async function getOrCreateSession(modelId) {
   // Fresh login handshake - never inherit a previous session's cookies for this model
   await wipeProfileDir(modelId);
 
-  const browser = await launchBrowser(modelId);
+  const browser = await launchBrowser(modelId, ':1');
   const page = await browser.newPage();
   // 1920x1080 briefly overloaded this 1-vCPU/1GB VPS (load average 15+,
   // heavy swapping) since Chrome renders it entirely in software with
@@ -832,6 +841,19 @@ app.get('/stream', (req, res) => {
   };
 
   pushFrame();
+});
+
+// Hands the admin's browser what it needs to open a real VNC connection to
+// the login display (:1) - the password itself, since VNC auth happens
+// client-side in the browser via noVNC. Shared-secret protected like every
+// other route here; the browser never talks to this directly, only
+// Next.js does, which is itself gated to admins.
+app.get('/vnc-info', (req, res) => {
+  const password = process.env.VNC_LOGIN_PASSWORD;
+  if (!password) {
+    return res.status(500).json({ error: 'VNC_LOGIN_PASSWORD not configured on the VPS' });
+  }
+  res.json({ status: 'success', password });
 });
 
 // Health check

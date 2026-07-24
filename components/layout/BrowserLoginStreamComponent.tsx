@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { mapClickToRenderedElement } from "@/lib/canvasClick";
+import { mapClickToCanvasCoords } from "@/lib/canvasClick";
 
 interface BrowserLoginStreamComponentProps {
   modelId: string;
@@ -10,17 +10,45 @@ interface BrowserLoginStreamComponentProps {
   onSuccess: () => void;
 }
 
+// Loads noVNC's RFB client (an ES module, self-hosted at /novnc/) via an
+// injected <script type="module">, once per page load - sidesteps Next.js/
+// webpack trying to resolve it as part of the app's own module graph, since
+// it's a plain static asset, not a bundled dependency.
+let rfbLoadPromise: Promise<any> | null = null;
+function loadRFB(): Promise<any> {
+  if ((window as any).__RFB) return Promise.resolve((window as any).__RFB);
+  if (rfbLoadPromise) return rfbLoadPromise;
+  rfbLoadPromise = new Promise((resolve, reject) => {
+    const onReady = () => {
+      window.removeEventListener("__rfbready", onReady);
+      resolve((window as any).__RFB);
+    };
+    window.addEventListener("__rfbready", onReady);
+    const script = document.createElement("script");
+    script.type = "module";
+    script.textContent = `
+      import RFB from '/novnc/core/rfb.js';
+      window.__RFB = RFB;
+      window.dispatchEvent(new Event('__rfbready'));
+    `;
+    script.onerror = () => reject(new Error("noVNC konnte nicht geladen werden"));
+    document.head.appendChild(script);
+  });
+  return rfbLoadPromise;
+}
+
 /**
  * Opens a live, click-and-type-able view of a real headful browser running
  * on the VPS, so the admin can actually log in to OnlyFans. Once a valid
  * session is detected, shows "Creator verbinden" to persist the cookies.
  *
- * Renders the live MJPEG stream (see /api/crm/stream-url) as the primary
- * view once it loads - a continuous pushed feed instead of one screenshot
- * per poll request, which made CAPTCHA-solving in particular feel like a
- * slideshow. The old poll+canvas path is kept as an automatic fallback
- * (shown until the stream loads, or permanently if it never does) since
- * it's proven and the stream is new, unverified-live code.
+ * Primary path: a real VNC connection (noVNC) to a dedicated display on the
+ * VPS - genuine remote-desktop control (native input forwarding built into
+ * the protocol, no custom click/keyboard relay needed) instead of
+ * screenshot polling, which is what made typing/clicking - especially
+ * CAPTCHAs - feel many seconds delayed. Falls back to the original
+ * poll-a-screenshot approach if VNC can't connect for any reason (e.g. a
+ * network blocking the WebSocket) - that path is proven, if slower.
  */
 export default function BrowserLoginStreamComponent({
   modelId,
@@ -31,27 +59,20 @@ export default function BrowserLoginStreamComponent({
   const [phase, setPhase] = useState<"opening" | "live" | "confirming" | "error">("opening");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [error, setError] = useState<string>("");
+  const [vncActive, setVncActive] = useState(false);
 
+  const vncContainerRef = useRef<HTMLDivElement>(null);
+  const rfbRef = useRef<any>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   // Keystrokes/clicks used to fire as independent parallel requests, which
   // could land on the VPS out of order and garble what you typed. Chain
   // them on this queue so each one waits for the previous to finish first.
+  // Only used by the poll+canvas fallback - VNC forwards input natively.
   const queueRef = useRef<Promise<void>>(Promise.resolve());
-  // The background poll and the per-keystroke interact calls both draw
-  // frames independently. A slow poll response can land AFTER a newer
-  // keystroke's response and paint a stale frame over it - the typed
-  // letter flashes and then looks like it never happened. Tag every request
-  // with a sequence number at dispatch time and only ever draw the newest
-  // one that arrives, regardless of which one resolves first.
   const frameSeqRef = useRef(0);
   const appliedSeqRef = useRef(0);
-
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [streamOk, setStreamOk] = useState(false);
-  const streamRetriesRef = useRef(0);
 
   const drawScreenshot = (base64OrDataUrl: string, seq: number) => {
     if (!canvasRef.current) return;
@@ -68,13 +89,16 @@ export default function BrowserLoginStreamComponent({
     img.src = base64OrDataUrl.startsWith("data:") ? base64OrDataUrl : `data:image/jpeg;base64,${base64OrDataUrl}`;
   };
 
+  // Doubles as the login-state check (isLoggedIn) regardless of whether
+  // VNC or the fallback is active - VNC has no concept of that, it's purely
+  // visual/input. Only draws to the fallback canvas when VNC isn't active.
   const fetchFrame = async () => {
     const seq = ++frameSeqRef.current;
     try {
       const res = await fetch(`/api/crm/screenshot?modelId=${encodeURIComponent(modelId)}`);
       if (!res.ok) return;
       const data = await res.json();
-      if (!streamOk && data.screenshot) drawScreenshot(data.screenshot, seq);
+      if (!vncActive && data.screenshot) drawScreenshot(data.screenshot, seq);
       setIsLoggedIn(!!data.isLoggedIn);
     } catch (err) {
       console.error("[LOGIN-VIEW] frame error:", err);
@@ -82,8 +106,6 @@ export default function BrowserLoginStreamComponent({
   };
 
   const interact = (action: string, data: Record<string, unknown>) => {
-    // Queue this call after whatever's currently in flight, so rapid typing
-    // or click-then-type doesn't send overlapping/out-of-order requests.
     const run = async () => {
       const seq = ++frameSeqRef.current;
       try {
@@ -94,7 +116,7 @@ export default function BrowserLoginStreamComponent({
         });
         if (!res.ok) return;
         const result = await res.json();
-        if (!streamOk && result.screenshot) drawScreenshot(result.screenshot, seq);
+        if (!vncActive && result.screenshot) drawScreenshot(result.screenshot, seq);
         setIsLoggedIn(!!result.isLoggedIn);
       } catch (err) {
         console.error("[LOGIN-VIEW] interact error:", err);
@@ -104,29 +126,8 @@ export default function BrowserLoginStreamComponent({
     return queueRef.current;
   };
 
-  const refreshStreamUrl = () => {
-    fetch(`/api/crm/stream-url?modelId=${encodeURIComponent(modelId)}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.streamUrl) setStreamUrl(data.streamUrl);
-      })
-      .catch(() => {
-        /* stream stays off, poll+canvas fallback carries the view */
-      });
-  };
-
-  const handleStreamError = () => {
-    setStreamOk(false);
-    streamRetriesRef.current += 1;
-    if (streamRetriesRef.current > 5) {
-      setStreamUrl(null); // give up for this session, poll+canvas keeps working
-      return;
-    }
-    // The token behind the failed connection was single-use - mint a fresh one.
-    refreshStreamUrl();
-  };
-
-  // Step 1: open the live browser on the VPS
+  // Step 1: open the live browser on the VPS, then try VNC before falling
+  // back to the poll+canvas approach.
   useEffect(() => {
     let cancelled = false;
 
@@ -146,9 +147,44 @@ export default function BrowserLoginStreamComponent({
         setPhase("live");
         await fetchFrame();
         pollRef.current = setInterval(fetchFrame, 300);
-        refreshStreamUrl();
+
+        // Try VNC. If anything here throws or the connection doesn't
+        // announce itself within a few seconds, vncActive just stays false
+        // and the poll+canvas view (already running above) carries on.
+        try {
+          const [RFB, vncInfoRes] = await Promise.all([
+            loadRFB(),
+            fetch("/api/crm/browser-login/vnc-info"),
+          ]);
+          if (cancelled) return;
+          if (!vncInfoRes.ok) throw new Error("VNC info unavailable");
+          const { wsUrl, password } = await vncInfoRes.json();
+          if (cancelled || !vncContainerRef.current || !wsUrl) return;
+
+          const rfb = new RFB(vncContainerRef.current, wsUrl, {
+            credentials: { password },
+          });
+          rfb.scaleViewport = true;
+          rfb.resizeSession = false;
+          rfbRef.current = rfb;
+
+          rfb.addEventListener("connect", () => {
+            if (!cancelled) setVncActive(true);
+          });
+          rfb.addEventListener("disconnect", (e: any) => {
+            console.warn("[LOGIN-VIEW] VNC disconnected:", e?.detail);
+            if (!cancelled) setVncActive(false);
+          });
+          rfb.addEventListener("securityfailure", (e: any) => {
+            console.warn("[LOGIN-VIEW] VNC auth failed:", e?.detail);
+          });
+        } catch (vncErr: any) {
+          console.warn("[LOGIN-VIEW] VNC unavailable, using poll+canvas fallback:", vncErr?.message);
+        }
+
         // Focus immediately so the admin can start typing without first
-        // having to click into the canvas.
+        // having to click into the fallback canvas (VNC grabs its own
+        // focus once connected).
         hiddenInputRef.current?.focus();
       } catch (err: any) {
         if (!cancelled) {
@@ -163,35 +199,34 @@ export default function BrowserLoginStreamComponent({
     return () => {
       cancelled = true;
       if (pollRef.current) clearInterval(pollRef.current);
+      if (rfbRef.current) {
+        try {
+          rfbRef.current.disconnect();
+        } catch {
+          /* ignore */
+        }
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelId]);
 
-  // Once the stream is confirmed live, the poll is only needed as a login-
-  // state check, not for visual updates - slow it down so the VPS isn't
-  // encoding two full frame feeds at once.
+  // Once VNC is confirmed active, the poll is only needed for the login-
+  // state check, not visuals - slow it down since there's no longer a
+  // canvas to keep redrawing.
   useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(fetchFrame, streamOk ? 3000 : 300);
+    pollRef.current = setInterval(fetchFrame, vncActive ? 2000 : 300);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamOk, modelId]);
+  }, [vncActive, modelId]);
 
-  // Shared click handler for whichever element is currently visible (the
-  // streamed <img> once it's up, the polled <canvas> as fallback until
-  // then). Maps CSS click position to actual frame pixels, accounting for
-  // object-contain letterboxing (see lib/canvasClick.ts) - without this a
-  // click could land offset from the checkbox/button you actually clicked.
-  const performClick = (
-    clientX: number,
-    clientY: number,
-    el: HTMLCanvasElement | HTMLImageElement,
-    intrinsicWidth: number,
-    intrinsicHeight: number
-  ) => {
-    const mapped = mapClickToRenderedElement(clientX, clientY, el, intrinsicWidth, intrinsicHeight);
+  // Fallback-only input handling - VNC forwards clicks/keys/scroll natively,
+  // none of this runs while vncActive.
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current) return;
+    const mapped = mapClickToCanvasCoords(e.clientX, e.clientY, canvasRef.current);
     if (!mapped) {
       hiddenInputRef.current?.focus();
       return;
@@ -200,17 +235,6 @@ export default function BrowserLoginStreamComponent({
     hiddenInputRef.current?.focus();
   };
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current) return;
-    performClick(e.clientX, e.clientY, canvasRef.current, canvasRef.current.width, canvasRef.current.height);
-  };
-
-  const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (!imgRef.current) return;
-    performClick(e.clientX, e.clientY, imgRef.current, imgRef.current.naturalWidth, imgRef.current.naturalHeight);
-  };
-
-  // Forward every keystroke typed into the hidden input to the live page
   const handleHiddenInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value;
     e.target.value = "";
@@ -224,16 +248,10 @@ export default function BrowserLoginStreamComponent({
     }
   };
 
-  // Without this, a mouse wheel over the view did nothing - any part of the
-  // login/CAPTCHA page below the fold (or a CAPTCHA checkbox that needs
-  // scrolling into view) was unreachable. Native (non-passive) listener
-  // because React's synthetic onWheel can't preventDefault the CRM page's
-  // own scroll. Wheel events fire many times per gesture, so accumulate and
-  // send at most once per 80ms. Attached to whichever element is currently
-  // mounted (img or canvas).
   useEffect(() => {
-    const el: HTMLElement | null = streamUrl && streamOk ? imgRef.current : canvasRef.current;
-    if (!el) return;
+    if (vncActive) return; // VNC forwards scroll natively
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
     let accumulated = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -251,12 +269,12 @@ export default function BrowserLoginStreamComponent({
       }, 80);
     };
 
-    el.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("wheel", onWheel, { passive: false });
     return () => {
-      el.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("wheel", onWheel);
       if (timer) clearTimeout(timer);
     };
-  }, [modelId, streamUrl, streamOk]);
+  }, [modelId, vncActive]);
 
   const handleConfirm = async () => {
     setPhase("confirming");
@@ -288,11 +306,13 @@ export default function BrowserLoginStreamComponent({
               {phase === "live" && (
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    streamOk ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                    vncActive
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                   }`}
-                  title={streamOk ? "Live-Stream aktiv" : "Fallback: Bild wird alle 300ms abgefragt"}
+                  title={vncActive ? "Echte VNC-Verbindung aktiv" : "Fallback: Bild wird alle 300ms abgefragt"}
                 >
-                  {streamOk ? "🟢 Live" : "🟡 Poll-Modus"}
+                  {vncActive ? "🟢 VNC live" : "🟡 Poll-Modus"}
                 </span>
               )}
             </h2>
@@ -319,33 +339,27 @@ export default function BrowserLoginStreamComponent({
             <p className="text-xs text-slate-400 mb-2">
               Klicke in das Fenster und logge dich mit den Model-Zugangsdaten bei OnlyFans ein. Klicken fokussiert Felder, danach kannst du direkt tippen.
             </p>
-            <div className="relative bg-black rounded-lg overflow-hidden border border-[#D4AF37]/30">
-              {streamUrl ? (
-                <img
-                  ref={imgRef}
-                  src={streamUrl}
-                  onLoad={() => setStreamOk(true)}
-                  onError={handleStreamError}
-                  onClick={handleImageClick}
-                  className="w-full h-auto max-h-[80vh] object-contain cursor-pointer block mx-auto"
-                  alt="Live-Login-Ansicht"
-                />
-              ) : (
+            <div className="relative bg-black rounded-lg overflow-hidden border border-[#D4AF37]/30" style={{ height: "70vh" }}>
+              {/* VNC attaches its own canvas into this div once connected */}
+              <div ref={vncContainerRef} className="w-full h-full" style={{ display: vncActive ? "block" : "none" }} />
+              {!vncActive && (
                 <canvas
                   ref={canvasRef}
                   onClick={handleCanvasClick}
-                  className="w-full h-auto max-h-[80vh] object-contain cursor-pointer block mx-auto"
+                  className="w-full h-full object-contain cursor-pointer block mx-auto"
                 />
               )}
-              {/* Invisible input that captures keystrokes and forwards them to the live page */}
-              <input
-                ref={hiddenInputRef}
-                type="text"
-                onChange={handleHiddenInput}
-                onKeyDown={handleHiddenKeyDown}
-                className="absolute -left-[9999px] w-1 h-1 opacity-0"
-                autoComplete="off"
-              />
+              {/* Invisible input that captures keystrokes for the fallback path only */}
+              {!vncActive && (
+                <input
+                  ref={hiddenInputRef}
+                  type="text"
+                  onChange={handleHiddenInput}
+                  onKeyDown={handleHiddenKeyDown}
+                  className="absolute -left-[9999px] w-1 h-1 opacity-0"
+                  autoComplete="off"
+                />
+              )}
             </div>
 
             <div className="mt-4 flex items-center justify-between gap-3">
