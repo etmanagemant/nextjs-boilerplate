@@ -200,12 +200,21 @@ async function reserveOverlaySpace(page) {
 const NAV_SCRIPT_TEMPLATE = `
 (function() {
   var ROLE = "%%ROLE%%";
+  // English AND German - the account's OnlyFans UI language was switched to
+  // German (confirmed live: text-only matching against English labels went
+  // completely silent the moment the account language changed, since
+  // "Start"/"Nachrichten"/etc. never matched the English-only list at all).
+  // Both lists covered so this keeps working regardless of which language
+  // the account happens to be set to.
   var HIDDEN_LABELS = ROLE === 'admin'
     ? []
-    : ['home', 'queue', 'statements', 'my profile', 'more', 'statistics', 'new post'];
+    : ['home', 'queue', 'statements', 'my profile', 'more', 'statistics', 'new post',
+       'start', 'warteschlange', 'aussagen', 'mein profil', 'mehr', 'statistiken', 'neuer beitrag'];
   var ICON_ONLY_LABELS = ROLE === 'admin'
-    ? ['home', 'notifications', 'messages', 'collections', 'vault', 'queue', 'statements', 'statistics', 'my profile', 'more', 'help and support']
-    : ['notifications', 'messages', 'collections', 'vault', 'help and support'];
+    ? ['home', 'notifications', 'messages', 'collections', 'vault', 'queue', 'statements', 'statistics', 'my profile', 'more', 'help and support',
+       'start', 'benachrichtigungen', 'nachrichten', 'sammlungen', 'tresor', 'warteschlange', 'aussagen', 'statistiken', 'mein profil', 'mehr', 'hilfe und support', 'hilfe & support']
+    : ['notifications', 'messages', 'collections', 'vault', 'help and support',
+       'benachrichtigungen', 'nachrichten', 'sammlungen', 'tresor', 'hilfe und support', 'hilfe & support'];
 
   function norm(s) { return (s || '').trim().toLowerCase(); }
 
@@ -235,6 +244,14 @@ const NAV_SCRIPT_TEMPLATE = `
     }
     var contactBtn = document.querySelector('.contact_button, a[aria-label*="Help" i][aria-label*="support" i]');
     if (contactBtn && contactBtn.style.display !== 'none') contactBtn.style.display = 'none';
+    // The "New Post"/"Neuer Beitrag" button isn't part of the sidebar at
+    // all - confirmed live it's ".m-create-post" under a completely
+    // different "l-header__menu__item" class family, which is why sidebar
+    // width fixes never touched it and it kept forcing extra width next to
+    // the icon rail. Hidden outright for every role in this compact view -
+    // a reliable, language-independent class match instead of text.
+    var newPostBtn = document.querySelector('.m-create-post');
+    if (newPostBtn && newPostBtn.style.display !== 'none') newPostBtn.style.display = 'none';
   }
   function start() {
     scan();
