@@ -83,9 +83,18 @@ export default function BrowserLoginStreamComponent({
 
   // VNC has no concept of "logged in" - it's purely visual/input. This is
   // the only thing still polled for.
+  // Deliberately NOT /api/crm/screenshot: that route also carries the CRM
+  // Inbox's "this previously-working session looks expired, disconnect it"
+  // logic, which has no way to know a fresh login is legitimately in
+  // progress here (isLoggedIn:false while the admin is still filling out
+  // the form is completely normal, not proof of anything expiring). Calling
+  // it during an active login could auto-disconnect - i.e. kill - the exact
+  // browser the admin is mid-login on, every ~2s, for as long as the form
+  // takes to fill in. This dedicated status endpoint only ever reads state,
+  // never mutates it.
   const checkLoginState = async () => {
     try {
-      const res = await fetch(`/api/crm/screenshot?modelId=${encodeURIComponent(modelId)}`);
+      const res = await fetch(`/api/crm/browser-login/status?modelId=${encodeURIComponent(modelId)}`);
       if (!res.ok) return;
       const data = await res.json();
       setIsLoggedIn(!!data.isLoggedIn);
