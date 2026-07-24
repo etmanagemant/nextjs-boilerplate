@@ -131,6 +131,22 @@ async function enableDarkMode(page) {
   }
 }
 
+// The --lang Chrome flag and Accept-Language header only affect OnlyFans'
+// browser-detected default; once a session exists, OnlyFans actually reads
+// its own 'lang' cookie to decide UI language and keeps whatever that cookie
+// already says (confirmed live via /cookies - a session still showed
+// lang=en despite both of the above being set). Setting the cookie directly
+// is the only thing that reliably forces German, so every fresh session
+// (main model login and each chatter slot copy) sets it explicitly rather
+// than relying on the account's own saved preference.
+async function setGermanLangCookie(page) {
+  try {
+    await page.setCookie({ name: 'lang', value: 'de', domain: '.onlyfans.com', path: '/' });
+  } catch (e) {
+    console.warn('[LANG] Could not set lang cookie:', e.message);
+  }
+}
+
 // Reserves empty space at the bottom of the real chat message list so the
 // CRM's own floating emoji bar (drawn on top of the VNC feed, positioned
 // over the compose-box area) never covers actual OnlyFans content - the
@@ -411,15 +427,38 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
         if (sentLog[j].message_text === text) {
           logIdx = j + 1;
           if (!alreadyLabeled) {
-            // Appended to the whole message container (el), not just its
-            // .b-chat__message__body - OnlyFans' own timestamp renders as a
-            // later sibling outside body, so appending inside body put our
-            // label ABOVE the timestamp instead of below it as requested.
-            var tag = document.createElement('div');
+            // OnlyFans' own per-message timestamp is a bare <span> with no
+            // class (confirmed live via /debug-dom: <span title="">9:35 pm
+            // </span>), so it can only be found by matching its text, not a
+            // selector. Requested layout is "9:35 pm gesendet von X" on one
+            // line, not stacked - found by locating that span and inserting
+            // the label right after it as a flex sibling.
+            var tag = document.createElement('span');
             tag.className = LABEL_CLASS;
             tag.textContent = 'gesendet von ' + sentLog[j].chatter_name;
-            tag.style.cssText = 'font-size:10px;opacity:0.55;text-align:right;margin-top:2px;color:inherit;';
-            el.appendChild(tag);
+            tag.style.cssText = 'font-size:10px;opacity:0.55;color:inherit;white-space:nowrap;margin-left:4px;';
+            var timeSpan = null;
+            var spans = el.querySelectorAll('span');
+            for (var s = 0; s < spans.length; s++) {
+              if (/^\s*\d{1,2}[:.]\d{2}\s*(am|pm)?\s*$/i.test(spans[s].textContent)) {
+                timeSpan = spans[s];
+                break;
+              }
+            }
+            if (timeSpan && timeSpan.parentElement) {
+              timeSpan.parentElement.style.display = 'flex';
+              timeSpan.parentElement.style.alignItems = 'center';
+              timeSpan.insertAdjacentElement('afterend', tag);
+            } else {
+              // Some messages render with the timestamp hidden until hover
+              // (the m-time-hidden modifier seen live) - fall back to
+              // anchoring on the message container itself rather than
+              // silently dropping the label.
+              tag.style.display = 'block';
+              tag.style.textAlign = 'right';
+              tag.style.marginTop = '2px';
+              el.appendChild(tag);
+            }
           }
           break;
         }
@@ -765,6 +804,9 @@ async function ensureSlotBrowser(slot, modelId, role, chatterName) {
       console.warn(`[SLOT ${slot.id}] Live cookie overlay failed:`, e.message);
     }
   }
+  // Runs after the live cookie overlay so a stale lang=en copied from the
+  // main session's profile can't win.
+  await setGermanLangCookie(page);
 
   try {
     await page.goto('https://onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
@@ -876,6 +918,7 @@ async function getOrCreateSession(modelId) {
   // OnlyFans itself to render in German.
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9' });
   await enableDarkMode(page);
+  await setGermanLangCookie(page);
 
   try {
     // The direct /login route has been unreliable ("page not available") -
@@ -1337,6 +1380,26 @@ app.get('/chatter-slot-page', (req, res) => {
     /* page mid-navigation or closed - just report unknown */
   }
   res.json({ status: 'success', pageUrl });
+});
+
+// Navigates a chatter's own slot to OnlyFans' real post-composer
+// (confirmed live via /debug-dom: the native "New Post"/"Neuer Beitrag"
+// button links to /posts/create) - used by the CRM's own "New Post" nav
+// entry, since the native button is hidden in this compact view.
+app.post('/open-new-post', async (req, res) => {
+  const { userId, modelId } = req.body || {};
+  if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
+
+  const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+  if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+
+  try {
+    await slot.page.goto('https://onlyfans.com/posts/create', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('[OPEN-NEW-POST] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
 });
 
 // Scrapes the visible text of a chatter's currently-open OnlyFans chat, for
