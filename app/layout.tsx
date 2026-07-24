@@ -1,5 +1,6 @@
 import "./globals.css";
 import Link from "next/link";
+import Image from "next/image";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 
 export const metadata = {
@@ -69,11 +70,16 @@ export default async function RootLayout({
               )}
             </nav>
 
-            {/* CENTER - TITLE */}
+            {/* CENTER - LOGO */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="text-sm font-black tracking-normal uppercase text-transparent bg-clip-text bg-gradient-to-r from-[#F3E5AB] via-[#D4AF37] to-[#AA7C11]">
-                ETManagement
-              </span>
+              <Image
+                src="/images/logo.png"
+                alt="ET Management"
+                width={633}
+                height={611}
+                priority
+                className="h-12 w-auto"
+              />
             </div>
 
             {/* RIGHT SIDE - Management, Massmessage, Plan, Buchhaltung (ADMIN ONLY!) */}
