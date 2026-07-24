@@ -311,10 +311,6 @@ export function OnlyFansViewer({
 
       {phase === "live" && (
         <>
-          <div className="absolute top-2 right-2 z-20 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-            🟢 Live
-          </div>
-
           {/* Only shown once an actual fan chat is open (detected via
               pollCurrentFan) - showing it whenever the session is merely
               "live" meant it floated over the fan list, a profile page,

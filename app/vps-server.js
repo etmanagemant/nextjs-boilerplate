@@ -149,7 +149,15 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
     style.id = '__crm_reserve_space__';
     style.textContent = '.b-chat__messages { padding-bottom: 90px !important; } ' +
       '* { scrollbar-width: none !important; } ' +
-      '*::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }';
+      '*::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; } ' +
+      // Stripping the sidebar labels' text (see the nav script) only clears
+      // the text node - the item still occupies its original ~226px box,
+      // confirmed live via /debug-dom, which read as "empty space where
+      // more text should be" rather than an actually-compact icon rail.
+      // Collapsing both the item and the sidebar's own fixed-width
+      // container down to icon width fixes that.
+      '.l-sidebar, .l-sidebar__inner { width: 64px !important; overflow: hidden !important; } ' +
+      '.l-sidebar__menu__item { width: 48px !important; min-width: 48px !important; padding-left: 0 !important; padding-right: 0 !important; justify-content: center !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
   if (document.head) inject();
