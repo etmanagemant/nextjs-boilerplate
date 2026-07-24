@@ -36,6 +36,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "error", error: "No cookies found - login not detected yet" }, { status: 400 });
     }
 
+    // "Some cookies exist" is true on every single page load (consent/
+    // analytics cookies), logged in or not - it was never actual proof of a
+    // real OnlyFans login. If the frontend's own login-detection ever read
+    // a false positive (e.g. a brief moment mid-redirect/verification
+    // before OnlyFans fully committed the session), this let a connect get
+    // confirmed - and marked is_active in Supabase - for a model that was
+    // never really logged in, which then got auto-disconnected once the
+    // screenshot route's grace period ran out. Requiring the same real
+    // auth cookies getLoginState() on the VPS checks for closes that gap.
+    const hasRealAuth =
+      cookies.some((c: any) => c?.name === "sess" && c?.value) &&
+      cookies.some((c: any) => c?.name === "auth_id" && c?.value);
+    if (!hasRealAuth) {
+      return NextResponse.json(
+        { status: "error", error: "Login noch nicht abgeschlossen - bitte im Fenster oben fertig einloggen, bevor du verbindest" },
+        { status: 400 }
+      );
+    }
+
     // Store as a flat { name: value } map - the same shape send-message-to-onlyfans
     // and the manual session injector already use. localStorage rides along
     // under a reserved key (see IGNORED_COOKIE_KEYS in screenshot/route.ts,
