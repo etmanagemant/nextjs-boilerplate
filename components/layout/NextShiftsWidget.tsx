@@ -14,6 +14,7 @@ interface NextShiftsWidgetProps {
   userEmail: string;
   userId: string;
   userFullName?: string;
+  isAdmin?: boolean;
 }
 
 function pad2(n: number) {
@@ -37,6 +38,7 @@ export default function NextShiftsWidget({
   userEmail,
   userId,
   userFullName,
+  isAdmin = false,
 }: NextShiftsWidgetProps) {
   const [jetztZeit, setJetztZeit] = useState("");
 
@@ -132,13 +134,17 @@ export default function NextShiftsWidget({
       {naechsteZweiSchichten.length === 0 ? (
         <div className="text-center py-8 px-6 bg-gradient-to-br from-[#0A0A0A] to-[#050505] border border-[#9C7A3D]/20 rounded-lg">
           <p className="text-lg mb-3">✨ Keine Schichten geplant</p>
-          <p className="text-xs text-slate-400 mb-4">Erstelle eine neue Schicht im Management</p>
-          <Link
-            href="/management"
-            className="inline-block px-6 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg text-xs uppercase tracking-wider transition-all hover:shadow-lg"
-          >
-            ⚙️ Zum Management
-          </Link>
+          {isAdmin && (
+            <>
+              <p className="text-xs text-slate-400 mb-4">Erstelle eine neue Schicht im Management</p>
+              <Link
+                href="/management"
+                className="inline-block px-6 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg text-xs uppercase tracking-wider transition-all hover:shadow-lg"
+              >
+                ⚙️ Zum Management
+              </Link>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

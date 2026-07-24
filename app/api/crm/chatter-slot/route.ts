@@ -20,7 +20,7 @@ export const runtime = "nodejs";
  */
 export async function POST(req: NextRequest) {
   try {
-    const { user, isAdmin } = await getRequestAdmin();
+    const { user, isAdmin, supabase } = await getRequestAdmin();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -30,9 +30,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing modelId" }, { status: 400 });
     }
 
+    // Baked into the live OnlyFans page as a "gesendet von X" label under
+    // this chatter's own outgoing messages - needs a human-readable name,
+    // not just the user id.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const chatterName = profile?.full_name || user.email || "Chatter";
+
     const slotResponse = await vpsFetch("/chatter-slot", {
       method: "POST",
-      body: JSON.stringify({ userId: user.id, modelId, role: isAdmin ? "admin" : "chatter" }),
+      body: JSON.stringify({ userId: user.id, modelId, role: isAdmin ? "admin" : "chatter", chatterName }),
     });
     if (!slotResponse.ok) {
       return NextResponse.json({ error: "VPS unreachable" }, { status: 502 });

@@ -190,6 +190,54 @@ async function applyChatterRestrictions(page) {
   }
 }
 
+// Labels every outgoing message bubble in the real OnlyFans chat with which
+// chatter's slot sent it. Confirmed live (via /debug-dom) that OnlyFans
+// marks the creator's own messages with the "m-from-me" class - since each
+// slot is one chatter's own dedicated window, every message that appears
+// while a given slot is open was unambiguously sent by that slot's chatter,
+// no per-message correlation needed. %%CHATTER_NAME%% is substituted per
+// slot before injection (evaluateOnNewDocument only accepts a plain string,
+// not a closure over a variable).
+const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
+(function() {
+  var CHATTER_NAME = "%%CHATTER_NAME%%";
+  var LABEL_CLASS = 'etm-sent-by-label';
+
+  function label(el) {
+    if (el.querySelector('.' + LABEL_CLASS)) return;
+    var body = el.querySelector('.b-chat__message__body') || el;
+    var tag = document.createElement('div');
+    tag.className = LABEL_CLASS;
+    tag.textContent = 'gesendet von ' + CHATTER_NAME;
+    tag.style.cssText = 'font-size:10px;opacity:0.55;text-align:right;margin-top:2px;color:inherit;';
+    body.appendChild(tag);
+  }
+
+  function scan() {
+    var mine = document.querySelectorAll('.b-chat__message.m-from-me');
+    for (var i = 0; i < mine.length; i++) label(mine[i]);
+  }
+  function start() {
+    scan();
+    new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+  }
+  if (document.body) start();
+  else document.addEventListener('DOMContentLoaded', start);
+})();
+`;
+
+async function applySentByOverlay(page, chatterName) {
+  try {
+    const script = SENT_BY_OVERLAY_SCRIPT_TEMPLATE.replace(
+      '%%CHATTER_NAME%%',
+      String(chatterName || 'Chatter').replace(/"/g, '\\"')
+    );
+    await page.evaluateOnNewDocument(script);
+  } catch (e) {
+    console.warn('[SENT-BY-OVERLAY] Could not register:', e.message);
+  }
+}
+
 // Wipe the on-disk Chrome profile (cookies, cache, local storage) so a fresh
 // login never inherits a previous session for the same model.
 async function wipeProfileDir(modelId) {
@@ -402,7 +450,7 @@ async function ensureSlotInfra(slot) {
 
 // Launches (or reuses) this slot's Chrome window for the given model,
 // starting from a fresh filesystem copy of that model's live profile.
-async function ensureSlotBrowser(slot, modelId, role) {
+async function ensureSlotBrowser(slot, modelId, role, chatterName) {
   if (slot.browser && slot.browser.isConnected() && slot.modelId === modelId) {
     // A slot copied before the admin finished logging in (a chatter can
     // easily open CRM Inbox while Connection Hub is still mid-login)
@@ -483,6 +531,7 @@ async function ensureSlotBrowser(slot, modelId, role) {
   if (role !== 'admin') {
     await applyChatterRestrictions(page);
   }
+  await applySentByOverlay(page, chatterName);
 
   // The filesystem copy above can still be stale even when the main
   // session is genuinely logged in: Chrome writes its cookie database to
@@ -548,7 +597,7 @@ setInterval(() => {
   }
 }, 2 * 60 * 1000);
 
-async function assignSlot(userId, modelId, role) {
+async function assignSlot(userId, modelId, role, chatterName) {
   if (!modelSessions[modelId]) {
     const err = new Error('NO_MODEL_SESSION');
     err.code = 'NO_MODEL_SESSION';
@@ -571,7 +620,7 @@ async function assignSlot(userId, modelId, role) {
   }
 
   await ensureSlotInfra(slot);
-  await ensureSlotBrowser(slot, modelId, role);
+  await ensureSlotBrowser(slot, modelId, role, chatterName);
   slot.lastActivity = Date.now();
   return slot;
 }
@@ -1041,10 +1090,10 @@ app.get('/vnc-info', (req, res) => {
 // right slot.
 app.post('/chatter-slot', async (req, res) => {
   try {
-    const { userId, modelId, role } = req.body || {};
+    const { userId, modelId, role, chatterName } = req.body || {};
     if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
 
-    const slot = await withModelLock(`slot:${userId}:${modelId}`, () => assignSlot(userId, modelId, role));
+    const slot = await withModelLock(`slot:${userId}:${modelId}`, () => assignSlot(userId, modelId, role, chatterName));
     res.json({ status: 'success', slotId: slot.id, wsPath: `/vnc-chatter-${slot.id}/websockify` });
   } catch (error) {
     if (error.code === 'NO_MODEL_SESSION') {
@@ -1118,6 +1167,107 @@ app.get('/debug-screenshot', async (req, res) => {
     }
     const screenshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 85 });
     res.json({ status: 'success', screenshot });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Temporary network-call capture for finding real OnlyFans API endpoints by
+// watching what the live page itself calls while manually clicking around
+// (same "confirm, don't guess" approach as ONLYFANS_CHATS_ENDPOINT/
+// ONLYFANS_ME_ENDPOINT) - unlike /sync-live's discover mode, this doesn't
+// navigate anything itself, so it can be pointed at a chatter slot's page
+// and run alongside normal VNC use without disrupting it.
+function resolveDebugPage(req) {
+  const { modelId, slotId } = req.query.slotId !== undefined || req.query.modelId !== undefined ? req.query : req.body || {};
+  if (slotId) {
+    const slot = CHATTER_SLOTS.find((s) => String(s.id) === String(slotId));
+    return slot && slot.page ? slot.page : null;
+  }
+  const session = modelSessions[modelId];
+  return session ? session.page : null;
+}
+
+app.post('/debug-network-start', (req, res) => {
+  const page = resolveDebugPage(req);
+  if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
+
+  if (page._networkCaptureHandler) {
+    page.off('request', page._networkCaptureHandler);
+  }
+  page._networkCaptureCalls = [];
+  page._networkCaptureHandler = (r) => {
+    if (r.url().includes('/api2/')) {
+      page._networkCaptureCalls.push(`${r.method()} ${r.url()}`);
+    }
+  };
+  page.on('request', page._networkCaptureHandler);
+  res.json({ status: 'success', message: 'Capturing /api2/ calls - go click around now, then call /debug-network-stop' });
+});
+
+app.post('/debug-network-stop', (req, res) => {
+  const page = resolveDebugPage(req);
+  if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
+
+  const calls = page._networkCaptureCalls || [];
+  if (page._networkCaptureHandler) {
+    page.off('request', page._networkCaptureHandler);
+    page._networkCaptureHandler = null;
+  }
+  res.json({ status: 'success', calls, pageUrl: page.url() });
+});
+
+// One-off DOM inspection - finds the real compose-box position and the
+// outgoing/incoming message bubble selectors on the live chat page, so the
+// floating emoji bar and a future "sent by" overlay can target real
+// coordinates/classes instead of guessed ones. Diagnostic only.
+app.get('/debug-dom', async (req, res) => {
+  const page = resolveDebugPage(req);
+  if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
+
+  const selector = req.query.selector || null;
+
+  try {
+    const data = await page.evaluate((sel) => {
+      const textarea = document.querySelector('textarea[placeholder*="message" i], div[contenteditable="true"]');
+      const textareaRect = textarea ? textarea.getBoundingClientRect() : null;
+
+      let selectorMatches = null;
+      if (sel) {
+        selectorMatches = Array.from(document.querySelectorAll(sel))
+          .slice(0, 8)
+          .map((el) => {
+            const rect = el.getBoundingClientRect();
+            const cs = window.getComputedStyle(el);
+            return {
+              tag: el.tagName,
+              className: typeof el.className === 'string' ? el.className.slice(0, 300) : '',
+              outerHTML: el.outerHTML.slice(0, 600),
+              rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+              justifyContent: cs.justifyContent,
+              marginLeft: cs.marginLeft,
+              textAlign: cs.textAlign,
+            };
+          });
+      }
+
+      const candidates = Array.from(document.querySelectorAll('[class*="message" i]')).slice(0, 15);
+      const sample = candidates.map((el) => ({
+        tag: el.tagName,
+        className: typeof el.className === 'string' ? el.className.slice(0, 200) : '',
+        text: (el.textContent || '').trim().slice(0, 40),
+      }));
+
+      return {
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        textareaRect: textareaRect
+          ? { top: textareaRect.top, left: textareaRect.left, width: textareaRect.width, height: textareaRect.height, bottom: textareaRect.bottom }
+          : null,
+        messageElementSample: sample,
+        selectorMatches,
+      };
+    }, selector);
+    res.json({ status: 'success', data, pageUrl: page.url() });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

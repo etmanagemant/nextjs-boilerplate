@@ -308,7 +308,14 @@ export function OnlyFansViewer({
               "live" meant it floated over the fan list, a profile page,
               anywhere, with nowhere useful to paste into. */}
           {currentFan && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5">
+            // Positioned to match OnlyFans' own message compose box, not
+            // centered on the whole 1280x800 frame - confirmed via a live
+            // DOM measurement (the compose textarea sits at roughly
+            // left 52.7%-97.6%, top 86.25% of the frame, not full-width).
+            <div
+              className="absolute z-20 flex flex-col items-center gap-1.5"
+              style={{ left: "75%", bottom: "14%", transform: "translateX(-50%)" }}
+            >
               {emojiPickerOpen && (
                 <div className="relative w-72">
                   <EmojiPicker
@@ -322,7 +329,7 @@ export function OnlyFansViewer({
                   />
                 </div>
               )}
-              <div className="max-w-[92%] overflow-x-auto flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/80 border border-[#C9A86A]/40 backdrop-blur-sm shadow-2xl">
+              <div className="max-w-[40%] overflow-x-auto flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/80 border border-[#C9A86A]/40 backdrop-blur-sm shadow-2xl">
                 {emojis.map((emoji, i) => (
                   <button
                     key={i}

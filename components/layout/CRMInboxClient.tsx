@@ -236,11 +236,12 @@ export default function CRMInboxClient({
           ) : !selectedFanId && !selectedOnlyFansModel ? (
             // DEFAULT LANDING - Show NextShiftsWidget with reminder + instructions
             <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black p-8">
-              <NextShiftsWidget 
+              <NextShiftsWidget
                 allShifts={allShifts}
                 userEmail={userEmail}
                 userId={userId}
                 userFullName={undefined}
+                isAdmin={userRole === "admin"}
               />
             </div>
           ) : selectedOnlyFansModel && !selectedFanId ? (
