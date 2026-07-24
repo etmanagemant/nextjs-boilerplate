@@ -571,6 +571,41 @@ app.get('/cookies', async (req, res) => {
   }
 });
 
+// Fetch the connected model's own OnlyFans profile info (for the avatar,
+// called right after "Creator verbinden") by reusing the live authenticated
+// session - same page.evaluate(fetch) trick as /sync-live, for the same
+// reason a fresh cookie-cloned session would get rejected. The endpoint is
+// a best guess (a common "current user" REST convention) - unconfirmed
+// against a real session, same caveat as the chats/send-message endpoints;
+// the Next.js side tries several likely field names for the avatar URL and
+// just skips it if none match, so a wrong guess here fails safe.
+app.get('/profile-info', async (req, res) => {
+  const { modelId } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+
+  const session = modelSessions[modelId];
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  session.lastActivity = Date.now();
+
+  try {
+    const endpoint = process.env.ONLYFANS_ME_ENDPOINT || '/api2/v2/users/me';
+    const data = await session.page.evaluate(async (url) => {
+      const res = await fetch(url, { credentials: 'include' });
+      const text = await res.text();
+      try {
+        return { ok: res.ok, status: res.status, json: JSON.parse(text) };
+      } catch (e) {
+        return { ok: res.ok, status: res.status, text: text.slice(0, 500) };
+      }
+    }, endpoint);
+
+    res.json({ status: 'success', modelId, data });
+  } catch (error) {
+    console.error(`[PROFILE-INFO] Error for ${modelId}:`, error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
 // Re-launch a session from cookies saved earlier (used when the live browser
 // already got closed by the idle timeout but the chatter wants to view it)
 app.post('/restore', async (req, res) => {

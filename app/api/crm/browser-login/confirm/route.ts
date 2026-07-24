@@ -63,11 +63,38 @@ export async function POST(req: NextRequest) {
       throw new Error(`Database error: ${upsertError.message}`);
     }
 
+    // Best-effort: pull the model's own OnlyFans avatar so it doesn't have
+    // to be pasted in manually. Never lets a failure here block the actual
+    // connect - the important part (cookies saved above) already succeeded.
+    let avatarUrl: string | null = null;
+    try {
+      const profileResponse = await vpsFetch(`/profile-info?modelId=${encodeURIComponent(modelId)}`);
+      if (profileResponse.ok) {
+        const profileResult = await profileResponse.json();
+        const json = profileResult?.data?.json;
+        avatarUrl =
+          json?.avatarThumbs?.c50 ||
+          json?.avatarThumbs?.w480 ||
+          json?.avatar ||
+          json?.data?.avatarThumbs?.c50 ||
+          json?.data?.avatar ||
+          null;
+      }
+      if (avatarUrl) {
+        await supabase.from("models").update({ avatar_url: avatarUrl }).eq("id", modelId);
+      } else {
+        console.warn("[BROWSER-LOGIN CONFIRM] Could not find an avatar URL in profile-info response");
+      }
+    } catch (avatarErr: any) {
+      console.warn("[BROWSER-LOGIN CONFIRM] Avatar fetch failed (non-fatal):", avatarErr?.message);
+    }
+
     return NextResponse.json({
       status: "success",
       modelId,
       message: "Model connected successfully!",
       cookieCount: cookies.length,
+      avatarUrl,
     });
   } catch (error: any) {
     console.error("[BROWSER-LOGIN CONFIRM] Error:", error.message);
