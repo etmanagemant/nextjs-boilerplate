@@ -42,8 +42,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No recognized fields to update" }, { status: 400 });
     }
 
+    // chatter_id is NOT NULL with no default (confirmed directly against
+    // the live schema) - leaving it out only ever worked for updating a
+    // row that already existed. The very first save for any given fan
+    // takes the INSERT path of this upsert instead, which was failing
+    // outright with a not-null violation, surfaced to the client as a
+    // bare 500. Attributes to whoever is currently saving; harmless to
+    // re-set on every update too (last editor, not "original creator").
     const { error } = await supabase.from("crm_fan_metadata").upsert(
-      { model_id: modelId, fan_id: fanId, ...update },
+      { model_id: modelId, fan_id: fanId, chatter_id: user.id, ...update },
       { onConflict: "model_id,fan_id" }
     );
     if (error) throw error;
