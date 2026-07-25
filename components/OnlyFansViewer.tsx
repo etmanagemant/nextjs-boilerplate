@@ -58,6 +58,7 @@ export function OnlyFansViewer({
 
   const [currentFan, setCurrentFan] = useState<{ fanId: string; metadata: any; lastEditedBy: string | null } | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [textareaTop, setTextareaTop] = useState<number | null>(null);
   const fanPollRef = useRef<NodeJS.Timeout | null>(null);
 
   // Assigns (or reuses) this user's own independent chatter slot for this
@@ -162,6 +163,7 @@ export function OnlyFansViewer({
       const res = await fetch(`/api/crm/current-fan?modelId=${encodeURIComponent(modelId)}`);
       const data = res.ok ? await res.json() : {};
       setModalOpen(!!data.modalOpen);
+      setTextareaTop(typeof data.textareaTop === "number" ? data.textareaTop : null);
       if (data.status === "success" && data.fanId) {
         setCurrentFan({ fanId: data.fanId, metadata: data.metadata, lastEditedBy: data.lastEditedBy || null });
       } else {
@@ -356,18 +358,30 @@ export function OnlyFansViewer({
               covering the vault picker otherwise. */}
           {currentFan && !modalOpen && (
             // Positioned to match OnlyFans' own message compose box, not
-            // centered on the whole 1280x800 frame - re-measured again
-            // after widening <main> to fill the full frame (VPS-side, this
-            // session): the compose box itself grew wider along with
-            // everything else, so this needed a second recalibration on
-            // top of the first (left 35.9%-81.9% -> now left 35.9%-98.75%,
-            // center ~67.3%, width ~63% of the 1280x800 frame). Explicitly
-            // requested to span the compose field's full width, not just
-            // part of it. reserveOverlaySpace (VPS-side) pads the real
-            // message list so this never covers actual chat content.
+            // centered on the whole 1280x800 frame (left/width calibrated
+            // for the 1280x800 frame, center ~67.3%, width ~63%).
+            // reserveOverlaySpace (VPS-side) pads the real message list so
+            // this never covers actual chat content.
+            //
+            // "bottom" used to be a flat 14% guess, calibrated only for the
+            // compose box's normal (no-attachment) height - confirmed live
+            // that attaching a Vault file grows the real compose box taller
+            // (price/preview labels + thumbnail row above the text field),
+            // which pushes the actual text field down while this fixed
+            // overlay stayed put, ending up overlapping the attachment
+            // thumbnails. textareaTop (polled from the real page, see
+            // pollCurrentFan) is the text field's actual current top in the
+            // 800px-tall frame - converting that to a bottom-percentage
+            // makes the bar follow the real compose box instead of guessing.
+            // Falls back to the old flat 14% if a poll hasn't landed yet.
             <div
               className="absolute z-20 flex flex-col items-center gap-1.5"
-              style={{ left: "67.3%", bottom: "14%", transform: "translateX(-50%)", width: "63%" }}
+              style={{
+                left: "67.3%",
+                bottom: textareaTop != null ? `${Math.max(0, ((800 - textareaTop) / 800) * 100 + 2)}%` : "14%",
+                transform: "translateX(-50%)",
+                width: "63%",
+              }}
             >
               {emojiPickerOpen && (
                 <div className="relative w-full">

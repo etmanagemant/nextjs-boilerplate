@@ -1725,7 +1725,26 @@ app.get('/chatter-slot-page', async (req, res) => {
   } catch (e) {
     /* ignore - default to false */
   }
-  res.json({ status: 'success', pageUrl, modalOpen });
+  // The CRM's own floating emoji bar (OnlyFansViewer.tsx) used a fixed
+  // "bottom: 14%" guess, calibrated for the compose box's normal height -
+  // confirmed live that attaching a Vault file (via the Script Vault picker
+  // or manually) grows the real compose box taller (price/preview labels +
+  // thumbnail row above the text field), pushing the actual input down
+  // while this fixed-position overlay stayed put, ending up overlapping the
+  // attachment thumbnails instead of sitting above the text field. Returning
+  // the textarea's real current top position lets the frontend follow it
+  // instead of guessing.
+  let textareaTop = null;
+  try {
+    textareaTop = await slot.page.evaluate(() => {
+      var el = document.querySelector('.js-text-editor[contenteditable="true"], textarea[placeholder*="message" i]');
+      if (!el) return null;
+      return el.getBoundingClientRect().top;
+    });
+  } catch (e) {
+    /* ignore - frontend falls back to its old fixed position */
+  }
+  res.json({ status: 'success', pageUrl, modalOpen, textareaTop });
 });
 
 // Scrapes the visible text of a chatter's currently-open OnlyFans chat, for
@@ -1828,18 +1847,64 @@ app.post('/insert-script-step', async (req, res) => {
     if (!focused) return res.json({ status: 'no_input', message: 'Kein offenes Nachrichtenfeld gefunden' });
     await page.keyboard.type(messageText);
 
+    // Same hard-gate pattern as /upload-to-vault-fan's price step: confirmed
+    // live once already (there) that blindly typing a price without
+    // checking whether a price field actually got focused sends the
+    // content as a free message with zero error. This requires the field to
+    // be found AND the typed value to be read back and match before ever
+    // reporting success.
+    // CONFIRMED LIVE (via debug-dom): the price popup's own input has
+    // name="" (empty!) and placeholder="Frei" - neither contains "price" or
+    // "preis" as a substring, so the old selector guess could never match
+    // it. The real, stable handle is autocomplete="price-input". The
+    // popup also needs its own explicit "SPEICHERN" (Save) click to commit -
+    // same pattern as the vault picker's Add button - typing into the field
+    // alone doesn't persist it.
+    const setPriceOrFail = async (expectedPrice) => {
+      await page.evaluate(() => {
+        var toggle = document.querySelector('[at-attr="price_btn"]');
+        if (toggle) toggle.click();
+      });
+      await page.waitForSelector('input[autocomplete="price-input"]', { timeout: 3000 }).catch(() => {});
+      const priceFocused = await page.evaluate(() => {
+        var input = document.querySelector('input[autocomplete="price-input"]');
+        if (!input) return false;
+        input.focus();
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      });
+      if (!priceFocused) {
+        return { ok: false, error: 'Preisfeld nicht gefunden - nicht gesendet, damit nichts kostenlos verschickt wird' };
+      }
+      await page.keyboard.type(String(expectedPrice));
+      await new Promise((r) => setTimeout(r, 200));
+      const priceConfirmed = await page.evaluate((expected) => {
+        var input = document.querySelector('input[autocomplete="price-input"]');
+        return !!(input && input.value && input.value.replace(',', '.').indexOf(String(expected)) !== -1);
+      }, expectedPrice);
+      if (!priceConfirmed) {
+        return { ok: false, error: 'Preis konnte nicht bestätigt werden - nicht gesendet, damit nichts kostenlos verschickt wird' };
+      }
+      const saved = await page.evaluate(() => {
+        var candidates = Array.from(document.querySelectorAll('button, [role="button"]'));
+        var btn = candidates.find(function (el) { return (el.textContent || '').trim().toLowerCase() === 'speichern'; });
+        if (!btn) return false;
+        btn.click();
+        return true;
+      });
+      if (!saved) {
+        return { ok: false, error: 'Preis konnte nicht gespeichert werden (Speichern-Button nicht gefunden) - nicht gesendet, damit nichts kostenlos verschickt wird' };
+      }
+      await new Promise((r) => setTimeout(r, 200));
+      return { ok: true };
+    };
+
     const items = Array.isArray(mediaRefs) ? mediaRefs.filter((m) => m && m.label) : [];
     if (items.length === 0) {
       if (price) {
-        // UNVERIFIED: best-effort price-input selector for a text-only PPV.
-        await page.evaluate((p) => {
-          var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
-          if (input) {
-            input.focus();
-            input.value = '';
-          }
-        }, price);
-        await page.keyboard.type(String(price));
+        const priceResult = await setPriceOrFail(price);
+        if (!priceResult.ok) return res.json({ status: 'error', error: priceResult.error });
       }
       slot.lastActivity = Date.now();
       return res.json({ status: 'success' });
@@ -1853,7 +1918,11 @@ app.post('/insert-script-step', async (req, res) => {
       return true;
     });
     if (!opened) return res.json({ status: 'partial', message: 'Text eingefügt, Tresor-Button nicht gefunden' });
-    await new Promise((r) => setTimeout(r, 800));
+    // Wait for the actual grid to exist rather than guessing a fixed delay -
+    // resolves the instant it's ready (often well under the old flat 800ms)
+    // instead of always paying the full guess, so the visible "flash" of
+    // OnlyFans' own attach window is as short as it can be.
+    await page.waitForSelector('[class*="checkbox-control" i] [at-attr="checkbox"]', { timeout: 4000 }).catch(() => {});
 
     // Click each picked media item. The gallery picker (VaultGalleryPicker)
     // now hands over the REAL thumbnail URL for each item (sniffed
@@ -1880,7 +1949,7 @@ app.post('/insert-script-step', async (req, res) => {
         // that the attach modal's own 300x300 grid thumbnails share that
         // exact path with what /vault-media captured.
         const stablePath = item.thumbnailUrl.split('?')[0];
-        for (let attempt = 0; attempt < 4 && !picked; attempt++) {
+        for (let attempt = 0; attempt < 3 && !picked; attempt++) {
           picked = await page.evaluate((path) => {
             // CONFIRMED LIVE: the exact same file's thumbnail (same stable
             // path) appears up to 3 times on the page at once - a couple of
@@ -1895,9 +1964,17 @@ app.post('/insert-script-step', async (req, res) => {
             var candidates = document.querySelectorAll('[class*="checkbox-control" i] img');
             var img = Array.from(candidates).find(function (i) { return i.src.split('?')[0] === path; });
             if (!img) return false;
-            var el = img.closest('[class*="item" i]');
-            if (!el) return false;
-            el.click();
+            var tile = img.closest('[class*="checkbox-control" i]');
+            if (!tile) return false;
+            // CONFIRMED LIVE (via debug-dom): the actual checkbox toggle is a
+            // separate SIBLING element (`div[at-attr="checkbox"]`) next to
+            // the <img>, not the tile itself or the image. Clicking the tile
+            // (or the image) instead opens OnlyFans' full-screen lightbox
+            // preview - clicking specifically this inner checkbox element is
+            // what toggles the selection.
+            var checkbox = tile.querySelector('[at-attr="checkbox"]');
+            if (!checkbox) return false;
+            checkbox.click();
             return true;
           }, stablePath);
           if (!picked) {
@@ -1907,7 +1984,7 @@ app.post('/insert-script-step', async (req, res) => {
               var container = document.querySelector('[class*="vault" i] [class*="list" i], [class*="vault" i] [class*="scroll" i]');
               if (container) container.scrollTop += container.clientHeight;
             });
-            await new Promise((r) => setTimeout(r, 700));
+            await new Promise((r) => setTimeout(r, 250));
           }
         }
       }
@@ -1941,7 +2018,7 @@ app.post('/insert-script-step', async (req, res) => {
       }
 
       if (picked) pickedCount++;
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 120));
     }
 
     if (pickedCount === 0) {
@@ -1951,16 +2028,32 @@ app.post('/insert-script-step', async (req, res) => {
       });
     }
 
+    // CONFIRMED LIVE: "SCHLIESSEN" (Close) just dismisses the picker WITHOUT
+    // saving anything - the actual confirm action is a separate "HINZUFÜGEN"
+    // (Add) button that only appears once at least one file is checked,
+    // next to a "N ausgewählt" counter. Clicking Close instead of Add is
+    // exactly why nothing was ever landing in the compose box: the code
+    // reported "success" (checkbox click genuinely worked) but then threw
+    // the selection away instead of confirming it.
+    await page.evaluate(() => {
+      var candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
+      var matches = candidates.filter(function (el) {
+        var txt = (el.textContent || '').trim().toLowerCase();
+        return txt === 'hinzufügen' || txt === 'hinzufuegen' || txt === 'add';
+      });
+      if (!matches.length) return;
+      matches.sort(function (a, b) {
+        var ra = a.getBoundingClientRect();
+        var rb = b.getBoundingClientRect();
+        return ra.width * ra.height - rb.width * rb.height;
+      });
+      matches[0].click();
+    });
+    await new Promise((r) => setTimeout(r, 150));
+
     if (price) {
-      // UNVERIFIED: best-effort price-input selector.
-      await page.evaluate((p) => {
-        var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
-        if (input) {
-          input.focus();
-          input.value = '';
-        }
-      }, price);
-      await page.keyboard.type(String(price));
+      const priceResult = await setPriceOrFail(price);
+      if (!priceResult.ok) return res.json({ status: 'error', error: priceResult.error });
     }
 
     slot.lastActivity = Date.now();

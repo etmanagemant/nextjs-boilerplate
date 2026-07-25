@@ -37,9 +37,10 @@ export async function GET(req: NextRequest) {
     }
     const pageData = await pageRes.json();
     const modalOpen = !!pageData.modalOpen;
+    const textareaTop = typeof pageData.textareaTop === "number" ? pageData.textareaTop : null;
     const match = typeof pageData.pageUrl === "string" ? pageData.pageUrl.match(CHAT_URL_PATTERN) : null;
     if (!match) {
-      return NextResponse.json({ status: "no-fan", modalOpen });
+      return NextResponse.json({ status: "no-fan", modalOpen, textareaTop });
     }
     const fanId = match[1];
 
@@ -69,6 +70,7 @@ export async function GET(req: NextRequest) {
       status: "success",
       fanId,
       modalOpen,
+      textareaTop,
       lastEditedBy,
       metadata: data || {
         fan_id: fanId,
