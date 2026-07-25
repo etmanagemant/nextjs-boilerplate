@@ -585,7 +585,6 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
   var API_BASE = "%%API_BASE%%";
   var BTN_ID = '__etm_script_vault_btn__';
   var PANEL_ID = '__etm_script_vault_panel__';
-  var STEP_TYPE_LABEL = { text: 'Text', image: 'Bild', ppv: 'PPV' };
 
   function closePanel() {
     var panel = document.getElementById(PANEL_ID);
@@ -600,8 +599,7 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
         userId: USER_ID,
         modelId: MODEL_ID,
         messageText: step.message_text,
-        stepType: step.step_type,
-        vaultSearchTerm: step.vault_search_term,
+        mediaRefs: step.media_refs || [],
         price: step.price,
       }),
     }).finally(onDone);
@@ -620,10 +618,11 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
       item.style.cssText = 'padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:2px;';
       item.onmouseenter = function() { item.style.background = 'rgba(201,168,106,0.15)'; };
       item.onmouseleave = function() { item.style.background = 'transparent'; };
+      var mediaCount = (step.media_refs && step.media_refs.length) || 0;
       var head = document.createElement('div');
       head.style.cssText = 'display:flex;justify-content:space-between;color:#E2C48A;font-weight:700;font-size:11px;';
-      head.innerHTML = '<span>Schritt ' + (idx + 1) + ' – ' + (STEP_TYPE_LABEL[step.step_type] || step.step_type) + '</span>' +
-        (step.step_type === 'ppv' && step.price != null ? '<span style="color:#4FAE78;">$' + step.price + '</span>' : '');
+      head.innerHTML = '<span>Schritt ' + (idx + 1) + (mediaCount ? ' – 📁 ' + mediaCount : '') + '</span>' +
+        (step.price != null ? '<span style="color:#4FAE78;">$' + step.price + '</span>' : '');
       var preview = document.createElement('div');
       preview.textContent = step.message_text;
       preview.style.cssText = 'color:#8A847B;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;';
@@ -1775,7 +1774,7 @@ app.post('/insert-emoji', async (req, res) => {
 // before trusting this for real sends.
 app.post('/insert-script-step', async (req, res) => {
   try {
-    const { userId, modelId, messageText, stepType, vaultSearchTerm, price } = req.body || {};
+    const { userId, modelId, messageText, mediaRefs, price } = req.body || {};
     if (!userId || !modelId || !messageText) {
       return res.status(400).json({ error: 'Missing userId, modelId, or messageText' });
     }
@@ -1793,7 +1792,19 @@ app.post('/insert-script-step', async (req, res) => {
     if (!focused) return res.json({ status: 'no_input', message: 'Kein offenes Nachrichtenfeld gefunden' });
     await page.keyboard.type(messageText);
 
-    if (stepType === 'text' || !vaultSearchTerm) {
+    const items = Array.isArray(mediaRefs) ? mediaRefs.filter((m) => m && m.label) : [];
+    if (items.length === 0) {
+      if (price) {
+        // UNVERIFIED: best-effort price-input selector for a text-only PPV.
+        await page.evaluate((p) => {
+          var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
+          if (input) {
+            input.focus();
+            input.value = '';
+          }
+        }, price);
+        await page.keyboard.type(String(price));
+      }
       slot.lastActivity = Date.now();
       return res.json({ status: 'success' });
     }
@@ -1808,42 +1819,51 @@ app.post('/insert-script-step', async (req, res) => {
     if (!opened) return res.json({ status: 'partial', message: 'Text eingefügt, Tresor-Button nicht gefunden' });
     await new Promise((r) => setTimeout(r, 800));
 
-    const searched = await page.evaluate((term) => {
-      var input = document.querySelector('input[name="media_vault_search"]');
-      if (!input) return false;
-      input.focus();
-      return true;
-    }, vaultSearchTerm);
-    if (searched) {
-      await page.keyboard.type(vaultSearchTerm);
-      await new Promise((r) => setTimeout(r, 1000));
+    // Click each picked media item by its label - the picker (VaultPickerModal)
+    // already captured these labels via live click-selection in the real
+    // Vault, so this re-opens the in-chat attach modal and searches for each
+    // one by name rather than guessing a single generic search term.
+    // UNVERIFIED: couldn't confirm the result-click selector live (empty
+    // test vault this session) - best-effort common pattern.
+    let pickedCount = 0;
+    for (const item of items) {
+      const searched = await page.evaluate(() => {
+        var input = document.querySelector('input[name="media_vault_search"]');
+        if (!input) return false;
+        input.focus();
+        input.value = '';
+        return true;
+      });
+      if (searched) {
+        await page.keyboard.type(item.label);
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+
+      const picked = await page.evaluate(() => {
+        var candidates = document.querySelectorAll(
+          '[class*="media-item" i] img, [class*="thumb" i] img, [class*="MediaItem" i], [class*="vault"] [class*="item" i]'
+        );
+        for (var i = 0; i < candidates.length; i++) {
+          var el = candidates[i].closest('[class*="item" i]') || candidates[i];
+          if (el && el.offsetParent !== null) {
+            el.click();
+            return true;
+          }
+        }
+        return false;
+      });
+      if (picked) pickedCount++;
+      await new Promise((r) => setTimeout(r, 400));
     }
 
-    // UNVERIFIED: best-effort selector for a result thumbnail - couldn't
-    // confirm live (empty test vault). Tries a few common patterns.
-    const picked = await page.evaluate(() => {
-      var candidates = document.querySelectorAll(
-        '[class*="media-item" i] img, [class*="thumb" i] img, [class*="MediaItem" i], [class*="vault"] [class*="item" i]'
-      );
-      for (var i = 0; i < candidates.length; i++) {
-        var el = candidates[i].closest('[class*="item" i]') || candidates[i];
-        if (el && el.offsetParent !== null) {
-          el.click();
-          return true;
-        }
-      }
-      return false;
-    });
-
-    if (!picked) {
+    if (pickedCount === 0) {
       return res.json({
         status: 'partial',
         message: 'Text eingefügt, aber keine Tresor-Datei gefunden (Selektor unbestätigt - bitte mit echtem Tresor-Inhalt testen)',
       });
     }
-    await new Promise((r) => setTimeout(r, 500));
 
-    if (stepType === 'ppv' && price) {
+    if (price) {
       // UNVERIFIED: best-effort price-input selector.
       await page.evaluate((p) => {
         var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
@@ -1856,10 +1876,65 @@ app.post('/insert-script-step', async (req, res) => {
     }
 
     slot.lastActivity = Date.now();
-    res.json({ status: 'success' });
+    res.json({ status: pickedCount === items.length ? 'success' : 'partial', pickedCount, total: items.length });
   } catch (error) {
     console.error('[INSERT-SCRIPT-STEP] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// Navigates a chatter's slot to the real OnlyFans Vault page (confirmed
+// live: https://onlyfans.com/my/vault, same picker UI as the in-chat
+// vault-attach modal but as a full page), so VaultPickerModal's embedded
+// VNC feed opens directly on it for the admin to browse and click-select.
+app.post('/vault-picker-goto', async (req, res) => {
+  try {
+    const { userId, modelId } = req.body || {};
+    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
+    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+    await slot.page.goto('https://onlyfans.com/my/vault', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('[VAULT-PICKER-GOTO] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// Reads back whichever Vault items the admin currently has selected via
+// OnlyFans' own multi-select UI.
+//
+// IMPORTANT / UNVERIFIED: this session's test vault was confirmed
+// completely empty across every category (including a newly-seen
+// "Uploads" one), so there was never any real item to click-select and
+// inspect - the selector below is a best-effort guess at common
+// "selected" state patterns (checked class/attribute), not confirmed DOM.
+// Needs a live pass with real vault content before trusting the captured
+// selection.
+app.post('/vault-picker-selection', async (req, res) => {
+  try {
+    const { userId, modelId } = req.body || {};
+    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
+    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+
+    const items = await slot.page.evaluate(() => {
+      var selected = document.querySelectorAll(
+        '[class*="selected" i], [class*="checked" i][class*="media" i], [class*="media" i][class*="active" i], [aria-checked="true"]'
+      );
+      var out = [];
+      for (var i = 0; i < selected.length; i++) {
+        var el = selected[i];
+        var img = el.querySelector('img');
+        var label = el.getAttribute('data-id') || el.getAttribute('aria-label') || (img && img.alt) || 'Datei ' + (i + 1);
+        out.push({ label: label, thumbnailUrl: img ? img.src : undefined });
+      }
+      return out;
+    });
+    res.json({ status: 'success', items });
+  } catch (error) {
+    console.error('[VAULT-PICKER-SELECTION] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message, items: [] });
   }
 });
 

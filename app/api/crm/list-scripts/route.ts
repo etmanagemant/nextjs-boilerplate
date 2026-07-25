@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
         .limit(100),
       supabase
         .from("crm_script_steps")
-        .select("id, script_id, order_index, step_type, message_text, vault_search_term, price")
+        .select("id, script_id, order_index, step_type, message_text, media_refs, price")
         .order("order_index", { ascending: true }),
     ]);
     if (scriptsError) throw scriptsError;

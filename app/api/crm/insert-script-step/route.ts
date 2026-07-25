@@ -20,7 +20,7 @@ export async function OPTIONS() {
 }
 
 /**
- * POST Body: { userId, modelId, messageText, stepType, vaultSearchTerm, price }
+ * POST Body: { userId, modelId, messageText, mediaRefs, price }
  */
 export async function POST(req: NextRequest) {
   try {

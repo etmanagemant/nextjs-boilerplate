@@ -2,14 +2,20 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import { VaultPickerModal } from "@/components/layout/VaultPickerModal";
+
+interface MediaRef {
+  label: string;
+  thumbnailUrl?: string;
+}
 
 interface ScriptStep {
   id: string;
   script_id: string;
   order_index: number;
-  step_type: "text" | "image" | "ppv";
+  step_type: string;
   message_text: string;
-  vault_search_term: string | null;
+  media_refs: MediaRef[];
   price: number | null;
 }
 
@@ -35,28 +41,21 @@ interface ScriptVaultClientProps {
 }
 
 type DraftStep = {
-  step_type: "text" | "image" | "ppv";
   message_text: string;
-  vault_search_term: string;
+  media: MediaRef[];
   price: string;
 };
 
-const EMPTY_STEP: DraftStep = { step_type: "text", message_text: "", vault_search_term: "", price: "" };
-
-const STEP_TYPE_LABEL: Record<DraftStep["step_type"], string> = {
-  text: "💬 Nur Text",
-  image: "🖼️ Bild aus Tresor",
-  ppv: "💰 PPV-Video aus Tresor",
-};
+const EMPTY_STEP: DraftStep = { message_text: "", media: [], price: "" };
 
 /**
  * A Script belongs to exactly one model (not one chatter) - creating one
  * means picking which model it's for, and every chatter working that
- * model sees the same steps. Each step is text-only, text+image, or
- * text+PPV; image/PPV steps reference existing OnlyFans Vault content by
- * search term rather than uploading anything new - the in-chat Script
- * Vault button (VPS-side) does the actual vault search/attach/price-set
- * automation when a chatter picks a step.
+ * model sees the same steps. Every step is just text + optional media
+ * (multiple, click-picked live from the real OnlyFans Vault via
+ * VaultPickerModal) + optional price, all freely combinable - explicitly
+ * requested to drop the earlier text/image/ppv type selector, since any
+ * combination should just be possible without pre-declaring it.
  */
 export default function ScriptVaultClient({
   initialScripts,
@@ -74,6 +73,7 @@ export default function ScriptVaultClient({
   const [formModelId, setFormModelId] = useState(connectedModels[0]?.id || "");
   const [draftSteps, setDraftSteps] = useState<DraftStep[]>([{ ...EMPTY_STEP }]);
   const [expandedScriptId, setExpandedScriptId] = useState<string | null>(null);
+  const [pickerForStep, setPickerForStep] = useState<number | null>(null);
 
   const supabase = createClient();
 
@@ -107,10 +107,10 @@ export default function ScriptVaultClient({
       const stepRows = draftSteps.map((s, i) => ({
         script_id: script.id,
         order_index: i,
-        step_type: s.step_type,
+        step_type: s.price ? "ppv" : s.media.length > 0 ? "image" : "text",
         message_text: s.message_text,
-        vault_search_term: s.step_type === "text" ? null : s.vault_search_term || null,
-        price: s.step_type === "ppv" ? Number(s.price) || 0 : null,
+        media_refs: s.media,
+        price: s.price ? Number(s.price) || 0 : null,
       }));
       const { data: newSteps, error: stepsError } = await supabase
         .from("crm_script_steps")
@@ -228,28 +228,15 @@ export default function ScriptVaultClient({
                   <div key={i} className="bg-[#050505]/60 border border-[#9C7A3D]/10 rounded-lg p-3 space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[10px] font-bold text-slate-500 uppercase">Schritt {i + 1}</span>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={step.step_type}
-                          onChange={(e) =>
-                            updateDraftStep(i, { step_type: e.target.value as DraftStep["step_type"] })
-                          }
-                          className="bg-[#0A0A0A] border border-[#9C7A3D]/20 rounded px-2 py-1 text-white text-xs outline-none focus:border-[#C9A86A]"
+                      {draftSteps.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeDraftStep(i)}
+                          className="text-red-400 hover:text-red-300 text-xs font-bold"
                         >
-                          <option value="text">{STEP_TYPE_LABEL.text}</option>
-                          <option value="image">{STEP_TYPE_LABEL.image}</option>
-                          <option value="ppv">{STEP_TYPE_LABEL.ppv}</option>
-                        </select>
-                        {draftSteps.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeDraftStep(i)}
-                            className="text-red-400 hover:text-red-300 text-xs font-bold"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
+                          ✕
+                        </button>
+                      )}
                     </div>
                     <textarea
                       value={step.message_text}
@@ -258,27 +245,41 @@ export default function ScriptVaultClient({
                       rows={2}
                       className="w-full bg-[#0A0A0A] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
                     />
-                    {step.step_type !== "text" && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          value={step.vault_search_term}
-                          onChange={(e) => updateDraftStep(i, { vault_search_term: e.target.value })}
-                          placeholder="Suchbegriff/Dateiname im Tresor"
-                          className="bg-[#0A0A0A] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-xs outline-none focus:border-[#C9A86A]"
-                        />
-                        {step.step_type === "ppv" && (
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={step.price}
-                            onChange={(e) => updateDraftStep(i, { price: e.target.value })}
-                            placeholder="Preis in $"
-                            className="bg-[#0A0A0A] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-xs outline-none focus:border-[#C9A86A]"
-                          />
-                        )}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setPickerForStep(i)}
+                        disabled={!formModelId}
+                        className="px-3 py-2 bg-white/5 hover:bg-[#C9A86A]/15 border border-dashed border-[#9C7A3D]/60 text-[#C9A86A] rounded text-xs font-bold uppercase disabled:opacity-40"
+                      >
+                        📁 Medien hinzufügen
+                      </button>
+                      {step.media.map((m, mi) => (
+                        <span
+                          key={mi}
+                          className="flex items-center gap-1 bg-[#9C7A3D]/20 text-[#E2C48A] text-[10px] px-2 py-1 rounded"
+                        >
+                          {m.label}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateDraftStep(i, { media: step.media.filter((_, idx) => idx !== mi) })
+                            }
+                            className="text-red-400 hover:text-red-300 ml-1"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))}
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={step.price}
+                        onChange={(e) => updateDraftStep(i, { price: e.target.value })}
+                        placeholder="Preis $ (optional)"
+                        className="w-32 bg-[#0A0A0A] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-xs outline-none focus:border-[#C9A86A]"
+                      />
+                    </div>
                   </div>
                 ))}
                 <button
@@ -348,21 +349,23 @@ export default function ScriptVaultClient({
                         {scriptSteps.map((step) => (
                           <div key={step.id} className="bg-[#050505]/50 p-3 rounded text-xs">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[9px] bg-[#9C7A3D]/20 px-2 py-0.5 rounded uppercase font-bold text-[#C9A86A]">
-                                {step.step_type === "text"
-                                  ? "💬 Text"
-                                  : step.step_type === "image"
-                                  ? "🖼️ Bild"
-                                  : "💰 PPV"}
-                              </span>
-                              {step.step_type === "ppv" && step.price != null && (
-                                <span className="text-emerald-400 font-bold">${step.price}</span>
+                              {step.price != null && (
+                                <span className="text-[9px] bg-emerald-500/20 px-2 py-0.5 rounded uppercase font-bold text-emerald-400">
+                                  ${step.price}
+                                </span>
+                              )}
+                              {(step.media_refs || []).length > 0 && (
+                                <span className="text-[9px] bg-[#9C7A3D]/20 px-2 py-0.5 rounded uppercase font-bold text-[#C9A86A]">
+                                  📁 {step.media_refs.length} Datei(en)
+                                </span>
                               )}
                             </div>
                             <p className="text-slate-300 whitespace-pre-wrap">{step.message_text}</p>
-                            {step.vault_search_term && (
-                              <p className="text-slate-500 mt-1">🔍 Tresor: {step.vault_search_term}</p>
-                            )}
+                            {(step.media_refs || []).map((m, mi) => (
+                              <p key={mi} className="text-slate-500 mt-1">
+                                📁 {m.label}
+                              </p>
+                            ))}
                           </div>
                         ))}
                       </div>
@@ -374,6 +377,18 @@ export default function ScriptVaultClient({
           </div>
         </div>
       </main>
+
+      {pickerForStep !== null && formModelId && (
+        <VaultPickerModal
+          modelId={formModelId}
+          onSelect={(items) => {
+            updateDraftStep(pickerForStep, {
+              media: [...draftSteps[pickerForStep].media, ...items],
+            });
+          }}
+          onClose={() => setPickerForStep(null)}
+        />
+      )}
     </div>
   );
 }
