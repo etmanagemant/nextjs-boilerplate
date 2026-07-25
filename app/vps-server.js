@@ -200,7 +200,19 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
       // reserves when it's explicitly set, which a plain width override
       // cannot beat - forcing the shorthand directly is what actually
       // shrinks the reserved space instead of just clipping the box.
-      '.l-header { width: 64px !important; flex: 0 0 64px !important; overflow: hidden !important; }';
+      '.l-header { width: 64px !important; flex: 0 0 64px !important; overflow: hidden !important; } ' +
+      // Root cause of the leftover gap on the individual-conversation view,
+      // confirmed live via /debug-dom: <main class="no-padding"> (only this
+      // exact class/state, not the plain chat-list view) carries its own
+      // margin-left:216px - presumably reserved for a fan-info side panel
+      // OnlyFans has in its own UI that this compact view never renders.
+      // That margin both shifted main's position AND, since it counts
+      // against a flex-grow item's available track, capped its actual
+      // width at 984px regardless of the .l-header fix above. The
+      // self-correcting "left" JS logic already masks the position part,
+      // but never touched the width main lost to it - removing the margin
+      // outright fixes both at once.
+      'main { margin-left: 0 !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
   if (document.head) inject();
@@ -485,7 +497,6 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
     var lastShownChatter = null;
     for (var i = 0; i < mine.length; i++) {
       var el = mine[i];
-      var alreadyLabeled = !!el.querySelector('.' + LABEL_CLASS);
       var text = getBubbleText(el);
       if (!text) continue;
       for (var j = logIdx; j < sentLog.length; j++) {
@@ -494,39 +505,60 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
           var chatterName = sentLog[j].chatter_name;
           var isRepeatSender = chatterName === lastShownChatter;
           lastShownChatter = chatterName;
-          if (!alreadyLabeled && !isRepeatSender) {
-            // OnlyFans' own per-message timestamp is a bare <span> with no
-            // class (confirmed live via /debug-dom: <span title="">9:35 pm
-            // </span>), so it can only be found by matching its text, not a
-            // selector. Requested layout is "9:35 pm gesendet von X" on one
-            // line, not stacked - found by locating that span and inserting
-            // the label right after it as a flex sibling.
-            var tag = document.createElement('span');
-            tag.className = LABEL_CLASS;
-            tag.textContent = 'gesendet von ' + sentLog[j].chatter_name;
-            tag.style.cssText = 'font-size:10px;opacity:0.55;color:inherit;white-space:nowrap;margin-left:4px;';
-            var timeSpan = null;
-            var spans = el.querySelectorAll('span');
-            for (var s = 0; s < spans.length; s++) {
-              if (/^\s*\d{1,2}[:.]\d{2}\s*(am|pm)?\s*$/i.test(spans[s].textContent)) {
-                timeSpan = spans[s];
-                break;
-              }
+          if (isRepeatSender) break;
+
+          // OnlyFans' own per-message timestamp is a bare <span> with no
+          // class (confirmed live via /debug-dom: <span title="">21:24
+          // </span>, wrapped in a ".b-chat__message__time" span alongside
+          // the read-receipt checkmark), so it can only be found by
+          // matching its text, not a selector. Live data showed EVERY
+          // rendered label using the fallback (block, below the message)
+          // styling, never the inline "time gesendet von X" one - OnlyFans
+          // renders the bubble before its timestamp/read-receipt finishes,
+          // so the very first scan after sending never finds a time span
+          // yet, and the old code treated any created label as permanent,
+          // so it could never upgrade once the real timestamp showed up
+          // moments later. Now a fallback label is marked and revisited on
+          // every scan - once a time span is found, the fallback is
+          // replaced with the proper inline placement instead of staying
+          // wrong forever.
+          var existingLabel = el.querySelector('.' + LABEL_CLASS);
+          var isFallback = existingLabel && existingLabel.dataset.etmFallback === '1';
+          if (existingLabel && !isFallback) break;
+
+          var timeSpan = null;
+          var spans = el.querySelectorAll('span');
+          for (var s = 0; s < spans.length; s++) {
+            if (/^\s*\d{1,2}[:.]\d{2}\s*(am|pm)?\s*$/i.test(spans[s].textContent)) {
+              timeSpan = spans[s];
+              break;
             }
-            if (timeSpan && timeSpan.parentElement) {
-              timeSpan.parentElement.style.display = 'flex';
-              timeSpan.parentElement.style.alignItems = 'center';
-              timeSpan.insertAdjacentElement('afterend', tag);
-            } else {
-              // Some messages render with the timestamp hidden until hover
-              // (the m-time-hidden modifier seen live) - fall back to
-              // anchoring on the message container itself rather than
-              // silently dropping the label.
-              tag.style.display = 'block';
-              tag.style.textAlign = 'right';
-              tag.style.marginTop = '2px';
-              el.appendChild(tag);
-            }
+          }
+          // No timestamp yet and a fallback is already showing - leave it
+          // as-is rather than tearing it down and rebuilding it identically
+          // every 4s.
+          if (!timeSpan && existingLabel) break;
+
+          if (existingLabel) existingLabel.remove();
+          var tag = document.createElement('span');
+          tag.className = LABEL_CLASS;
+          tag.textContent = 'gesendet von ' + chatterName;
+          tag.style.cssText = 'font-size:10px;opacity:0.55;color:inherit;white-space:nowrap;margin-left:4px;';
+          if (timeSpan && timeSpan.parentElement) {
+            timeSpan.parentElement.style.display = 'flex';
+            timeSpan.parentElement.style.alignItems = 'center';
+            timeSpan.insertAdjacentElement('afterend', tag);
+          } else {
+            // Some messages render with the timestamp hidden until hover
+            // (the m-time-hidden modifier seen live) - fall back to
+            // anchoring on the message container itself rather than
+            // silently dropping the label, and mark it so a later scan
+            // can still upgrade it once/if a real timestamp appears.
+            tag.dataset.etmFallback = '1';
+            tag.style.display = 'block';
+            tag.style.textAlign = 'right';
+            tag.style.marginTop = '2px';
+            el.appendChild(tag);
           }
           break;
         }
