@@ -11,19 +11,14 @@ export default async function UploadVaultPage() {
     redirect("/login");
   }
 
-  // Get user role, media, and connected models in parallel
-  const [profile, { data: media }, { data: crm_models }] = await Promise.all([
+  const [profile, { data: crm_models }, { data: mappings }] = await Promise.all([
     getCurrentProfile(user.id),
-    supabase
-      .from("crm_vault_media")
-      .select("*")
-      .eq("chatter_id", user.id)
-      .order("created_at", { ascending: false }),
     supabase
       .from("crm_model_sessions")
       .select("model_id")
       .eq("is_active", true)
       .order("model_id", { ascending: true }),
+    supabase.from("crm_vault_fan_mapping").select("model_id, vault_fan_model_id"),
   ]);
 
   const userRole = profile?.role || "guest";
@@ -44,11 +39,10 @@ export default async function UploadVaultPage() {
 
   return (
     <UploadVaultClient
-      initialMedia={media || []}
       userId={user.id}
       userRole={userRole}
-      userName={profile?.full_name || user.email || "Chatter"}
       connectedModels={connectedModels}
+      initialMappings={mappings || []}
     />
   );
 }

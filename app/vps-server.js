@@ -1863,6 +1863,99 @@ app.post('/insert-script-step', async (req, res) => {
   }
 });
 
+// Uploads a local file into a model's OnlyFans Vault indirectly - OnlyFans
+// has no direct bulk-upload-to-vault feature the team uses; the workaround
+// (explained by the user) is sending the file as a priced message to a
+// dedicated "Vault-Fan" (another one of their own model accounts, renamed
+// to "Vault" in the chat list), which OnlyFans then archives into the
+// Vault automatically. Runs on the model's MAIN session (modelSessions),
+// not a chatter slot, so it never competes with an active chatter for one
+// of the 4 limited slots.
+//
+// IMPORTANT / UNVERIFIED: the chat-list search input and the "attach
+// media" button are confirmed live (same debug-dom session as
+// insert-script-step). The price-input selector and the exact post-attach
+// timing are best-effort guesses, not confirmed against a real upload -
+// needs a live pass to verify before trusting it for real sends.
+app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), async (req, res) => {
+  const { modelId, vaultFanLabel, price, fileName } = req.query;
+  if (!modelId || !vaultFanLabel || !fileName) {
+    return res.status(400).json({ error: 'Missing modelId, vaultFanLabel, or fileName' });
+  }
+  if (!req.body || !req.body.length) {
+    return res.status(400).json({ error: 'Missing file body' });
+  }
+
+  const session = modelSessions[modelId];
+  if (!session) return res.json({ status: 'no_session' });
+  const page = session.page;
+
+  const tempPath = path.join('/tmp', `upload-${Date.now()}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+  try {
+    await fs.writeFile(tempPath, req.body);
+
+    await page.goto('https://onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // Chat-list search (confirmed live: autocomplete="chats-search-input"),
+    // not the within-a-chat search - finds the "Vault"-labeled conversation
+    // by the nickname the user sets on it, per their own explanation,
+    // rather than scrolling the chat list.
+    const searched = await page.evaluate(() => {
+      var input = document.querySelector('input[autocomplete="chats-search-input"]');
+      if (!input) return false;
+      input.focus();
+      return true;
+    });
+    if (!searched) return res.json({ status: 'error', error: 'Chat-Suche nicht gefunden' });
+    await page.keyboard.type(String(vaultFanLabel));
+    await new Promise((r) => setTimeout(r, 1200));
+
+    const opened = await page.evaluate(() => {
+      var link = document.querySelector('.b-chats__item__link');
+      if (!link) return false;
+      link.click();
+      return true;
+    });
+    if (!opened) return res.json({ status: 'error', error: 'Vault-Fan-Chat nicht gefunden' });
+    await new Promise((r) => setTimeout(r, 1200));
+
+    const [fileChooser] = await Promise.all([
+      page.waitForFileChooser({ timeout: 8000 }).catch(() => null),
+      page.evaluate(() => {
+        var btn = document.querySelector('#attach_file_photo, .attach_file');
+        if (btn) btn.click();
+      }),
+    ]);
+    if (!fileChooser) {
+      return res.json({ status: 'error', error: 'Datei-Dialog nicht ausgelöst (Selektor unbestätigt)' });
+    }
+    await fileChooser.accept([tempPath]);
+    await new Promise((r) => setTimeout(r, 3000));
+
+    if (price) {
+      await page.evaluate(() => {
+        var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
+        if (input) input.focus();
+      });
+      await page.keyboard.type(String(price));
+      await new Promise((r) => setTimeout(r, 300));
+    }
+
+    await page.evaluate(() => {
+      var btn = document.querySelector('[at-attr="send_btn"]');
+      if (btn && !btn.disabled) btn.click();
+    });
+
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('[UPLOAD-TO-VAULT-FAN] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  } finally {
+    await fs.unlink(tempPath).catch(() => {});
+  }
+});
+
 // One-off diagnostic screenshot of a model's or slot's current page -
 // useful for verifying layout/CSS changes without needing a live VNC
 // viewer open. Shared-secret gated like everything else here.
