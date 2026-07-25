@@ -166,13 +166,18 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
     style.textContent = '.b-chat__messages { padding-bottom: 90px !important; } ' +
       '* { scrollbar-width: none !important; } ' +
       '*::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; } ' +
-      // The visible vertical line through the chat view, reported live and
-      // confirmed via /debug-dom - it's the seam between
-      // .b-chats__conversations-list (the chat list, 395px) and its sibling
-      // .b-chats__conversations-content (the open thread), which meet
-      // exactly where the line sits. Stripping border and box-shadow since
-      // OnlyFans could be using either to draw the divider.
-      '.b-chats__conversations-list, .b-chats__conversations-content { border: none !important; box-shadow: none !important; } ' +
+      // The persistent vertical line reported live survived two targeted
+      // guesses (list/content seam, then several individually-colored
+      // candidates) - rather than keep guessing which specific element it
+      // is, this removes border/box-shadow/outline from every element
+      // inside the chat view at once.
+      '.b-chats, .b-chats * { border: none !important; box-shadow: none !important; outline: none !important; } ' +
+      // Second hypothesis for the same line, in case it isn't a border at
+      // all - class names like "m-native-custom-scrollbar" seen live
+      // suggest OnlyFans renders its own scrollbar as a plain styled div
+      // rather than a real native one, which the *::-webkit-scrollbar rule
+      // above can't touch since there's nothing native there to hide.
+      '[class*="scrollbar"] { background: transparent !important; }' +
       // Confirmed live via /debug-dom: the chat conversation area
       // (.b-chats, inside <main>) only rendered 984px wide inside the
       // 1280px frame even after the sidebar/main gap fix - some max-width
