@@ -172,11 +172,19 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
       // is, this removes border/box-shadow/outline from every element
       // inside the chat view at once.
       '.b-chats, .b-chats * { border: none !important; box-shadow: none !important; outline: none !important; } ' +
+      // Precisely pinpointed live (annotated screenshot): the line actually
+      // sits at the icon-rail/content seam, not inside .b-chats at all -
+      // every previous guess targeted the wrong side of that boundary.
+      // .l-header is the icon rail itself (confirmed live: width 64px,
+      // spans full height) - covering it and its pseudo-elements the same
+      // way as .b-chats above.
+      '.l-header, .l-header *, .l-header::before, .l-header::after, .l-header *::before, .l-header *::after { border: none !important; box-shadow: none !important; outline: none !important; } ' +
       // Second hypothesis for the same line, in case it isn't a border at
       // all - class names like "m-native-custom-scrollbar" seen live
-      // suggest OnlyFans renders its own scrollbar as a plain styled div
-      // rather than a real native one, which the *::-webkit-scrollbar rule
-      // above can't touch since there's nothing native there to hide.
+      // (on .l-header__menu itself) suggest OnlyFans renders its own
+      // scrollbar as a plain styled div rather than a real native one,
+      // which the *::-webkit-scrollbar rule above can't touch since
+      // there's nothing native there to hide.
       '[class*="scrollbar"] { background: transparent !important; }' +
       // Confirmed live via /debug-dom: the chat conversation area
       // (.b-chats, inside <main>) only rendered 984px wide inside the
