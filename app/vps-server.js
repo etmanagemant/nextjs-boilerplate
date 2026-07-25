@@ -2034,26 +2034,56 @@ app.post('/insert-script-step', async (req, res) => {
 
     // CONFIRMED LIVE: "SCHLIESSEN" (Close) just dismisses the picker WITHOUT
     // saving anything - the actual confirm action is a separate "HINZUFÜGEN"
-    // (Add) button that only appears once at least one file is checked,
-    // next to a "N ausgewählt" counter. Clicking Close instead of Add is
-    // exactly why nothing was ever landing in the compose box: the code
-    // reported "success" (checkbox click genuinely worked) but then threw
-    // the selection away instead of confirming it.
-    await page.evaluate(() => {
-      var candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
-      var matches = candidates.filter(function (el) {
-        var txt = (el.textContent || '').trim().toLowerCase();
-        return txt === 'hinzufügen' || txt === 'hinzufuegen' || txt === 'add';
+    // (Add) button that only mounts once at least one file is checked, next
+    // to a "N ausgewählt" counter. Clicking Close instead of Add is exactly
+    // why nothing was ever landing in the compose box before.
+    //
+    // CONFIRMED LIVE (this pass): a single evaluate+click right after the
+    // picking loop isn't reliable - the Add button/counter bar is a newly-
+    // mounted Vue component, and this environment's real-world latency for
+    // that to actually render and become clickable runs into multiple
+    // seconds sometimes, not milliseconds. waitForFunction below blocks
+    // until a matching, visible element genuinely exists (up to 4s) rather
+    // than assuming it's already there; the click is then retried up to 5x,
+    // verified against modal-open actually clearing, since a click firing
+    // before the handler is wired up can silently do nothing.
+    await page.waitForFunction(
+      () => {
+        var candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
+        return candidates.some(function (el) {
+          var txt = (el.textContent || '').trim().toLowerCase();
+          return (txt === 'hinzufügen' || txt === 'hinzufuegen' || txt === 'add') && el.offsetParent !== null;
+        });
+      },
+      { timeout: 4000 }
+    ).catch(() => {});
+
+    let addClicked = false;
+    for (let attempt = 0; attempt < 5 && !addClicked; attempt++) {
+      const clicked = await page.evaluate(() => {
+        var candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
+        var matches = candidates.filter(function (el) {
+          var txt = (el.textContent || '').trim().toLowerCase();
+          return (txt === 'hinzufügen' || txt === 'hinzufuegen' || txt === 'add') && el.offsetParent !== null;
+        });
+        if (!matches.length) return false;
+        matches.sort(function (a, b) {
+          var ra = a.getBoundingClientRect();
+          var rb = b.getBoundingClientRect();
+          return ra.width * ra.height - rb.width * rb.height;
+        });
+        matches[0].click();
+        return true;
       });
-      if (!matches.length) return;
-      matches.sort(function (a, b) {
-        var ra = a.getBoundingClientRect();
-        var rb = b.getBoundingClientRect();
-        return ra.width * ra.height - rb.width * rb.height;
-      });
-      matches[0].click();
-    });
-    await new Promise((r) => setTimeout(r, 150));
+      if (!clicked) {
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      await new Promise((r) => setTimeout(r, 400));
+      const stillOpen = await page.evaluate(() => document.body.classList.contains('modal-open'));
+      addClicked = !stillOpen;
+      if (!addClicked) await new Promise((r) => setTimeout(r, 300));
+    }
 
     if (price) {
       const priceResult = await setPriceOrFail(price);
