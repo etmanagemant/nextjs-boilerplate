@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
-import { VaultLivePicker } from "@/components/layout/VaultLivePicker";
+import { VaultGalleryPicker } from "@/components/layout/VaultGalleryPicker";
 
 interface MediaRef {
   label: string;
@@ -346,7 +346,7 @@ export default function ScriptVaultClient({
                       />
 
                       {pickerForStep === i && formModelId && (
-                        <VaultLivePicker
+                        <VaultGalleryPicker
                           modelId={formModelId}
                           onSelect={(items) => updateDraftStep(i, { media: [...step.media, ...items] })}
                           onClose={() => setPickerForStep(null)}

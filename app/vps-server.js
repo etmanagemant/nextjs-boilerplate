@@ -2094,7 +2094,17 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
     await fs.writeFile(tempPath, req.body);
 
     if (!opened) return res.json({ status: 'error', error: 'Vault-Fan-Chat nicht gefunden' });
-    await new Promise((r) => setTimeout(r, 1200));
+
+    // Confirmed live bug: a flat 1200ms wait wasn't enough for the attach
+    // button to exist yet after jumping straight to a chat via URL (this
+    // page load has more to render than the old search-then-click flow
+    // did, which had its own built-in waits along the way) - waitForSelector
+    // waits for the actual element instead of guessing a fixed delay.
+    try {
+      await page.waitForSelector('#attach_file_photo, .attach_file', { timeout: 10000 });
+    } catch (e) {
+      return res.json({ status: 'error', error: 'Anhang-Button nicht geladen (Chat-Seite zu langsam oder Selektor falsch)' });
+    }
 
     const [fileChooser] = await Promise.all([
       page.waitForFileChooser({ timeout: 8000 }).catch(() => null),
@@ -2295,6 +2305,117 @@ app.post('/debug-type', async (req, res) => {
     res.json({ status: 'success' });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Diagnostic-only: runs a same-origin fetch() from inside the live page
+// (so it carries the page's own OnlyFans session cookies automatically)
+// against an arbitrary /api2/ URL and returns the parsed JSON - used to
+// explore what OnlyFans' own internal API returns before building a
+// real feature around it.
+app.post('/debug-fetch', async (req, res) => {
+  const page = resolveDebugPage(req);
+  if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
+  const url = req.body && req.body.url;
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+
+  try {
+    const result = await page.evaluate(async (u) => {
+      const r = await fetch(u, { credentials: 'include' });
+      const text = await r.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch (e) {}
+      return { status: r.status, ok: r.ok, json: json, textSample: json ? null : text.slice(0, 500) };
+    }, url);
+    res.json({ status: 'success', result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Real Vault gallery, no VNC/live-browsing at all - a bare fetch() to
+// OnlyFans' own /api2/ endpoints from outside the page gets rejected
+// (confirmed live: "Something went wrong" error), because OnlyFans signs
+// these requests with headers its own front-end JS computes internally.
+// Rather than reverse-engineer that signing scheme, this navigates the
+// chatter slot's page to the real Vault (or a specific category) and
+// SNIFFS the response body of the request OnlyFans' own SPA code makes
+// naturally while loading - already validly authenticated/signed, we
+// just read it instead of making our own request. Returns real thumbnail
+// URLs so the admin gets an actual image grid in our own UI, with
+// selection tracked entirely in OUR state - no clicking inside the real
+// OnlyFans page at all, so there's no risk of triggering its own
+// move/delete multi-select mode.
+app.post('/vault-media', async (req, res) => {
+  try {
+    const { userId, modelId, listId } = req.body || {};
+    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
+    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    if (!slot || !slot.page) return res.json({ status: 'no_slot', items: [], lists: [] });
+    const page = slot.page;
+
+    let mediaBody = null;
+    let listsBody = null;
+    const handler = async (response) => {
+      try {
+        const url = response.url();
+        if (!mediaBody && url.indexOf('/api2/v2/vault/media?') !== -1) {
+          mediaBody = await response.json();
+        } else if (!listsBody && url.indexOf('/api2/v2/vault/lists?') !== -1) {
+          listsBody = await response.json();
+        }
+      } catch (e) {
+        /* ignore parse errors on unrelated responses */
+      }
+    };
+    page.on('response', handler);
+
+    try {
+      const targetUrl = listId ? `https://onlyfans.com/my/vault/list/${listId}` : 'https://onlyfans.com/my/vault';
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+      const start = Date.now();
+      while (!mediaBody && Date.now() - start < 8000) {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    } finally {
+      page.off('response', handler);
+    }
+
+    if (!mediaBody) {
+      return res.json({ status: 'error', error: 'Keine Antwort von OnlyFans erhalten', items: [], lists: [] });
+    }
+
+    // UNVERIFIED field mapping - OnlyFans' actual response shape isn't
+    // documented, so this tries several plausible field names. rawSample
+    // is included so a mismatch can be diagnosed and fixed from the
+    // actual live response instead of guessing blind again.
+    const rawList = mediaBody.list || mediaBody.data || (Array.isArray(mediaBody) ? mediaBody : []);
+    const items = rawList.map((m, i) => {
+      const thumb =
+        (m.thumb && (m.thumb.url || m.thumb.src)) ||
+        (m.files && m.files.thumb && (m.files.thumb.url || m.files.thumb.src)) ||
+        (m.preview && (m.preview.url || m.preview.src)) ||
+        m.thumbUrl || m.previewUrl || m.url || null;
+      return {
+        id: m.id != null ? String(m.id) : String(i),
+        label: m.name || m.fileName || ('Datei ' + (i + 1)),
+        thumbnailUrl: thumb,
+      };
+    });
+
+    const rawLists = (listsBody && (listsBody.list || listsBody.data)) || [];
+    const lists = rawLists.map((l) => ({ id: String(l.id), name: l.name || l.title || String(l.id) }));
+
+    res.json({
+      status: 'success',
+      items,
+      lists,
+      rawSample: items.length === 0 && rawList.length > 0 ? rawList[0] : undefined,
+    });
+  } catch (error) {
+    console.error('[VAULT-MEDIA] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message, items: [], lists: [] });
   }
 });
 
