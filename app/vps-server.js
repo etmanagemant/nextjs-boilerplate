@@ -492,15 +492,12 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
     // element for ones that already have it.
     var mine = document.querySelectorAll('.b-chat__message.m-from-me');
     var logIdx = 0;
-    // Tracks the sender of the last message walked, labeled or not, across
-    // the whole loop - a wall of identical "gesendet von X" repeated on
-    // every single message in a same-sender streak read as sloppy/cluttered
-    // (reported live against a chat full of short back-to-back test
-    // messages). Only labeling on an actual sender CHANGE matches how chat
-    // UIs normally group consecutive messages, without losing any real
-    // attribution info - a run of unlabeled messages is still unambiguously
-    // "whoever the last visible label said."
-    var lastShownChatter = null;
+    // EVERY message needs its own visible "gesendet von X" - explicitly
+    // confirmed live after a previous attempt suppressed repeats on a
+    // same-sender streak, mistaking "labels render sloppily positioned"
+    // (the real complaint) for "too many labels shown." The fix for the
+    // actual complaint is the fallback-upgrade logic below, not hiding
+    // labels.
     for (var i = 0; i < mine.length; i++) {
       var el = mine[i];
       var text = getBubbleText(el);
@@ -509,9 +506,6 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
         if (sentLog[j].message_text === text) {
           logIdx = j + 1;
           var chatterName = sentLog[j].chatter_name;
-          var isRepeatSender = chatterName === lastShownChatter;
-          lastShownChatter = chatterName;
-          if (isRepeatSender) break;
 
           // OnlyFans' own per-message timestamp is a bare <span> with no
           // class (confirmed live via /debug-dom: <span title="">21:24
