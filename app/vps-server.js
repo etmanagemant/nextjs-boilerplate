@@ -1218,8 +1218,13 @@ async function assignSlot(userId, modelId, role, chatterName) {
   return slot;
 }
 
-// Get an existing live session, or open a fresh one navigated to the login page
-async function getOrCreateSession(modelId) {
+// Get an existing live session, or open a fresh one. Normally navigates
+// straight to the blank login page (today's manual "Model verbinden" flow),
+// but if restoreCookies is passed (a flat {name: value} map previously
+// saved via /cookies, see autoReconnectAllModels below) it injects them
+// before the first navigation instead, so a model can come back silently
+// logged in after a VPS restart/crash instead of always starting logged out.
+async function getOrCreateSession(modelId, restoreCookies) {
   const existing = modelSessions[modelId];
   if (existing && existing.browser.isConnected()) {
     existing.lastActivity = Date.now();
@@ -1234,7 +1239,9 @@ async function getOrCreateSession(modelId) {
   }
 
   await enforceSessionCap(modelId);
-  // Fresh login handshake - never inherit a previous session's cookies for this model
+  // Fresh login handshake - never inherit whatever's left on disk from a
+  // previous run. When restoreCookies is set, the valid state we actually
+  // want comes back explicitly via page.setCookie below, not from disk.
   await wipeProfileDir(modelId);
 
   const browser = await launchBrowser(modelId, ':1');
@@ -1256,7 +1263,6 @@ async function getOrCreateSession(modelId) {
   // OnlyFans itself to render in German.
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'de-DE,de;q=0.9' });
   await enableDarkMode(page);
-  await setGermanLangCookie(page);
   // This main session is what Connection Hub's own login/pre-connect stream
   // shows (BrowserLoginStreamComponent) - previously only chatter slots got
   // the icon-only/compact nav treatment (ensureSlotBrowser), so this exact
@@ -1267,15 +1273,51 @@ async function getOrCreateSession(modelId) {
   await reserveOverlaySpace(page);
   await applyNavRestrictions(page, 'admin');
 
+  if (restoreCookies) {
+    const cookiePairs = Object.entries(restoreCookies)
+      .filter(([name]) => name !== 'local_storage')
+      .map(([name, value]) => ({ name, value: String(value), domain: '.onlyfans.com', path: '/' }));
+    if (cookiePairs.length) {
+      try {
+        await page.setCookie(...cookiePairs);
+      } catch (e) {
+        console.warn(`[SESSION] Cookie restore failed for ${modelId}:`, e.message);
+      }
+    }
+  }
+  // Runs after any cookie restore so a stale lang value baked into the
+  // stored cookie map can't win - same reasoning as ensureSlotBrowser's
+  // live cookie overlay, which applies setGermanLangCookie last too.
+  await setGermanLangCookie(page);
+
   try {
     // The direct /login route has been unreliable ("page not available") -
     // the root page shows the same login form to logged-out visitors anyway.
-    await page.goto('https://www.onlyfans.com', {
+    // Restored sessions go straight to the chat inbox instead, since if the
+    // cookies are valid there's no login page to land on at all.
+    await page.goto(restoreCookies ? 'https://www.onlyfans.com/my/chats' : 'https://www.onlyfans.com', {
       waitUntil: 'domcontentloaded',
-      timeout: 15000,
+      timeout: restoreCookies ? 20000 : 15000,
     });
   } catch (navErr) {
     console.warn(`[SESSION] Initial navigation warning for ${modelId}: ${navErr.message}`);
+  }
+
+  if (restoreCookies && restoreCookies.local_storage) {
+    try {
+      await page.evaluate((json) => {
+        const data = JSON.parse(json);
+        for (const key of Object.keys(data)) {
+          try {
+            localStorage.setItem(key, data[key]);
+          } catch (e) {
+            /* ignore single-key failure */
+          }
+        }
+      }, restoreCookies.local_storage);
+    } catch (e) {
+      console.warn(`[SESSION] localStorage restore failed for ${modelId}:`, e.message);
+    }
   }
 
   const session = { browser, page, lastActivity: Date.now(), createdAt: new Date() };
@@ -1372,6 +1414,59 @@ if (APP_URL && CRON_SECRET) {
   console.log(`[SYNC-LOOP] Enabled, every ${SYNC_INTERVAL_MS / 1000}s`);
 } else {
   console.warn('[SYNC-LOOP] Disabled - NEXT_PUBLIC_APP_URL or CRON_SECRET not set');
+}
+
+// Runs once, shortly after this process comes up (see the app.listen()
+// callback near the bottom of this file). Asks Next.js which models were
+// connected before the restart and tries to silently rejoin each one using
+// its stored cookies (getOrCreateSession's restoreCookies param), so a VPS
+// restart/crash (deploy, OOM, `systemctl restart`) no longer forces a human
+// to notice a broken chat and manually reconnect every single time - a
+// routine restart alone doesn't invalidate OnlyFans' session cookies, only
+// this process's own in-memory modelSessions map was ever lost. Falls back
+// to leaving that one model disconnected (today's existing manual "Model
+// verbinden" flow, unchanged) whenever the stored cookies really did expire.
+async function autoReconnectAllModels() {
+  if (!APP_URL || !CRON_SECRET) {
+    console.warn('[AUTO-RECONNECT] Skipped - NEXT_PUBLIC_APP_URL or CRON_SECRET not set');
+    return;
+  }
+  let sessions = [];
+  try {
+    const res = await fetch(`${APP_URL}/api/vps/sessions-to-restore?secret=${CRON_SECRET}`);
+    const data = await res.json().catch(() => ({}));
+    sessions = Array.isArray(data.sessions) ? data.sessions : [];
+  } catch (e) {
+    console.error('[AUTO-RECONNECT] Failed to fetch sessions to restore:', e.message);
+    return;
+  }
+  if (!sessions.length) {
+    console.log('[AUTO-RECONNECT] No stored sessions to restore');
+    return;
+  }
+  console.log(`[AUTO-RECONNECT] Attempting to restore ${sessions.length} model session(s)...`);
+  // Sequential, not parallel - launching several Chrome instances at once on
+  // this 1-vCPU/1GB VPS is exactly the load spike withModelLock and
+  // enforceSessionCap already exist to avoid elsewhere.
+  for (const { modelId, cookies } of sessions) {
+    try {
+      const session = await withModelLock(modelId, () => getOrCreateSession(modelId, cookies));
+      const state = await getLoginState(session.page);
+      if (state.isLoggedIn) {
+        console.log(`[AUTO-RECONNECT] ${modelId}: restored silently`);
+      } else {
+        console.warn(`[AUTO-RECONNECT] ${modelId}: stored cookies no longer valid, closing and marking disconnected`);
+        await closeSession(modelId, 'stored cookies invalid on auto-reconnect', true);
+        await fetch(`${APP_URL}/api/vps/mark-session-invalid?secret=${CRON_SECRET}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modelId }),
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.error(`[AUTO-RECONNECT] ${modelId}: error`, e.message);
+    }
+  }
 }
 
 // ============================================================================
@@ -1968,7 +2063,7 @@ app.post('/insert-script-step', async (req, res) => {
         return { ok: false, error: 'Preisfeld nicht gefunden - nicht gesendet, damit nichts kostenlos verschickt wird' };
       }
       await page.keyboard.type(String(expectedPrice));
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 100));
       const priceConfirmed = await page.evaluate((expected) => {
         var input = document.querySelector('input[autocomplete="price-input"]');
         return !!(input && input.value && input.value.replace(',', '.').indexOf(String(expected)) !== -1);
@@ -1986,7 +2081,7 @@ app.post('/insert-script-step', async (req, res) => {
       if (!saved) {
         return { ok: false, error: 'Preis konnte nicht gespeichert werden (Speichern-Button nicht gefunden) - nicht gesendet, damit nichts kostenlos verschickt wird' };
       }
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 100));
       return { ok: true };
     };
 
@@ -2108,7 +2203,7 @@ app.post('/insert-script-step', async (req, res) => {
       }
 
       if (picked) pickedCount++;
-      await new Promise((r) => setTimeout(r, 120));
+      await new Promise((r) => setTimeout(r, 80));
     }
 
     if (pickedCount === 0) {
@@ -2188,8 +2283,17 @@ app.post('/insert-script-step', async (req, res) => {
         await new Promise((r) => setTimeout(r, 600));
         continue;
       }
-      await new Promise((r) => setTimeout(r, 600));
-      const stillOpen = await page.evaluate(() => document.body.classList.contains('modal-open'));
+      // Poll for the modal to actually close instead of always burning the
+      // full worst-case 600ms - same 600ms ceiling as before (still
+      // generous enough for the slow "newly-mounted Vue component" case
+      // this budget was enlarged for), but resolves the instant the modal
+      // closes rather than always paying the full amount even when it
+      // closes in ~150ms, which is the common case.
+      let stillOpen = true;
+      for (let waited = 0; waited < 600 && stillOpen; waited += 100) {
+        await new Promise((r) => setTimeout(r, 100));
+        stillOpen = await page.evaluate(() => document.body.classList.contains('modal-open'));
+      }
       addClicked = !stillOpen;
       if (!addClicked) await new Promise((r) => setTimeout(r, 500));
     }
@@ -2946,6 +3050,9 @@ for (const slot of CHATTER_SLOTS) {
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[SERVER] Listening on port ${PORT}`);
+  // Fire-and-forget - /health and every other route must stay available
+  // immediately regardless of how long restoring N models' sessions takes.
+  autoReconnectAllModels().catch((e) => console.error('[AUTO-RECONNECT] Unexpected error:', e.message));
 });
 
 // Close every browser promptly on shutdown so systemd doesn't have to wait
