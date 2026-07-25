@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
 interface ConnectedModel {
@@ -10,7 +10,7 @@ interface ConnectedModel {
 
 interface VaultFanMapping {
   model_id: string;
-  vault_fan_model_id: string;
+  vault_fan_label: string;
 }
 
 interface UploadVaultClientProps {
@@ -47,26 +47,42 @@ export default function UploadVaultClient({
   const [mappings, setMappings] = useState<VaultFanMapping[]>(initialMappings);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [labelDraft, setLabelDraft] = useState("");
+  const [savingLabel, setSavingLabel] = useState(false);
 
   const supabase = createClient();
 
   const currentMapping = mappings.find((m) => m.model_id === activeModelId);
-  const vaultFanModelId = currentMapping?.vault_fan_model_id || "";
+  const vaultFanLabel = currentMapping?.vault_fan_label || "";
 
-  const handleSetVaultFan = async (otherModelId: string) => {
-    if (!activeModelId) return;
+  const selectModel = (modelId: string) => {
+    setActiveModelId(modelId);
+    setLabelDraft(mappings.find((m) => m.model_id === modelId)?.vault_fan_label || "Vault");
+  };
+
+  useEffect(() => {
+    if (activeModelId) setLabelDraft(mappings.find((m) => m.model_id === activeModelId)?.vault_fan_label || "Vault");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSetVaultFanLabel = async () => {
+    if (!activeModelId || !labelDraft.trim()) return;
+    setSavingLabel(true);
     try {
+      const label = labelDraft.trim();
       const { error } = await supabase
         .from("crm_vault_fan_mapping")
-        .upsert({ model_id: activeModelId, vault_fan_model_id: otherModelId, updated_at: new Date().toISOString() });
+        .upsert({ model_id: activeModelId, vault_fan_label: label, updated_at: new Date().toISOString() });
       if (error) throw error;
       setMappings([
         ...mappings.filter((m) => m.model_id !== activeModelId),
-        { model_id: activeModelId, vault_fan_model_id: otherModelId },
+        { model_id: activeModelId, vault_fan_label: label },
       ]);
     } catch (err) {
       console.error("Error saving vault-fan mapping:", err);
       alert("Fehler beim Speichern der Vault-Fan-Zuordnung");
+    } finally {
+      setSavingLabel(false);
     }
   };
 
@@ -96,7 +112,7 @@ export default function UploadVaultClient({
         const formData = new FormData();
         formData.append("file", item.file);
         formData.append("modelId", activeModelId);
-        formData.append("vaultFanLabel", "Vault");
+        formData.append("vaultFanLabel", vaultFanLabel || "Vault");
         if (item.price) formData.append("price", item.price);
 
         const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: formData });
@@ -145,7 +161,7 @@ export default function UploadVaultClient({
               {connectedModels.map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => setActiveModelId(m.id)}
+                  onClick={() => selectModel(m.id)}
                   className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition ${
                     activeModelId === m.id
                       ? "bg-[#C9A86A]/20 text-[#C9A86A] border border-[#C9A86A]/50"
@@ -161,22 +177,27 @@ export default function UploadVaultClient({
           {activeModelId && (
             <section className="mb-6 bg-black/40 p-4 rounded-xl border border-[#9C7A3D]/20">
               <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
-                Vault-Fan für dieses Model (im OnlyFans-Chat als "Vault" umbenannt)
+                Name des Vault-Fans für dieses Model (so wie er im OnlyFans-Chat umbenannt wurde, z.B. "Vault")
               </label>
-              <select
-                value={vaultFanModelId}
-                onChange={(e) => handleSetVaultFan(e.target.value)}
-                className="w-full max-w-xs bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
-              >
-                <option value="">-- auswählen --</option>
-                {connectedModels
-                  .filter((m) => m.id !== activeModelId)
-                  .map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-              </select>
+              <div className="flex gap-2 max-w-md">
+                <input
+                  type="text"
+                  value={labelDraft}
+                  onChange={(e) => setLabelDraft(e.target.value)}
+                  placeholder="Vault"
+                  className="flex-1 bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
+                />
+                <button
+                  onClick={handleSetVaultFanLabel}
+                  disabled={savingLabel || !labelDraft.trim()}
+                  className="px-4 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded text-xs uppercase disabled:opacity-40"
+                >
+                  {savingLabel ? "..." : "✓ Speichern"}
+                </button>
+              </div>
+              {vaultFanLabel && (
+                <p className="text-[10px] text-slate-500 mt-2">Aktuell gespeichert: "{vaultFanLabel}"</p>
+              )}
             </section>
           )}
 
@@ -236,10 +257,10 @@ export default function UploadVaultClient({
               ))}
               <button
                 onClick={sendAll}
-                disabled={isSending || !vaultFanModelId}
+                disabled={isSending || !vaultFanLabel}
                 className="w-full mt-3 px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg disabled:opacity-40"
               >
-                {isSending ? "Wird gesendet..." : !vaultFanModelId ? "Erst Vault-Fan auswählen" : `${queue.length} Datei(en) senden`}
+                {isSending ? "Wird gesendet..." : !vaultFanLabel ? "Erst Vault-Fan-Namen speichern" : `${queue.length} Datei(en) senden`}
               </button>
             </section>
           )}

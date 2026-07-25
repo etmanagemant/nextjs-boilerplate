@@ -111,7 +111,18 @@ export default async function ManagementPage() {
 
                   {/* 👑 NEUE SPALTE: Provision (Chatter) oder Stundenhonorar (Moderator) */}
                   <td className="p-3">
-                    {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
+                    {p.email === "etmanagement@gmail.com" || p.email === "etmanagemant@gmail.com" || p.user_id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (
+                      <span className="text-xs text-slate-500 font-mono">Admin</span>
+                    ) : p.role === "model" ? (
+                      // Models haben keine Provision/Stundenlohn - die
+                      // Zuordnung zu ihrem OnlyFans-Account passiert im
+                      // Connection Hub, nicht hier.
+                      <a href="/management/crm-connect" className="text-[10px] text-[#C9A86A] hover:text-[#E5C158] font-bold underline">
+                        → im Connection Hub zuordnen
+                      </a>
+                    ) : !p.role ? (
+                      <span className="text-[10px] text-slate-500">Erst Rolle vergeben</span>
+                    ) : (
                       <form action={updateMitarbeiterCompensation} className="flex gap-1.5 items-center flex-wrap">
                         <input type="hidden" name="user_id" value={p.user_id} />
                         <input type="hidden" name="role" value={p.role} />
@@ -128,8 +139,6 @@ export default async function ManagementPage() {
                         )}
                         <button type="submit" className="text-[10px] bg-emerald-600 text-white font-bold px-1.5 py-1 rounded hover:bg-emerald-700 transition cursor-pointer">✓</button>
                       </form>
-                    ) : (
-                      <span className="text-xs text-slate-500 font-mono">Admin</span>
                     )}
                   </td>
 

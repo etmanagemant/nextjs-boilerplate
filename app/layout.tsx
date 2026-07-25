@@ -2,6 +2,7 @@ import "./globals.css";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import GlobalSidebar from "@/components/layout/GlobalSidebar";
 import GlobalTopBar from "@/components/layout/GlobalTopBar";
+import WaitingForRole from "@/components/layout/WaitingForRole";
 
 export const metadata = {
   title: "ET Management",
@@ -16,6 +17,11 @@ export default async function RootLayout({
   const { user } = await getCurrentUser();
 
   let role = "chatter";
+  // A brand-new self-registered user (see app/login/page.tsx) gets no role
+  // at all until an admin assigns one via Management - pending is the true
+  // default now, not a silent "chatter" fallback, so nothing should render
+  // for them below except the waiting screen.
+  let pending = false;
   if (user) {
     if (
       user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
@@ -25,10 +31,14 @@ export default async function RootLayout({
       role = "admin";
     } else {
       const profile = await getCurrentProfile(user.id);
-      if (profile && profile.role === "moderator") {
+      if (!profile || !profile.role) {
+        pending = true;
+      } else if (profile.role === "moderator") {
         role = "moderator";
-      } else if (profile && profile.role === "admin") {
+      } else if (profile.role === "admin") {
         role = "admin";
+      } else {
+        role = profile.role;
       }
     }
   }
@@ -41,12 +51,23 @@ export default async function RootLayout({
             layout redesign. */}
         <div className="fixed top-0 left-0 right-0 h-[2px] z-[60] bg-gradient-to-r from-transparent via-[#C9A86A] to-transparent" />
 
-        {user && <GlobalTopBar />}
-        {user && <GlobalSidebar role={role} />}
+        {user && pending && <WaitingForRole userId={user.id} />}
 
-        <main className={user ? "pt-32 pl-56 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]" : "min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]"}>
-          {children}
-        </main>
+        {user && !pending && (
+          <>
+            <GlobalTopBar />
+            <GlobalSidebar role={role} />
+            <main className="pt-32 pl-56 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
+              {children}
+            </main>
+          </>
+        )}
+
+        {!user && (
+          <main className="min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
+            {children}
+          </main>
+        )}
       </body>
     </html>
   );

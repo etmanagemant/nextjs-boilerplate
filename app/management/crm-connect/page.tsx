@@ -9,6 +9,7 @@ interface Model {
   id: string;
   name: string;
   platform_type: string;
+  owner_user_id: string | null;
 }
 
 interface Chatter {
@@ -22,6 +23,11 @@ interface ManagedModel {
   name: string;
   platform_type: string;
   avatar_url: string | null;
+}
+
+interface ModelLoginUser {
+  user_id: string;
+  full_name: string | null;
 }
 
 export default async function CRMConnectPage() {
@@ -91,10 +97,11 @@ export default async function CRMConnectPage() {
   // chatter list, and the full models table (moved here from the
   // Management page - the "Models (Schichtplanung)" add/edit/delete
   // widget) in parallel - none of these depend on each other.
-  const [{ data: connectedModels, error: fetchError }, { data: chatters }, { data: allModels }] = await Promise.all([
+  const [{ data: connectedModels, error: fetchError }, { data: chatters }, { data: allModels }, { data: modelLoginUsers }] = await Promise.all([
     supabase.from("crm_model_sessions").select("model_id, is_active").order("model_id", { ascending: true }),
     supabase.from("profiles").select("user_id, full_name, role").in("role", ["chatter", "moderator"]).order("full_name", { ascending: true }),
-    supabase.from("models").select("id, name, platform_type, avatar_url").order("name", { ascending: true }),
+    supabase.from("models").select("id, name, platform_type, avatar_url, owner_user_id").order("name", { ascending: true }),
+    supabase.from("profiles").select("user_id, full_name").eq("role", "model").order("full_name", { ascending: true }),
   ]);
 
   if (fetchError) {
@@ -106,6 +113,7 @@ export default async function CRMConnectPage() {
     id: m.model_id,
     name: m.model_id, // Use model_id as display name (will be updated when connected)
     platform_type: "onlyfans",
+    owner_user_id: null,
   }));
 
   // 📊 Sidebar only shows currently-active (is_active = true) sessions -
@@ -116,7 +124,7 @@ export default async function CRMConnectPage() {
   if (!connectedModels || connectedModels.length === 0) {
     const { data: fallbackModels } = await supabase
       .from("models")
-      .select("id, name, platform_type")
+      .select("id, name, platform_type, owner_user_id")
       .eq("platform_type", "onlyfans")
       .order("name", { ascending: true });
 
@@ -125,6 +133,7 @@ export default async function CRMConnectPage() {
         id: m.id,
         name: m.name || m.id,
         platform_type: m.platform_type,
+        owner_user_id: m.owner_user_id || null,
       }));
     }
   } else {
@@ -132,16 +141,18 @@ export default async function CRMConnectPage() {
     const modelIds = connectedModels.map((m: any) => m.model_id);
     const { data: modelDetails } = await supabase
       .from("models")
-      .select("id, name, avatar_url")
+      .select("id, name, avatar_url, owner_user_id")
       .in("id", modelIds);
 
     const nameMap = new Map(modelDetails?.map((m: any) => [m.id, m.name]) || []);
     const avatarMap = new Map(modelDetails?.map((m: any) => [m.id, m.avatar_url]) || []);
+    const ownerMap = new Map(modelDetails?.map((m: any) => [m.id, m.owner_user_id]) || []);
 
     typedModels = connectedModels.map((m: any) => ({
       id: m.model_id,
       name: nameMap.get(m.model_id) || m.model_id,
       platform_type: "onlyfans",
+      owner_user_id: ownerMap.get(m.model_id) || null,
     }));
 
     sidebarModels = connectedModels
@@ -161,12 +172,15 @@ export default async function CRMConnectPage() {
     avatar_url: m.avatar_url,
   }));
 
+  const typedModelLoginUsers: ModelLoginUser[] = modelLoginUsers || [];
+
   return (
     <CRMConnectClient
       initialModels={typedModels}
       initialChatters={typedChatters}
       connectedModels={sidebarModels}
       managedModels={typedManagedModels}
+      modelLoginUsers={typedModelLoginUsers}
       addModel={addModel}
       deleteModel={deleteModel}
       updateModelName={updateModelName}

@@ -63,6 +63,28 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
     })();
   }, [inOnlyFansSection]);
 
+  // Models only ever see their own upload workspace - none of the
+  // agency-internal tools (Schichtplan, Dashboard, OnlyFans-CRM, Stechuhr,
+  // Abrechnung etc.) apply to them.
+  if (role === "model") {
+    return (
+      <aside className="fixed left-0 top-32 bottom-0 w-56 z-40 bg-[#0A0A0A] border-r border-[#9C7A3D]/30 flex flex-col py-4 px-2 gap-1 overflow-y-auto scrollbar-hide">
+        <p className="px-3 pb-2 text-xs font-bold text-slate-500 uppercase tracking-widest">Tools</p>
+        <Link
+          href="/model-workspace"
+          className={`btn-gold-hover-shimmer flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
+            pathname === "/model-workspace"
+              ? "bg-[#C9A86A]/20 text-[#C9A86A] border-l-2 border-[#C9A86A]"
+              : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
+          }`}
+        >
+          <span className="text-lg flex-shrink-0">📤</span>
+          <span>Mein Upload</span>
+        </Link>
+      </aside>
+    );
+  }
+
   const items: NavItem[] = [
     { href: "/", label: "Schichtplan", icon: "🏠" },
     { href: "/dashboard", label: "Dashboard", icon: "📊" },

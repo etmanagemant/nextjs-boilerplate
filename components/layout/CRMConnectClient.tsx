@@ -10,6 +10,12 @@ interface Model {
   id: string;
   name: string;
   platform_type: string;
+  owner_user_id: string | null;
+}
+
+interface ModelLoginUser {
+  user_id: string;
+  full_name: string | null;
 }
 
 interface CreatorSession {
@@ -43,6 +49,7 @@ interface CRMConnectClientProps {
   initialChatters: Chatter[];
   connectedModels?: ConnectedModel[];
   managedModels: ManagedModel[];
+  modelLoginUsers: ModelLoginUser[];
   addModel: (formData: FormData) => Promise<void>;
   deleteModel: (formData: FormData) => Promise<void>;
   updateModelName: (formData: FormData) => Promise<void>;
@@ -52,6 +59,7 @@ interface CRMConnectClientProps {
 export default function CRMConnectClient({
   initialModels,
   managedModels,
+  modelLoginUsers,
   addModel,
   deleteModel,
   updateModelName,
@@ -63,8 +71,26 @@ export default function CRMConnectClient({
   );
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [modelBeingConnected, setModelBeingConnected] = useState<Model | null>(null);
+  const [savingOwnerFor, setSavingOwnerFor] = useState<string | null>(null);
 
   const supabase = createClient();
+
+  const handleSetOwner = async (modelId: string, ownerUserId: string) => {
+    setSavingOwnerFor(modelId);
+    try {
+      const { error } = await supabase
+        .from("models")
+        .update({ owner_user_id: ownerUserId || null })
+        .eq("id", modelId);
+      if (error) throw error;
+      setModels(models.map((m) => (m.id === modelId ? { ...m, owner_user_id: ownerUserId || null } : m)));
+    } catch (err) {
+      console.error("Error assigning model login:", err);
+      alert("Fehler beim Zuordnen des Model-Logins");
+    } finally {
+      setSavingOwnerFor(null);
+    }
+  };
 
   useEffect(() => {
     fetchSessions();
@@ -217,6 +243,30 @@ export default function CRMConnectClient({
                       </p>
                     )}
 
+                    {/* Model-Login-Zuordnung: welcher role="model"-Account
+                        (Selbstregistrierung) darf für dieses Model Reddit-
+                        Bilder + OnlyFans-Dateien hochladen. */}
+                    <div className="mb-4">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        🔑 Model-Login
+                      </label>
+                      <select
+                        value={model.owner_user_id || ""}
+                        disabled={savingOwnerFor === model.id}
+                        onChange={(e) => handleSetOwner(model.id, e.target.value)}
+                        className="w-full bg-[#050505] border border-[#9C7A3D]/20 rounded px-2 py-1.5 text-white text-xs outline-none focus:border-[#C9A86A] disabled:opacity-50"
+                      >
+                        <option value="">-- kein Login zugeordnet --</option>
+                        {modelLoginUsers
+                          .filter((u) => u.user_id === model.owner_user_id || !models.some((m) => m.id !== model.id && m.owner_user_id === u.user_id))
+                          .map((u) => (
+                            <option key={u.user_id} value={u.user_id}>
+                              {u.full_name || u.user_id}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
                     {/* Action Buttons */}
                     <div className="space-y-2">
                       {isConnected ? (
@@ -244,7 +294,10 @@ export default function CRMConnectClient({
       {/* Models (Schichtplanung) - moved here from the Management page,
           alongside the model connection status it's most relevant next to. */}
       <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg">
-        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Models (Schichtplanung)</h2>
+        <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">Models (Schichtplanung)</h2>
+        <p className="text-[11px] text-slate-500 mb-4">
+          Alle Models der Agentur, plattformübergreifend - sobald eins OnlyFans-verbunden ist, erscheint es zusätzlich oben im Connection Grid.
+        </p>
         <form action={addModel} className="flex gap-3 mb-6">
           <input type="text" name="name" placeholder="Model Name" required className="flex-1 px-3 py-2 border border-[#9C7A3D]/30 rounded-md text-sm text-white bg-[#050505] focus:border-[#C9A86A] outline-none" />
           <button type="submit" className="bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black px-4 py-2 rounded-md text-sm font-bold hover:from-[#E5C158] transition cursor-pointer">Model hinzufügen</button>

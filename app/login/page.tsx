@@ -22,15 +22,17 @@ export default function LoginPage() {
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) { setErrorMsg(error.message); setLoading(false); return; }
       
-      // 🟢 Erstelle automatisch ein Profile für den neuen Benutzer
+      // 🟢 Erstelle automatisch ein Profile für den neuen Benutzer - ohne
+      // Rolle: ein Admin muss die Rolle erst über Management vergeben,
+      // bis dahin sieht der neue Account nur die Warteseite (siehe
+      // app/layout.tsx + WaitingForRole.tsx).
       if (data?.user?.id) {
         const { error: profileError } = await supabase.from("profiles").insert([
           {
             user_id: data.user.id,
             email: email,
             full_name: "",
-            role: "chatter",
-            provision_rate: 20
+            role: null,
           }
         ]);
         if (profileError) {
@@ -38,8 +40,8 @@ export default function LoginPage() {
           // Nicht als Fehler anzeigen - Auth war erfolgreich
         }
       }
-      
-      setSuccessMsg("Erfolgreich! Du kannst dich jetzt einloggen.");
+
+      setSuccessMsg("Erfolgreich! Du kannst dich jetzt einloggen. Ein Admin muss dir noch eine Rolle zuweisen.");
       setIsRegister(false);
       setLoading(false);
     } else {
