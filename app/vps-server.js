@@ -1729,17 +1729,21 @@ app.get('/chatter-slot-page', async (req, res) => {
   // "bottom: 14%" guess, calibrated for the compose box's normal height -
   // confirmed live that attaching a Vault file (via the Script Vault picker
   // or manually) grows the real compose box taller (price/preview labels +
-  // thumbnail row above the text field), pushing the actual input down
-  // while this fixed-position overlay stayed put, ending up overlapping the
-  // attachment thumbnails instead of sitting above the text field. Returning
-  // the textarea's real current top position lets the frontend follow it
-  // instead of guessing.
+  // thumbnail row rendered above the text field), and this fixed-position
+  // overlay stayed put, ending up overlapping the attachment thumbnails.
+  // CONFIRMED LIVE: the text field's OWN bounding rect never moves (its
+  // .top reads the same whether or not anything is attached) - the growth
+  // happens on the outer ".b-make-post" compose-panel wrapper instead,
+  // which expands upward while the text field stays pinned to its bottom.
+  // Measuring that outer wrapper's top (not the text field's own) is what
+  // actually reflects how tall the compose area currently is.
   let textareaTop = null;
   try {
     textareaTop = await slot.page.evaluate(() => {
+      var panel = document.querySelector('.b-make-post');
+      if (panel) return panel.getBoundingClientRect().top;
       var el = document.querySelector('.js-text-editor[contenteditable="true"], textarea[placeholder*="message" i]');
-      if (!el) return null;
-      return el.getBoundingClientRect().top;
+      return el ? el.getBoundingClientRect().top : null;
     });
   } catch (e) {
     /* ignore - frontend falls back to its old fixed position */
