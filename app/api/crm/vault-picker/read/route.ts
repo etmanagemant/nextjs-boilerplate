@@ -6,12 +6,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Scrapes the model's real OnlyFans Vault for visible media (optionally
- * filtered by the vault's own search box) and returns thumbnails/labels -
- * drives the actual Vault search server-side so the admin gets a plain,
- * clickable grid in our own UI instead of a separate embedded live
- * OnlyFans view.
- * POST /api/crm/vault-list  Body: { modelId, query }
+ * Reads back whatever thumbnails the click-tracker (injected by
+ * /vault-picker-goto) has recorded so far in the caller's chatter slot.
+ * POST /api/crm/vault-picker/read  Body: { modelId }
  */
 export async function POST(req: NextRequest) {
   try {
@@ -19,14 +16,14 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const { modelId, query } = await req.json();
+    const { modelId } = await req.json();
     if (!modelId) {
       return NextResponse.json({ error: "Missing modelId" }, { status: 400 });
     }
 
-    const vpsRes = await vpsFetch("/vault-list", {
+    const vpsRes = await vpsFetch("/vault-picker-read", {
       method: "POST",
-      body: JSON.stringify({ userId: user.id, modelId, query: query || "" }),
+      body: JSON.stringify({ userId: user.id, modelId }),
     });
     if (!vpsRes.ok) {
       return NextResponse.json({ error: "VPS unreachable" }, { status: 502 });
@@ -34,7 +31,7 @@ export async function POST(req: NextRequest) {
     const data = await vpsRes.json();
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("[VAULT-LIST] Error:", error.message);
+    console.error("[VAULT-PICKER-READ] Error:", error.message);
     return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
   }
 }

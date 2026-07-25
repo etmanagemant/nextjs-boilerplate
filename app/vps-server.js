@@ -1883,70 +1883,75 @@ app.post('/insert-script-step', async (req, res) => {
   }
 });
 
-// Lightweight replacement for an earlier VNC-embedded vault picker - the
-// previous "read whichever items are selected" approach used a generic
-// CSS guess that turned out to match literally every item in the vault
-// grid, not just the ones actually clicked (confirmed live: all 8 files
-// came back "selected" after clicking only 2), on top of opening a
-// separate window showing the entire live OnlyFans interface, which the
-// admin found confusing. This scrapes the full list of visible vault
-// items instead (optionally filtered by the vault's own search box) and
-// lets the admin toggle selection in our OWN UI (VaultSearchPicker) -
-// no dependency on reading OnlyFans' own visual "selected" state at all.
-app.post('/vault-list', async (req, res) => {
+// Scraping the vault's contents blind (no live view at all) turned out
+// not to work - the vault has real folders/categories and a layout that
+// can't be reliably guessed from outside, and the admin explicitly needs
+// to SEE and browse it visually, not read a flat scraped list. Back to a
+// live embedded view (like the chat/OnlyFans viewer elsewhere), but the
+// actual bug from the very first attempt at this - reading OnlyFans' own
+// "selected" CSS state, which matched every file instead of just the
+// clicked ones - is fixed differently this time: instead of asking
+// "what does OnlyFans show as selected" after the fact, a click listener
+// is injected that records every image click AS IT HAPPENS (toggling an
+// entry in window.__pickedMedia on each click), independent of whatever
+// CSS class OnlyFans itself uses for its own selected-state styling.
+app.post('/vault-picker-goto', async (req, res) => {
   try {
-    const { userId, modelId, query } = req.body || {};
+    const { userId, modelId } = req.body || {};
+    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
+    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+    const page = slot.page;
+
+    await page.goto('https://onlyfans.com/my/vault', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // UNVERIFIED: the >40px size filter is a best-effort guess to avoid
+    // catching clicks on small unrelated icons (nav avatars, like
+    // buttons) - needs a live pass to confirm it doesn't also miss or
+    // over-match real vault thumbnails.
+    await page.evaluate(() => {
+      window.__pickedMedia = [];
+      if (window.__pickedMediaListenerAttached) return;
+      window.__pickedMediaListenerAttached = true;
+      document.addEventListener(
+        'click',
+        function (e) {
+          var img = e.target.tagName === 'IMG' ? e.target : e.target.querySelector && e.target.querySelector('img');
+          if (!img) {
+            var el = e.target.closest && e.target.closest('[class*="item" i], [class*="media" i], [class*="thumb" i]');
+            img = el && el.querySelector('img');
+          }
+          if (!img || !img.src || img.naturalWidth < 40 || img.naturalHeight < 40) return;
+          var list = window.__pickedMedia || (window.__pickedMedia = []);
+          var idx = list.findIndex(function (m) { return m.thumbnailUrl === img.src; });
+          if (idx >= 0) list.splice(idx, 1);
+          else list.push({ label: img.alt || 'Datei ' + (list.length + 1), thumbnailUrl: img.src });
+        },
+        true
+      );
+    });
+
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('[VAULT-PICKER-GOTO] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// Reads back whatever the click-listener above has recorded so far -
+// called whenever the admin clicks "Übernehmen" in the picker overlay.
+app.post('/vault-picker-read', async (req, res) => {
+  try {
+    const { userId, modelId } = req.body || {};
     if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
     const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
     if (!slot || !slot.page) return res.json({ status: 'no_slot', items: [] });
-    const page = slot.page;
 
-    if (!page.url().includes('/my/vault')) {
-      await page.goto('https://onlyfans.com/my/vault', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-
-    if (query) {
-      const searched = await page.evaluate(() => {
-        var input = document.querySelector('input[name="media_vault_search"]');
-        if (!input) return false;
-        input.focus();
-        input.value = '';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        return true;
-      });
-      if (searched) {
-        await page.keyboard.type(String(query));
-        await new Promise((r) => setTimeout(r, 900));
-      }
-    } else {
-      await new Promise((r) => setTimeout(r, 300));
-    }
-
-    // UNVERIFIED: best-effort selector for a vault media tile - couldn't
-    // confirm live against real content this session (test vault was
-    // empty). Dedupes by thumbnail URL as a safety net against the
-    // selector matching wrapper + inner elements for the same tile.
-    const items = await page.evaluate(() => {
-      var tiles = document.querySelectorAll(
-        '[class*="media-item" i], [class*="MediaItem" i], [class*="vault" i] [class*="item" i]'
-      );
-      var out = [];
-      var seen = {};
-      for (var i = 0; i < tiles.length && out.length < 60; i++) {
-        var el = tiles[i];
-        var img = el.querySelector('img');
-        if (!img || !img.src || seen[img.src]) continue;
-        seen[img.src] = true;
-        var label = el.getAttribute('data-id') || img.alt || 'Datei ' + (out.length + 1);
-        out.push({ label: label, thumbnailUrl: img.src });
-      }
-      return out;
-    });
-
+    const items = await slot.page.evaluate(() => window.__pickedMedia || []);
     res.json({ status: 'success', items });
   } catch (error) {
-    console.error('[VAULT-LIST] Error:', error.message);
+    console.error('[VAULT-PICKER-READ] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message, items: [] });
   }
 });
@@ -2029,9 +2034,11 @@ app.post('/chat-search', async (req, res) => {
 //
 // IMPORTANT / UNVERIFIED: the chat-list search input and the "attach
 // media" button are confirmed live (same debug-dom session as
-// insert-script-step). The price-input selector and the exact post-attach
-// timing are best-effort guesses, not confirmed against a real upload -
-// needs a live pass to verify before trusting it for real sends.
+// insert-script-step). The price-toggle and price-input selectors are
+// still best-effort guesses - confirmed live once already that typing
+// blindly without checking the field was actually found sends the file
+// as a free message with zero error, so this now hard-gates on the
+// price being verifiably set before Send is ever clicked (see below).
 app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), async (req, res) => {
   const { modelId, vaultFanLabel, vaultFanId, price, fileName } = req.query;
   if (!modelId || (!vaultFanLabel && !vaultFanId) || !fileName) {
@@ -2103,12 +2110,44 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
     await new Promise((r) => setTimeout(r, 3000));
 
     if (price) {
+      // Confirmed live bug: this used to blindly page.keyboard.type() the
+      // price regardless of whether a price field was actually found and
+      // focused - if OnlyFans needed a toggle click to reveal the price
+      // panel first (or the selector just didn't match), the keystrokes
+      // went nowhere and the file got sent as a free message with no
+      // error at all. Now: try to reveal the price panel, then REQUIRE
+      // the input to exist and its value to actually match what we typed
+      // before ever touching Send - if the price can't be confirmed, this
+      // aborts with an error instead of silently sending unpriced content.
       await page.evaluate(() => {
-        var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
-        if (input) input.focus();
+        var toggle = document.querySelector(
+          '[at-attr*="price" i], [class*="add-price" i], [class*="set-price" i], [aria-label*="preis" i], [aria-label*="price" i]'
+        );
+        if (toggle) toggle.click();
       });
+      await new Promise((r) => setTimeout(r, 500));
+
+      const priceFocused = await page.evaluate(() => {
+        var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
+        if (!input) return false;
+        input.focus();
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      });
+      if (!priceFocused) {
+        return res.json({ status: 'error', error: 'Preisfeld nicht gefunden - nicht gesendet, damit nichts kostenlos verschickt wird' });
+      }
       await page.keyboard.type(String(price));
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 400));
+
+      const priceConfirmed = await page.evaluate((expected) => {
+        var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
+        return !!(input && input.value && input.value.replace(',', '.').indexOf(String(expected)) !== -1);
+      }, price);
+      if (!priceConfirmed) {
+        return res.json({ status: 'error', error: 'Preis konnte nicht bestätigt werden - nicht gesendet, damit nichts kostenlos verschickt wird' });
+      }
     }
 
     await page.evaluate(() => {
