@@ -21,32 +21,43 @@ export async function OPTIONS() {
 }
 
 /**
- * Returns the scripts a given chatter can see (global + their own +
- * everything for admins), same filtering as ScriptVaultClient/ScriptPicker.
- * GET ?userId=&role=
+ * Returns the scripts (with their ordered steps) belonging to one model -
+ * scripts are model-scoped, not chatter-scoped, so every chatter working
+ * that model sees the same library.
+ * GET ?modelId=
  */
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-    const role = searchParams.get("role") || "chatter";
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: CORS_HEADERS });
+    const modelId = searchParams.get("modelId");
+    if (!modelId) {
+      return NextResponse.json({ error: "Missing modelId" }, { status: 400, headers: CORS_HEADERS });
     }
 
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("crm_script_library")
-      .select("id, title, script_content, category, is_global, assigned_to_user")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error) throw error;
+    const [{ data: scripts, error: scriptsError }, { data: steps, error: stepsError }] = await Promise.all([
+      supabase
+        .from("crm_scripts")
+        .select("id, title, created_at")
+        .eq("model_id", modelId)
+        .order("created_at", { ascending: false })
+        .limit(100),
+      supabase
+        .from("crm_script_steps")
+        .select("id, script_id, order_index, step_type, message_text, vault_search_term, price")
+        .order("order_index", { ascending: true }),
+    ]);
+    if (scriptsError) throw scriptsError;
+    if (stepsError) throw stepsError;
 
-    const scripts = (data || []).filter(
-      (s) => s.is_global || s.assigned_to_user === userId || role === "admin"
-    );
+    const scriptIds = new Set((scripts || []).map((s) => s.id));
+    const stepsByScript = (steps || []).filter((s) => scriptIds.has(s.script_id));
+    const result = (scripts || []).map((s) => ({
+      ...s,
+      steps: stepsByScript.filter((step) => step.script_id === s.id),
+    }));
 
-    return NextResponse.json({ status: "success", scripts }, { headers: CORS_HEADERS });
+    return NextResponse.json({ status: "success", scripts: result }, { headers: CORS_HEADERS });
   } catch (error: any) {
     console.error("[LIST-SCRIPTS] Error:", error.message);
     return NextResponse.json(

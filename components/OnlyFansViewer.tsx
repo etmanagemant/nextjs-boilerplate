@@ -57,6 +57,7 @@ export function OnlyFansViewer({
   const unmountedRef = useRef(false);
 
   const [currentFan, setCurrentFan] = useState<{ fanId: string; metadata: any; lastEditedBy: string | null } | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const fanPollRef = useRef<NodeJS.Timeout | null>(null);
 
   // Assigns (or reuses) this user's own independent chatter slot for this
@@ -160,6 +161,7 @@ export function OnlyFansViewer({
     try {
       const res = await fetch(`/api/crm/current-fan?modelId=${encodeURIComponent(modelId)}`);
       const data = res.ok ? await res.json() : {};
+      setModalOpen(!!data.modalOpen);
       if (data.status === "success" && data.fanId) {
         setCurrentFan({ fanId: data.fanId, metadata: data.metadata, lastEditedBy: data.lastEditedBy || null });
       } else {
@@ -346,8 +348,13 @@ export function OnlyFansViewer({
           {/* Only shown once an actual fan chat is open (detected via
               pollCurrentFan) - showing it whenever the session is merely
               "live" meant it floated over the fan list, a profile page,
-              anywhere, with nowhere useful to paste into. */}
-          {currentFan && (
+              anywhere, with nowhere useful to paste into. Also hidden
+              whenever OnlyFans has one of its own modals open (vault
+              picker, etc, detected via document.body's "modal-open" class)
+              - this overlay has no other way to know OnlyFans opened
+              something on top of it, and reported live as visually
+              covering the vault picker otherwise. */}
+          {currentFan && !modalOpen && (
             // Positioned to match OnlyFans' own message compose box, not
             // centered on the whole 1280x800 frame - re-measured again
             // after widening <main> to fill the full frame (VPS-side, this

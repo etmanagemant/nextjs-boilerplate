@@ -581,20 +581,105 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
 (function() {
   var USER_ID = "%%USER_ID%%";
   var USER_ROLE = "%%USER_ROLE%%";
+  var MODEL_ID = "%%MODEL_ID%%";
   var API_BASE = "%%API_BASE%%";
   var BTN_ID = '__etm_script_vault_btn__';
   var PANEL_ID = '__etm_script_vault_panel__';
+  var STEP_TYPE_LABEL = { text: 'Text', image: 'Bild', ppv: 'PPV' };
 
   function closePanel() {
     var panel = document.getElementById(PANEL_ID);
     if (panel) panel.remove();
   }
 
-  function insertIntoCompose(text) {
-    var editor = document.querySelector('.js-text-editor[contenteditable="true"]');
-    if (!editor) return;
-    editor.focus();
-    document.execCommand('insertText', false, text);
+  function insertStep(step, onDone) {
+    fetch(API_BASE + '/api/crm/insert-script-step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: USER_ID,
+        modelId: MODEL_ID,
+        messageText: step.message_text,
+        stepType: step.step_type,
+        vaultSearchTerm: step.vault_search_term,
+        price: step.price,
+      }),
+    }).finally(onDone);
+  }
+
+  function renderSteps(panel, script) {
+    panel.innerHTML = '';
+    var back = document.createElement('div');
+    back.textContent = '‹ ' + script.title;
+    back.style.cssText = 'color:#C9A86A;font-weight:700;font-size:12px;padding:6px 8px;cursor:pointer;margin-bottom:4px;';
+    back.addEventListener('click', function() { renderScriptList(panel); });
+    panel.appendChild(back);
+
+    (script.steps || []).forEach(function(step, idx) {
+      var item = document.createElement('div');
+      item.style.cssText = 'padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:2px;';
+      item.onmouseenter = function() { item.style.background = 'rgba(201,168,106,0.15)'; };
+      item.onmouseleave = function() { item.style.background = 'transparent'; };
+      var head = document.createElement('div');
+      head.style.cssText = 'display:flex;justify-content:space-between;color:#E2C48A;font-weight:700;font-size:11px;';
+      head.innerHTML = '<span>Schritt ' + (idx + 1) + ' – ' + (STEP_TYPE_LABEL[step.step_type] || step.step_type) + '</span>' +
+        (step.step_type === 'ppv' && step.price != null ? '<span style="color:#4FAE78;">$' + step.price + '</span>' : '');
+      var preview = document.createElement('div');
+      preview.textContent = step.message_text;
+      preview.style.cssText = 'color:#8A847B;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;';
+      item.appendChild(head);
+      item.appendChild(preview);
+      item.addEventListener('click', function() {
+        item.style.opacity = '0.5';
+        insertStep(step, function() { closePanel(); });
+      });
+      panel.appendChild(item);
+    });
+  }
+
+  function renderScriptList(panel) {
+    panel.innerHTML = '';
+    var loading = document.createElement('div');
+    loading.textContent = 'Lade Scripts...';
+    loading.style.cssText = 'color:#8A847B;font-size:12px;padding:12px;text-align:center;';
+    panel.appendChild(loading);
+
+    fetch(API_BASE + '/api/crm/list-scripts?modelId=' + encodeURIComponent(MODEL_ID))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        panel.innerHTML = '';
+        var scripts = (data && data.scripts) || [];
+        if (!scripts.length) {
+          var empty = document.createElement('div');
+          empty.textContent = 'Noch keine Scripts für dieses Model.';
+          empty.style.cssText = 'color:#8A847B;font-size:12px;padding:12px;text-align:center;';
+          panel.appendChild(empty);
+          return;
+        }
+        scripts.forEach(function(s) {
+          var item = document.createElement('div');
+          item.style.cssText = 'padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:2px;display:flex;justify-content:space-between;align-items:center;';
+          item.onmouseenter = function() { item.style.background = 'rgba(201,168,106,0.15)'; };
+          item.onmouseleave = function() { item.style.background = 'transparent'; };
+          var title = document.createElement('span');
+          title.textContent = s.title;
+          title.style.cssText = 'color:#E2C48A;font-weight:700;font-size:12px;';
+          var count = document.createElement('span');
+          count.textContent = ((s.steps && s.steps.length) || 0) + ' Schritte ›';
+          count.style.cssText = 'color:#8A847B;font-size:10px;';
+          item.appendChild(title);
+          item.appendChild(count);
+          item.addEventListener('click', function() { renderSteps(panel, s); });
+          panel.appendChild(item);
+        });
+      })
+      .catch(function() {
+        panel.innerHTML = '';
+        var err = document.createElement('div');
+        err.textContent = 'Fehler beim Laden.';
+        err.style.cssText = 'color:#C35D5D;font-size:12px;padding:12px;text-align:center;';
+        panel.appendChild(err);
+      });
   }
 
   function openPanel(anchorBtn) {
@@ -606,52 +691,8 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
     panel.style.left = Math.max(8, rect.left - 260) + 'px';
     panel.style.top = rect.top + 'px';
     panel.style.transform = 'translateY(-100%)';
-
-    var loading = document.createElement('div');
-    loading.textContent = 'Lade Scripts...';
-    loading.style.cssText = 'color:#8A847B;font-size:12px;padding:12px;text-align:center;';
-    panel.appendChild(loading);
     document.body.appendChild(panel);
-
-    fetch(API_BASE + '/api/crm/list-scripts?userId=' + encodeURIComponent(USER_ID) + '&role=' + encodeURIComponent(USER_ROLE))
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        panel.innerHTML = '';
-        var scripts = (data && data.scripts) || [];
-        if (!scripts.length) {
-          var empty = document.createElement('div');
-          empty.textContent = 'Noch keine Scripts verfügbar.';
-          empty.style.cssText = 'color:#8A847B;font-size:12px;padding:12px;text-align:center;';
-          panel.appendChild(empty);
-          return;
-        }
-        scripts.forEach(function(s) {
-          var item = document.createElement('div');
-          item.style.cssText = 'padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:2px;';
-          item.onmouseenter = function() { item.style.background = 'rgba(201,168,106,0.15)'; };
-          item.onmouseleave = function() { item.style.background = 'transparent'; };
-          var title = document.createElement('div');
-          title.textContent = s.title;
-          title.style.cssText = 'color:#E2C48A;font-weight:700;font-size:12px;';
-          var preview = document.createElement('div');
-          preview.textContent = s.script_content;
-          preview.style.cssText = 'color:#8A847B;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;';
-          item.appendChild(title);
-          item.appendChild(preview);
-          item.addEventListener('click', function() {
-            insertIntoCompose(s.script_content);
-            closePanel();
-          });
-          panel.appendChild(item);
-        });
-      })
-      .catch(function() {
-        panel.innerHTML = '';
-        var err = document.createElement('div');
-        err.textContent = 'Fehler beim Laden.';
-        err.style.cssText = 'color:#C35D5D;font-size:12px;padding:12px;text-align:center;';
-        panel.appendChild(err);
-      });
+    renderScriptList(panel);
   }
 
   document.addEventListener('click', function(e) {
@@ -715,12 +756,13 @@ async function applySentByOverlay(page, chatterName, modelId) {
 // (OnlyFans' compose box is TipTap/ProseMirror) from outside its own
 // internal state management - setting textContent/innerHTML directly
 // would desync the editor's model.
-async function applyScriptVaultButton(page, userId, role) {
+async function applyScriptVaultButton(page, userId, role, modelId) {
   try {
     const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
     const script = SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE
       .replace('%%USER_ID%%', String(userId || '').replace(/"/g, '\\"'))
       .replace('%%USER_ROLE%%', String(role || 'chatter').replace(/"/g, '\\"'))
+      .replace('%%MODEL_ID%%', String(modelId || '').replace(/"/g, '\\"'))
       .replace('%%API_BASE%%', apiBase.replace(/"/g, '\\"'));
     await page.evaluateOnNewDocument(script);
   } catch (e) {
@@ -1030,7 +1072,7 @@ async function ensureSlotBrowser(slot, modelId, role, chatterName, userId) {
   await reserveOverlaySpace(page);
   await applyNavRestrictions(page, role);
   await applySentByOverlay(page, chatterName, modelId);
-  await applyScriptVaultButton(page, userId, role);
+  await applyScriptVaultButton(page, userId, role, modelId);
 
   // The filesystem copy above can still be stale even when the main
   // session is genuinely logged in: Chrome writes its cookie database to
@@ -1622,7 +1664,7 @@ app.post('/chatter-slot', async (req, res) => {
 // view otherwise (that all happens directly on OnlyFans' own page).
 // Polled periodically by the frontend; deliberately lightweight (just the
 // URL, not a screenshot or full page read).
-app.get('/chatter-slot-page', (req, res) => {
+app.get('/chatter-slot-page', async (req, res) => {
   const { userId, modelId } = req.query;
   if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
 
@@ -1635,7 +1677,20 @@ app.get('/chatter-slot-page', (req, res) => {
   } catch (e) {
     /* page mid-navigation or closed - just report unknown */
   }
-  res.json({ status: 'success', pageUrl });
+  // OnlyFans adds "modal-open" to <body> whenever any of its own modals is
+  // showing (confirmed live: the vault-attach picker) - generic across
+  // every modal type, not just this one. Already polled every ~1s by the
+  // frontend for fan detection, so piggybacking this here is free instead
+  // of a second poll; used to hide the CRM's own floating emoji bar while
+  // an OnlyFans modal covers the compose area, since that overlay has no
+  // other way to know OnlyFans opened something on top of it.
+  let modalOpen = false;
+  try {
+    modalOpen = await slot.page.evaluate(() => document.body.classList.contains('modal-open'));
+  } catch (e) {
+    /* ignore - default to false */
+  }
+  res.json({ status: 'success', pageUrl, modalOpen });
 });
 
 // Scrapes the visible text of a chatter's currently-open OnlyFans chat, for
@@ -1701,6 +1756,109 @@ app.post('/insert-emoji', async (req, res) => {
     res.json({ status: 'success' });
   } catch (error) {
     console.error('[INSERT-EMOJI] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// Inserts a Script Vault step: always types the message text, and for
+// image/ppv steps also drives OnlyFans' own vault-attach modal (confirmed
+// live: the "Medien aus Tresor hinzufügen" button opens a picker with a
+// real search input, name="media_vault_search") to find and attach the
+// referenced file, setting a price for ppv steps.
+//
+// IMPORTANT / UNVERIFIED: the search box and modal-open detection are
+// confirmed live, but the actual result-click and price-input selectors
+// below are best-effort - this session's test vault had no real media to
+// click-test against (every category showed empty/error), so the
+// selectors are informed guesses based on common patterns, not confirmed
+// DOM. Needs a live pass with a model that actually has vault content
+// before trusting this for real sends.
+app.post('/insert-script-step', async (req, res) => {
+  try {
+    const { userId, modelId, messageText, stepType, vaultSearchTerm, price } = req.body || {};
+    if (!userId || !modelId || !messageText) {
+      return res.status(400).json({ error: 'Missing userId, modelId, or messageText' });
+    }
+
+    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+    const page = slot.page;
+
+    const focused = await page.evaluate(() => {
+      var el = document.querySelector('.js-text-editor[contenteditable="true"], textarea[placeholder*="message" i]');
+      if (!el) return false;
+      el.focus();
+      return true;
+    });
+    if (!focused) return res.json({ status: 'no_input', message: 'Kein offenes Nachrichtenfeld gefunden' });
+    await page.keyboard.type(messageText);
+
+    if (stepType === 'text' || !vaultSearchTerm) {
+      slot.lastActivity = Date.now();
+      return res.json({ status: 'success' });
+    }
+
+    // Open the vault-attach modal (confirmed live selector).
+    const opened = await page.evaluate(() => {
+      var btn = document.querySelector('[at-attr="add_vault_media"]');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    });
+    if (!opened) return res.json({ status: 'partial', message: 'Text eingefügt, Tresor-Button nicht gefunden' });
+    await new Promise((r) => setTimeout(r, 800));
+
+    const searched = await page.evaluate((term) => {
+      var input = document.querySelector('input[name="media_vault_search"]');
+      if (!input) return false;
+      input.focus();
+      return true;
+    }, vaultSearchTerm);
+    if (searched) {
+      await page.keyboard.type(vaultSearchTerm);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    // UNVERIFIED: best-effort selector for a result thumbnail - couldn't
+    // confirm live (empty test vault). Tries a few common patterns.
+    const picked = await page.evaluate(() => {
+      var candidates = document.querySelectorAll(
+        '[class*="media-item" i] img, [class*="thumb" i] img, [class*="MediaItem" i], [class*="vault"] [class*="item" i]'
+      );
+      for (var i = 0; i < candidates.length; i++) {
+        var el = candidates[i].closest('[class*="item" i]') || candidates[i];
+        if (el && el.offsetParent !== null) {
+          el.click();
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (!picked) {
+      return res.json({
+        status: 'partial',
+        message: 'Text eingefügt, aber keine Tresor-Datei gefunden (Selektor unbestätigt - bitte mit echtem Tresor-Inhalt testen)',
+      });
+    }
+    await new Promise((r) => setTimeout(r, 500));
+
+    if (stepType === 'ppv' && price) {
+      // UNVERIFIED: best-effort price-input selector.
+      await page.evaluate((p) => {
+        var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
+        if (input) {
+          input.focus();
+          input.value = '';
+        }
+      }, price);
+      await page.keyboard.type(String(price));
+    }
+
+    slot.lastActivity = Date.now();
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('[INSERT-SCRIPT-STEP] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message });
   }
 });
@@ -1786,6 +1944,54 @@ app.post('/debug-goto', async (req, res) => {
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
     res.json({ status: 'success', pageUrl: page.url() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Diagnostic-only: clicks the Nth (default 0) element matching a selector -
+// used to explore multi-step flows (like OnlyFans' own vault-attach modal)
+// live without needing to click through the VNC feed at the right pixel.
+app.post('/debug-click', async (req, res) => {
+  const page = resolveDebugPage(req);
+  if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
+  const { selector, index } = req.body || {};
+  if (!selector) return res.status(400).json({ error: 'Missing selector' });
+
+  try {
+    const clicked = await page.evaluate((sel, idx) => {
+      const els = document.querySelectorAll(sel);
+      const el = els[idx || 0];
+      if (!el) return false;
+      el.scrollIntoView({ block: 'center' });
+      el.click();
+      return true;
+    }, selector, index);
+    res.json({ status: clicked ? 'success' : 'not_found' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Diagnostic-only: focuses a selector and types text into it (for search
+// boxes inside modals, distinct from debug-send-test which targets the
+// main chat compose box specifically).
+app.post('/debug-type', async (req, res) => {
+  const page = resolveDebugPage(req);
+  if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
+  const { selector, text } = req.body || {};
+  if (!selector || !text) return res.status(400).json({ error: 'Missing selector or text' });
+
+  try {
+    const focused = await page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return false;
+      el.focus();
+      return true;
+    }, selector);
+    if (!focused) return res.json({ status: 'not_found' });
+    await page.keyboard.type(text);
+    res.json({ status: 'success' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

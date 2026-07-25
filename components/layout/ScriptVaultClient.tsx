@@ -3,20 +3,22 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
-interface Script {
+interface ScriptStep {
   id: string;
-  title: string;
-  script_content: string;
-  category: "greeting" | "offer" | "follow_up" | "custom";
-  is_global: boolean;
-  assigned_to_user: string | null;
-  created_at: string;
+  script_id: string;
+  order_index: number;
+  step_type: "text" | "image" | "ppv";
+  message_text: string;
+  vault_search_term: string | null;
+  price: number | null;
 }
 
-interface Chatter {
-  user_id: string;
-  full_name: string;
-  role: string;
+interface Script {
+  id: string;
+  model_id: string;
+  title: string;
+  created_by: string;
+  created_at: string;
 }
 
 interface ConnectedModel {
@@ -26,89 +28,98 @@ interface ConnectedModel {
 
 interface ScriptVaultClientProps {
   initialScripts: Script[];
-  chatters: Chatter[];
+  initialSteps: ScriptStep[];
   userId: string;
   userRole: string;
-  userName: string;
-  connectedModels?: ConnectedModel[];
+  connectedModels: ConnectedModel[];
 }
 
+type DraftStep = {
+  step_type: "text" | "image" | "ppv";
+  message_text: string;
+  vault_search_term: string;
+  price: string;
+};
+
+const EMPTY_STEP: DraftStep = { step_type: "text", message_text: "", vault_search_term: "", price: "" };
+
+const STEP_TYPE_LABEL: Record<DraftStep["step_type"], string> = {
+  text: "💬 Nur Text",
+  image: "🖼️ Bild aus Tresor",
+  ppv: "💰 PPV-Video aus Tresor",
+};
+
+/**
+ * A Script belongs to exactly one model (not one chatter) - creating one
+ * means picking which model it's for, and every chatter working that
+ * model sees the same steps. Each step is text-only, text+image, or
+ * text+PPV; image/PPV steps reference existing OnlyFans Vault content by
+ * search term rather than uploading anything new - the in-chat Script
+ * Vault button (VPS-side) does the actual vault search/attach/price-set
+ * automation when a chatter picks a step.
+ */
 export default function ScriptVaultClient({
   initialScripts,
-  chatters,
+  initialSteps,
   userId,
   userRole,
-  userName,
-  connectedModels = [],
+  connectedModels,
 }: ScriptVaultClientProps) {
   const [scripts, setScripts] = useState<Script[]>(initialScripts);
-  const [isLoading, setIsLoading] = useState(false);
+  const [steps, setSteps] = useState<ScriptStep[]>(initialSteps);
+  const [activeModelId, setActiveModelId] = useState<string>(connectedModels[0]?.id || "");
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    title: "",
-    content: "",
-    category: "custom" as "greeting" | "offer" | "follow_up" | "custom",
-    isGlobal: false,
-    assignTo: "",
-  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [title, setTitle] = useState("");
+  const [formModelId, setFormModelId] = useState(connectedModels[0]?.id || "");
+  const [draftSteps, setDraftSteps] = useState<DraftStep[]>([{ ...EMPTY_STEP }]);
+  const [expandedScriptId, setExpandedScriptId] = useState<string | null>(null);
 
   const supabase = createClient();
 
+  const modelScripts = scripts.filter((s) => s.model_id === activeModelId);
+
+  const addDraftStep = () => setDraftSteps([...draftSteps, { ...EMPTY_STEP }]);
+  const removeDraftStep = (index: number) => setDraftSteps(draftSteps.filter((_, i) => i !== index));
+  const updateDraftStep = (index: number, patch: Partial<DraftStep>) =>
+    setDraftSteps(draftSteps.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+
   const handleReset = () => {
-    setFormData({
-      title: "",
-      content: "",
-      category: "custom",
-      isGlobal: false,
-      assignTo: "",
-    });
-    setEditingId(null);
+    setTitle("");
+    setFormModelId(activeModelId);
+    setDraftSteps([{ ...EMPTY_STEP }]);
     setShowForm(false);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title || !formData.content) return;
+    if (!title || !formModelId || draftSteps.some((s) => !s.message_text)) return;
 
     setIsLoading(true);
     try {
-      if (editingId) {
-        // Update existing script
-        const { data, error } = await supabase
-          .from("crm_script_library")
-          .update({
-            title: formData.title,
-            script_content: formData.content,
-            category: formData.category,
-            is_global: formData.isGlobal,
-            assigned_to_user: formData.assignTo || null,
-          })
-          .eq("id", editingId)
-          .select()
-          .single();
+      const { data: script, error: scriptError } = await supabase
+        .from("crm_scripts")
+        .insert({ model_id: formModelId, title, created_by: userId })
+        .select()
+        .single();
+      if (scriptError) throw scriptError;
 
-        if (error) throw error;
-        setScripts(scripts.map((s) => (s.id === editingId ? data : s)));
-      } else {
-        // Create new script
-        const { data, error } = await supabase
-          .from("crm_script_library")
-          .insert({
-            title: formData.title,
-            script_content: formData.content,
-            category: formData.category,
-            is_global: formData.isGlobal,
-            assigned_to_user: formData.assignTo || null,
-            created_by: userId,
-          })
-          .select()
-          .single();
+      const stepRows = draftSteps.map((s, i) => ({
+        script_id: script.id,
+        order_index: i,
+        step_type: s.step_type,
+        message_text: s.message_text,
+        vault_search_term: s.step_type === "text" ? null : s.vault_search_term || null,
+        price: s.step_type === "ppv" ? Number(s.price) || 0 : null,
+      }));
+      const { data: newSteps, error: stepsError } = await supabase
+        .from("crm_script_steps")
+        .insert(stepRows)
+        .select();
+      if (stepsError) throw stepsError;
 
-        if (error) throw error;
-        setScripts([data, ...scripts]);
-      }
-
+      setScripts([script, ...scripts]);
+      setSteps([...(newSteps || []), ...steps]);
       handleReset();
     } catch (err) {
       console.error("Error saving script:", err);
@@ -118,271 +129,251 @@ export default function ScriptVaultClient({
     }
   };
 
-  const handleEdit = (script: Script) => {
-    setFormData({
-      title: script.title,
-      content: script.script_content,
-      category: script.category,
-      isGlobal: script.is_global,
-      assignTo: script.assigned_to_user || "",
-    });
-    setEditingId(script.id);
-    setShowForm(true);
-  };
-
   const handleDelete = async (scriptId: string) => {
     if (!confirm("Möchtest du dieses Script wirklich löschen?")) return;
-
     try {
-      const { error } = await supabase
-        .from("crm_script_library")
-        .delete()
-        .eq("id", scriptId);
-
+      const { error } = await supabase.from("crm_scripts").delete().eq("id", scriptId);
       if (error) throw error;
       setScripts(scripts.filter((s) => s.id !== scriptId));
+      setSteps(steps.filter((s) => s.script_id !== scriptId));
     } catch (err) {
       console.error("Error deleting script:", err);
       alert("Fehler beim Löschen des Scripts");
     }
   };
 
-  const displayScripts = scripts.filter((s) => {
-    // Show global scripts and user's own scripts
-    if (s.is_global) return true;
-    if (s.assigned_to_user === userId) return true;
-    // Admins see all scripts for management
-    if (userRole === "admin") return true;
-    return false;
-  });
-
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#E2C48A]">
       <main className="flex-1 overflow-auto">
-        <div className="max-w-6xl mx-auto p-6">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-black uppercase tracking-wider mb-2">
-            <span>📜</span>{" "}
-            <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">
-              Script Vault
-            </span>
-          </h1>
-          <p className="text-slate-400">
-            {userRole === "admin"
-              ? "Verwalte globale und persönliche Sales-Scripts für alle Chatters"
-              : "Deine persönlichen und globalen Response-Templates"}
-          </p>
-        </div>
+        <div className="max-w-4xl mx-auto p-6">
+          <div className="mb-6">
+            <h1 className="text-3xl font-black uppercase tracking-wider mb-2">
+              <span>📜</span>{" "}
+              <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">
+                Script Vault
+              </span>
+            </h1>
+            <p className="text-slate-400 text-sm">
+              Jedes Script gehört zu genau einem Model - die Chat-Library zeigt nur die Scripts des gerade offenen Models.
+            </p>
+          </div>
 
-        {/* Add New Script Button */}
-        {!showForm && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="mb-8 px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg"
-          >
-            ➕ Neues Script erstellen
-          </button>
-        )}
+          {connectedModels.length > 0 && (
+            <div className="flex gap-2 mb-6 flex-wrap">
+              {connectedModels.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    setActiveModelId(m.id);
+                    setFormModelId(m.id);
+                  }}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition ${
+                    activeModelId === m.id
+                      ? "bg-[#C9A86A]/20 text-[#C9A86A] border border-[#C9A86A]/50"
+                      : "bg-white/5 text-slate-400 hover:text-[#E2C48A] border border-transparent"
+                  }`}
+                >
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          )}
 
-        {/* Script Form */}
-        {showForm && (
-          <section className="mb-8 bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/20 shadow-lg">
-            <h2 className="text-lg font-bold text-[#C9A86A] mb-4 uppercase">
-              {editingId ? "✏️ Script bearbeiten" : "✨ Neues Script hinzufügen"}
-            </h2>
-            <form onSubmit={handleSave} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
-                  Script-Titel
-                </label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
-                  placeholder="z.B. Willkommens-Gruß"
-                  className="w-full bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
-                  required
-                />
-              </div>
+          {!showForm && (
+            <button
+              onClick={() => setShowForm(true)}
+              disabled={!activeModelId}
+              className="mb-6 px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg disabled:opacity-40"
+            >
+              ➕ Neues Script erstellen
+            </button>
+          )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
-                  Script-Text
-                </label>
-                <textarea
-                  value={formData.content}
-                  onChange={(e) =>
-                    setFormData({ ...formData, content: e.target.value })
-                  }
-                  placeholder="Dein Sales-Script hier..."
-                  rows={6}
-                  className="w-full bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
-                  required
-                />
-              </div>
+          {showForm && (
+            <section className="mb-8 bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/20 shadow-lg space-y-4">
+              <h2 className="text-lg font-bold text-[#C9A86A] uppercase">✨ Neues Script</h2>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
-                    Kategorie
-                  </label>
+                  <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Model</label>
                   <select
-                    value={formData.category}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        category: e.target.value as any,
-                      })
-                    }
+                    value={formModelId}
+                    onChange={(e) => setFormModelId(e.target.value)}
                     className="w-full bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
                   >
-                    <option value="greeting">Willkommengruß</option>
-                    <option value="offer">Angebot</option>
-                    <option value="follow_up">Follow-Up</option>
-                    <option value="custom">Sonstiges</option>
+                    {connectedModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
-
-                {userRole === "admin" && (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
-                      Zuordnung
-                    </label>
-                    <select
-                      value={formData.assignTo}
-                      onChange={(e) =>
-                        setFormData({ ...formData, assignTo: e.target.value })
-                      }
-                      className="w-full bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
-                    >
-                      <option value="">-- Global verfügbar --</option>
-                      {chatters.map((c) => (
-                        <option key={c.user_id} value={c.user_id}>
-                          {c.full_name} ({c.role})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">Script-Titel</label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="z.B. Sommer-Bundle"
+                    className="w-full bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
+                  />
+                </div>
               </div>
 
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.isGlobal}
-                    onChange={(e) =>
-                      setFormData({ ...formData, isGlobal: e.target.checked })
-                    }
-                    className="w-4 h-4 accent-[#C9A86A]"
-                  />
-                  <span className="text-xs font-bold text-slate-400">
-                    🌍 Global für alle sichtbar
-                  </span>
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-slate-400 uppercase">
+                  Schritte (in Reihenfolge - z.B. Freebie, dann 1-3 Textnachrichten, dann PPV)
                 </label>
+                {draftSteps.map((step, i) => (
+                  <div key={i} className="bg-[#050505]/60 border border-[#9C7A3D]/10 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">Schritt {i + 1}</span>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={step.step_type}
+                          onChange={(e) =>
+                            updateDraftStep(i, { step_type: e.target.value as DraftStep["step_type"] })
+                          }
+                          className="bg-[#0A0A0A] border border-[#9C7A3D]/20 rounded px-2 py-1 text-white text-xs outline-none focus:border-[#C9A86A]"
+                        >
+                          <option value="text">{STEP_TYPE_LABEL.text}</option>
+                          <option value="image">{STEP_TYPE_LABEL.image}</option>
+                          <option value="ppv">{STEP_TYPE_LABEL.ppv}</option>
+                        </select>
+                        {draftSteps.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeDraftStep(i)}
+                            className="text-red-400 hover:text-red-300 text-xs font-bold"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <textarea
+                      value={step.message_text}
+                      onChange={(e) => updateDraftStep(i, { message_text: e.target.value })}
+                      placeholder="Nachrichtentext..."
+                      rows={2}
+                      className="w-full bg-[#0A0A0A] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
+                    />
+                    {step.step_type !== "text" && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={step.vault_search_term}
+                          onChange={(e) => updateDraftStep(i, { vault_search_term: e.target.value })}
+                          placeholder="Suchbegriff/Dateiname im Tresor"
+                          className="bg-[#0A0A0A] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-xs outline-none focus:border-[#C9A86A]"
+                        />
+                        {step.step_type === "ppv" && (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={step.price}
+                            onChange={(e) => updateDraftStep(i, { price: e.target.value })}
+                            placeholder="Preis in $"
+                            className="bg-[#0A0A0A] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-xs outline-none focus:border-[#C9A86A]"
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addDraftStep}
+                  className="text-xs font-bold text-[#C9A86A] hover:text-[#E5C158] uppercase"
+                >
+                  ➕ Schritt hinzufügen
+                </button>
               </div>
 
               <div className="flex gap-3 pt-4 border-t border-[#9C7A3D]/10">
                 <button
-                  type="submit"
+                  onClick={handleSave}
                   disabled={isLoading}
-                  className="flex-1 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] px-4 py-2 text-black font-bold rounded uppercase cursor-pointer disabled:opacity-50 transition"
+                  className="flex-1 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] px-4 py-2 text-black font-bold rounded uppercase disabled:opacity-50 transition"
                 >
-                  {isLoading ? "Speichern..." : editingId ? "✓ Aktualisieren" : "✓ Erstellen"}
+                  {isLoading ? "Speichern..." : "✓ Script erstellen"}
                 </button>
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="flex-1 bg-slate-600/30 text-slate-300 py-2 px-4 rounded-lg font-bold uppercase tracking-wider text-sm hover:bg-slate-600/50 transition"
+                  className="flex-1 bg-slate-600/30 text-slate-300 py-2 px-4 rounded-lg font-bold uppercase text-sm hover:bg-slate-600/50 transition"
                 >
                   ✕ Abbrechen
                 </button>
               </div>
-            </form>
-          </section>
-        )}
-
-        {/* Scripts Grid */}
-        <div className="space-y-4">
-          {displayScripts.length === 0 ? (
-            <div className="bg-black/40 p-8 rounded-xl border border-[#9C7A3D]/10 text-center text-slate-400">
-              <p className="text-sm">
-                {scripts.length === 0
-                  ? "Noch keine Scripts vorhanden. Erstelle dein erstes Script!"
-                  : "Keine Scripts für dich verfügbar."}
-              </p>
-            </div>
-          ) : (
-            displayScripts.map((script) => (
-              <div
-                key={script.id}
-                className="bg-black/40 p-4 rounded-lg border border-[#9C7A3D]/10 space-y-3 hover:border-[#C9A86A]/30 transition"
-              >
-                <div className="flex justify-between items-start gap-4">
-                  <div className="flex-1">
-                    <h3 className="font-bold text-[#C9A86A] mb-1">
-                      {script.title}
-                    </h3>
-                    <div className="flex gap-2 mb-2 flex-wrap">
-                      <span className="text-[10px] bg-[#9C7A3D]/20 px-2 py-1 rounded uppercase font-bold">
-                        {script.category === "greeting"
-                          ? "👋 Willkommengruß"
-                          : script.category === "offer"
-                          ? "🎁 Angebot"
-                          : script.category === "follow_up"
-                          ? "📨 Follow-Up"
-                          : "📌 Sonstiges"}
-                      </span>
-                      {script.is_global && (
-                        <span className="text-[10px] bg-emerald-500/20 px-2 py-1 rounded uppercase font-bold text-emerald-400">
-                          🌍 Global
-                        </span>
-                      )}
-                      {script.assigned_to_user &&
-                        script.assigned_to_user !== userId && (
-                          <span className="text-[10px] bg-blue-500/20 px-2 py-1 rounded uppercase font-bold text-blue-400">
-                            👤 Zugeordnet
-                          </span>
-                        )}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    {userRole === "admin" && (
-                      <button
-                        onClick={() => handleEdit(script)}
-                        className="text-[#C9A86A] hover:text-[#E5C158] font-bold text-sm"
-                      >
-                        ✏️
-                      </button>
-                    )}
-                    {userRole === "admin" && (
-                      <button
-                        onClick={() => handleDelete(script.id)}
-                        className="text-red-400 hover:text-red-300 font-bold text-sm"
-                      >
-                        ❌
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <p className="text-xs text-slate-400 bg-[#050505]/50 p-3 rounded whitespace-pre-wrap max-h-24 overflow-y-auto">
-                  {script.script_content}
-                </p>
-
-                <p className="text-[10px] text-slate-500">
-                  Erstellt: {new Date(script.created_at).toLocaleString("de-DE")}
-                </p>
-              </div>
-            ))
+            </section>
           )}
+
+          <div className="space-y-3">
+            {modelScripts.length === 0 ? (
+              <div className="bg-black/40 p-8 rounded-xl border border-[#9C7A3D]/10 text-center text-slate-400 text-sm">
+                {connectedModels.length === 0 ? "Kein Model verbunden." : "Noch keine Scripts für dieses Model."}
+              </div>
+            ) : (
+              modelScripts.map((script) => {
+                const scriptSteps = steps.filter((s) => s.script_id === script.id);
+                const isExpanded = expandedScriptId === script.id;
+                return (
+                  <div key={script.id} className="bg-black/40 rounded-lg border border-[#9C7A3D]/10 overflow-hidden">
+                    <div
+                      className="flex justify-between items-center p-4 cursor-pointer hover:bg-white/5 transition"
+                      onClick={() => setExpandedScriptId(isExpanded ? null : script.id)}
+                    >
+                      <div>
+                        <h3 className="font-bold text-[#C9A86A]">{script.title}</h3>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{scriptSteps.length} Schritte</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {userRole === "admin" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(script.id);
+                            }}
+                            className="text-red-400 hover:text-red-300 font-bold text-sm"
+                          >
+                            ❌
+                          </button>
+                        )}
+                        <span className="text-slate-500 text-xs">{isExpanded ? "▾" : "▸"}</span>
+                      </div>
+                    </div>
+                    {isExpanded && (
+                      <div className="border-t border-[#9C7A3D]/10 p-4 space-y-2">
+                        {scriptSteps.map((step) => (
+                          <div key={step.id} className="bg-[#050505]/50 p-3 rounded text-xs">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[9px] bg-[#9C7A3D]/20 px-2 py-0.5 rounded uppercase font-bold text-[#C9A86A]">
+                                {step.step_type === "text"
+                                  ? "💬 Text"
+                                  : step.step_type === "image"
+                                  ? "🖼️ Bild"
+                                  : "💰 PPV"}
+                              </span>
+                              {step.step_type === "ppv" && step.price != null && (
+                                <span className="text-emerald-400 font-bold">${step.price}</span>
+                              )}
+                            </div>
+                            <p className="text-slate-300 whitespace-pre-wrap">{step.message_text}</p>
+                            {step.vault_search_term && (
+                              <p className="text-slate-500 mt-1">🔍 Tresor: {step.vault_search_term}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
     </div>
   );
 }

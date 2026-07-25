@@ -11,19 +11,12 @@ export default async function ScriptVaultPage() {
     redirect("/login");
   }
 
-  // Get user role, and the independent lists this page needs, in parallel
-  const [profile, { data: scripts }, { data: chatters }, { data: crm_models }] = await Promise.all([
+  // Scripts are model-scoped now (not per-chatter) - every chatter/admin
+  // sees the same steps grouped by which model they belong to.
+  const [profile, { data: scripts }, { data: steps }, { data: crm_models }] = await Promise.all([
     getCurrentProfile(user.id),
-    supabase
-      .from("crm_script_library")
-      .select("*")
-      .or(`is_global.eq.true,assigned_to_user.eq.${user.id}`)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("profiles")
-      .select("user_id, full_name, role")
-      .in("role", ["chatter", "moderator"])
-      .order("full_name", { ascending: true }),
+    supabase.from("crm_scripts").select("*").order("created_at", { ascending: false }),
+    supabase.from("crm_script_steps").select("*").order("order_index", { ascending: true }),
     supabase
       .from("crm_model_sessions")
       .select("model_id")
@@ -50,10 +43,9 @@ export default async function ScriptVaultPage() {
   return (
     <ScriptVaultClient
       initialScripts={scripts || []}
-      chatters={chatters || []}
+      initialSteps={steps || []}
       userId={user.id}
       userRole={userRole}
-      userName={profile?.full_name || user.email || "Chatter"}
       connectedModels={connectedModels}
     />
   );

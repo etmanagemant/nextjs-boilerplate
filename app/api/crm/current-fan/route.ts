@@ -36,9 +36,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ status: "no-fan" });
     }
     const pageData = await pageRes.json();
+    const modalOpen = !!pageData.modalOpen;
     const match = typeof pageData.pageUrl === "string" ? pageData.pageUrl.match(CHAT_URL_PATTERN) : null;
     if (!match) {
-      return NextResponse.json({ status: "no-fan" });
+      return NextResponse.json({ status: "no-fan", modalOpen });
     }
     const fanId = match[1];
 
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       status: "success",
       fanId,
+      modalOpen,
       lastEditedBy,
       metadata: data || {
         fan_id: fanId,
