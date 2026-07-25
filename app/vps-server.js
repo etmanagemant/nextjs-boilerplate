@@ -2619,6 +2619,34 @@ app.post('/debug-fetch', async (req, res) => {
   }
 });
 
+// One-off diagnostic only - lets a debugging pass run arbitrary read-only
+// JS in the page's own real window (same origin/context page.evaluate
+// already runs in, not an isolated content-script world) and see what it
+// returns. Used to poke around for any internally-shared HTTP client
+// OnlyFans' own Vue app might expose (the same thing a browser extension
+// running in that page could reach) rather than needing a dedicated route
+// for every single check.
+app.post('/debug-eval', async (req, res) => {
+  const page = resolveDebugPage(req);
+  if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
+  const code = req.body && req.body.code;
+  if (!code) return res.status(400).json({ error: 'Missing code' });
+
+  try {
+    const result = await page.evaluate((src) => {
+      try {
+        // eslint-disable-next-line no-new-func
+        return new Function(src)();
+      } catch (e) {
+        return { __evalError: e.message };
+      }
+    }, code);
+    res.json({ status: 'success', result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Real Vault gallery, no VNC/live-browsing at all - a bare fetch() to
 // OnlyFans' own /api2/ endpoints from outside the page gets rejected
 // (confirmed live: "Something went wrong" error), because OnlyFans signs
