@@ -1884,16 +1884,29 @@ app.post('/insert-script-step', async (req, res) => {
       return null;
     });
     console.log('[HIDE-FLOW] Screenshot done, len=', snapshot ? snapshot.length : 'null');
+    // CONFIRMED LIVE (reported by the user with a screenshot): the overlay
+    // showed up with a washed-out cream/beige color cast instead of looking
+    // unchanged. Root cause: OnlyFans has no real dark mode, so this app
+    // fakes it by inverting the ENTIRE page (html { filter: invert(1)
+    // hue-rotate(180deg) saturate(1.4) sepia(0.35) }, see DARK_MODE_SCRIPT
+    // above) and then applying a counter-filter to real img/video/etc tags
+    // to cancel that inversion back to normal-looking photos. A plain <div>
+    // with a CSS background-image doesn't match that counter-filter's tag
+    // selector, so the already-correct screenshot gets the ambient
+    // dark-mode inversion applied to it A SECOND TIME, distorting its
+    // colors - while the real page (all actual <img> tags) looks fine.
+    // Using an actual <img> element instead of a styled div makes it match
+    // the exact same counter-filter selector, so it renders true to the
+    // original screenshot's colors.
     const created = await page
       .evaluate((imgData) => {
         if (document.getElementById('__etm_hide_flow__')) return 'already-existed';
-        var overlay = document.createElement('div');
+        var overlay = document.createElement('img');
         overlay.id = '__etm_hide_flow__';
-        overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0b0b0d;';
+        overlay.style.cssText =
+          'position:fixed;inset:0;z-index:2147483647;width:100%;height:100%;object-fit:fill;background:#0b0b0d;';
         if (imgData) {
-          overlay.style.backgroundImage = 'url(data:image/jpeg;base64,' + imgData + ')';
-          overlay.style.backgroundSize = '100% 100%';
-          overlay.style.backgroundRepeat = 'no-repeat';
+          overlay.src = 'data:image/jpeg;base64,' + imgData;
         }
         document.body.appendChild(overlay);
         return document.getElementById('__etm_hide_flow__') ? 'created' : 'append-failed';
