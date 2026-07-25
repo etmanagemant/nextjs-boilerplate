@@ -591,7 +591,24 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
     if (panel) panel.remove();
   }
 
-  function insertStep(step, onDone) {
+  function showPanelError(panel, msg) {
+    var old = panel.querySelector('.__etm_step_error__');
+    if (old) old.remove();
+    var err = document.createElement('div');
+    err.className = '__etm_step_error__';
+    err.textContent = '⚠ ' + msg;
+    err.style.cssText = 'color:#E2A0A0;background:rgba(195,93,93,0.12);border:1px solid rgba(195,93,93,0.3);' +
+      'border-radius:6px;font-size:11px;padding:6px 8px;margin:0 0 6px 0;';
+    panel.insertBefore(err, panel.children[1] || null);
+  }
+
+  // Used to blindly close the panel on .finally() regardless of what the
+  // VPS actually did - confirmed live that a failed media-match (attach
+  // modal opened but nothing got picked) left the chatter with no
+  // indication anything went wrong. Now parses the real status and only
+  // closes on a genuine success, otherwise leaves the panel open with a
+  // visible error so the chatter knows to attach the file manually.
+  function insertStep(step, item, panel) {
     fetch(API_BASE + '/api/crm/insert-script-step', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -602,7 +619,20 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
         mediaRefs: step.media_refs || [],
         price: step.price,
       }),
-    }).finally(onDone);
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.status === 'success') {
+          closePanel();
+        } else {
+          item.style.opacity = '1';
+          showPanelError(panel, (data && (data.message || data.error)) || 'Einfügen fehlgeschlagen.');
+        }
+      })
+      .catch(function() {
+        item.style.opacity = '1';
+        showPanelError(panel, 'Netzwerkfehler beim Einfügen.');
+      });
   }
 
   function renderSteps(panel, script) {
@@ -630,7 +660,7 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
       item.appendChild(preview);
       item.addEventListener('click', function() {
         item.style.opacity = '0.5';
-        insertStep(step, function() { closePanel(); });
+        insertStep(step, item, panel);
       });
       panel.appendChild(item);
     });
@@ -1840,14 +1870,36 @@ app.post('/insert-script-step', async (req, res) => {
       let picked = false;
 
       if (item.thumbnailUrl) {
+        // CONFIRMED LIVE: matching the full signed URL (i.src === url) never
+        // works past the first load - OnlyFans re-signs its CloudFront
+        // thumbnail URLs (fresh Policy/Signature/expiry) on every page visit,
+        // so the thumbnailUrl captured when the script step was created has
+        // already gone stale by the time a chatter clicks it later. The
+        // underlying CDN path (domain + /files/<hash>/<WxH>_<name>.<ext>,
+        // before the "?") stays stable across re-signing - confirmed live
+        // that the attach modal's own 300x300 grid thumbnails share that
+        // exact path with what /vault-media captured.
+        const stablePath = item.thumbnailUrl.split('?')[0];
         for (let attempt = 0; attempt < 4 && !picked; attempt++) {
-          picked = await page.evaluate((url) => {
-            var img = Array.from(document.querySelectorAll('img')).find(function (i) { return i.src === url; });
+          picked = await page.evaluate((path) => {
+            // CONFIRMED LIVE: the exact same file's thumbnail (same stable
+            // path) appears up to 3 times on the page at once - a couple of
+            // small 36px preview-strip copies (class "b-media-set__item",
+            // which open the full-screen lightbox when clicked) plus the one
+            // real 113px selectable grid tile (class "m-checkbox-control",
+            // the actual attach checkbox). A blanket `querySelectorAll('img')`
+            // grabbed whichever came first in DOM order - one of the wrong
+            // lightbox copies - so this now only searches inside elements
+            // that carry the checkbox-control class confirmed live to be the
+            // real pickable tile.
+            var candidates = document.querySelectorAll('[class*="checkbox-control" i] img');
+            var img = Array.from(candidates).find(function (i) { return i.src.split('?')[0] === path; });
             if (!img) return false;
-            var el = img.closest('[class*="item" i]') || img;
+            var el = img.closest('[class*="item" i]');
+            if (!el) return false;
             el.click();
             return true;
-          }, item.thumbnailUrl);
+          }, stablePath);
           if (!picked) {
             // Scroll the attach modal's own list to load more before
             // giving up - best-effort, container selector unconfirmed.
@@ -1895,7 +1947,7 @@ app.post('/insert-script-step', async (req, res) => {
     if (pickedCount === 0) {
       return res.json({
         status: 'partial',
-        message: 'Text eingefügt, aber keine Tresor-Datei gefunden (Selektor unbestätigt - bitte mit echtem Tresor-Inhalt testen)',
+        message: 'Text eingefügt, aber keine Tresor-Datei gefunden. Bitte im offenen Tresor-Fenster manuell auswählen.',
       });
     }
 
@@ -1912,7 +1964,13 @@ app.post('/insert-script-step', async (req, res) => {
     }
 
     slot.lastActivity = Date.now();
-    res.json({ status: pickedCount === items.length ? 'success' : 'partial', pickedCount, total: items.length });
+    const allPicked = pickedCount === items.length;
+    res.json({
+      status: allPicked ? 'success' : 'partial',
+      message: allPicked ? undefined : `Nur ${pickedCount} von ${items.length} Dateien gefunden - Rest bitte manuell im offenen Tresor-Fenster auswählen.`,
+      pickedCount,
+      total: items.length,
+    });
   } catch (error) {
     console.error('[INSERT-SCRIPT-STEP] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message });
