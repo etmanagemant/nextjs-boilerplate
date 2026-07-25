@@ -2121,22 +2121,31 @@ app.post('/insert-script-step', async (req, res) => {
     // moved on while the modal was still open - which then got exposed to
     // the chatter once the cover was lifted at the end. Both budgets below
     // are now much more generous.
-    // CONFIRMED LIVE (root cause, finally pinned down via /debug-eval): the
-    // exact match ('hinzufügen' === ...) NEVER succeeded, not even once -
-    // every earlier "it worked" observation this session was actually a
-    // manual click through Claude-in-Chrome, not this code. A live
-    // substring probe (indexOf('hinzuf')) found the real button
-    // instantly, on the exact same page, in the exact same state, where
-    // the exact-match version found zero matches - meaning the "ü" this
-    // file's === comparison expects and the "ü" actually in the DOM's
-    // textContent are almost certainly two different Unicode
-    // representations of the same-looking glyph (precomposed vs. a
-    // combining-character sequence), which render identically but are
-    // never === equal. Matching on the ASCII-only prefix "hinzuf" sidesteps
-    // the whole ambiguity instead of trying to get the umlaut byte-exact.
+    // CONFIRMED LIVE (root cause #1, finally pinned down via /debug-eval):
+    // the exact match ('hinzufügen' === ...) NEVER succeeded, not even
+    // once - every earlier "it worked" observation this session was
+    // actually a manual click through Claude-in-Chrome, not this code. A
+    // live substring probe (indexOf('hinzuf')) found the real button
+    // instantly, on the exact same page/state where the exact-match
+    // version found zero matches - meaning the "ü" this file's ===
+    // comparison expects and the "ü" actually in the DOM's textContent are
+    // two different Unicode representations of the same-looking glyph
+    // (precomposed vs. a combining-character sequence), never === equal.
+    //
+    // CONFIRMED LIVE (root cause #2, found right after fixing #1): once
+    // substring matching against 'div, span' too, it also caught every
+    // ANCESTOR of the real button whose combined textContent happens to
+    // contain "hinzuf" somewhere inside it - including the entire modal
+    // wrapper. The "smallest area wins" sort then picked a zero-area
+    // phantom element first (0 < the real button's ~4233), and even
+    // without that, ties between the button and its own tight wrapper div
+    // aren't guaranteed to resolve to the button. Restricting the search to
+    // actual `button, [role="button"]` elements only removes both
+    // problems at once - there's no other button on this page whose text
+    // contains "hinzuf".
     await page.waitForFunction(
       () => {
-        var candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
+        var candidates = Array.from(document.querySelectorAll('button, [role="button"]'));
         return candidates.some(function (el) {
           var txt = (el.textContent || '').trim().toLowerCase();
           return (txt.indexOf('hinzuf') !== -1 || txt === 'add') && el.offsetParent !== null;
@@ -2148,7 +2157,7 @@ app.post('/insert-script-step', async (req, res) => {
     let addClicked = false;
     for (let attempt = 0; attempt < 12 && !addClicked; attempt++) {
       const clicked = await page.evaluate(() => {
-        var candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
+        var candidates = Array.from(document.querySelectorAll('button, [role="button"]'));
         var matches = candidates.filter(function (el) {
           var txt = (el.textContent || '').trim().toLowerCase();
           return (txt.indexOf('hinzuf') !== -1 || txt === 'add') && el.offsetParent !== null;
