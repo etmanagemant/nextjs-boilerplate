@@ -1857,20 +1857,27 @@ app.post('/insert-script-step', async (req, res) => {
 
   // Explicitly requested: the chatter should never see the Tresor picker
   // opening or being clicked through - only the final result, ready to
-  // review and send themselves. visibility:hidden (not display:none) keeps
-  // layout/offsetParent intact so the click-finding logic below still
-  // works normally - it just never gets painted to the VNC-streamed
-  // display while this runs. Always removed in the finally below, even on
-  // error, so a failed run can never leave the chatter staring at a blank
-  // screen.
+  // review and send themselves.
+  // CONFIRMED LIVE: a "body { visibility: hidden }" stylesheet rule did NOT
+  // work - the Tresor modal and price popup stayed fully visible anyway.
+  // visibility is inherited, but OnlyFans' own modal/dialog components
+  // evidently set their own explicit visibility (part of their open/close
+  // transition), which overrides the inherited hidden state right back to
+  // visible for themselves. Covering the whole viewport with an opaque div
+  // of our own - on top of everything via a maximum z-index, appended last
+  // so it's after any modal in DOM order too - doesn't depend on any of
+  // that: nothing can render through a solid element sitting above it,
+  // regardless of what visibility/opacity any nested component sets on
+  // itself. Always removed in the finally below, even on error, so a
+  // failed run can never leave the chatter staring at a blank screen.
   const hideFlow = () =>
     page
       .evaluate(() => {
         if (document.getElementById('__etm_hide_flow__')) return;
-        var s = document.createElement('style');
-        s.id = '__etm_hide_flow__';
-        s.textContent = 'body { visibility: hidden !important; }';
-        document.head.appendChild(s);
+        var overlay = document.createElement('div');
+        overlay.id = '__etm_hide_flow__';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0b0b0d;';
+        document.body.appendChild(overlay);
       })
       .catch(() => {});
   const revealFlow = () =>
