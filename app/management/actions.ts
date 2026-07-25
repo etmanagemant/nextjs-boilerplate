@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { revalidatePath } from "next/cache";
 
 export async function updateMitarbeiterRolle(formData: FormData) {
@@ -65,10 +66,25 @@ export async function updateModelAvatar(formData: FormData) {
 }
 
 export async function deleteMitarbeiter(formData: FormData) {
-  const userId = formData.get("user_id");
+  const userId = formData.get("user_id") as string;
   if (userId) {
     const supabaseServer = await createClient();
     await supabaseServer.from("profiles").delete().eq("user_id", userId);
+
+    // Löscht auch den echten Auth-Account - vorher blieb der beim Löschen
+    // hier nur "profiles" los, der Login existierte bei Supabase weiter.
+    // Kam die Person später zurück und hat sich mit derselben E-Mail neu
+    // registriert, tat Supabase (aus Anti-Enumeration-Gründen) nur so als
+    // ob's geklappt hätte, ohne wirklich einen neuen Account/Profile
+    // anzulegen - jetzt kann dieselbe E-Mail nach dem Löschen hier
+    // problemlos neu registriert werden.
+    try {
+      const adminClient = createSupabaseAdminClient();
+      await adminClient.auth.admin.deleteUser(userId);
+    } catch (err) {
+      console.error("Error deleting auth user:", err);
+    }
+
     revalidatePath("/management");
     revalidatePath("/management/crm-connect");
   }
