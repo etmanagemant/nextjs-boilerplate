@@ -49,6 +49,8 @@ export function OnlyFansViewer({
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
+  const viewerOuterRef = useRef<HTMLDivElement>(null);
+  const [videoDims, setVideoDims] = useState<{ width: number; height: number } | null>(null);
   const rfbRef = useRef<any>(null);
   const noSessionPollRef = useRef<NodeJS.Timeout | null>(null);
   const noSessionSyncedRef = useRef(false);
@@ -197,6 +199,32 @@ export function OnlyFansViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelId]);
 
+  // Computes the video's pixel size in JS instead of leaving it to CSS
+  // aspect-ratio - reported live as a persistent thin vertical line in the
+  // VNC feed that no server-side/page-content fix touched, and that never
+  // showed up in a direct screenshot of the actual remote page (only in
+  // the rendered VNC view) - a hallmark of scaling a bitmap canvas to a
+  // FRACTIONAL pixel size (e.g. 1189.92px), which is exactly what
+  // aspect-ratio produces from an arbitrary container height. noVNC's
+  // scaleViewport scales the fixed 1280x800 remote framebuffer to
+  // whatever CSS size the container resolves to; rounding both dimensions
+  // to whole pixels here keeps that scale factor's rounding consistent
+  // instead of leaving it to the browser.
+  useEffect(() => {
+    const outer = viewerOuterRef.current;
+    if (!outer) return;
+    const recompute = () => {
+      const h = Math.floor(outer.clientHeight);
+      if (h <= 0) return;
+      const w = Math.floor((h * 1280) / 800);
+      setVideoDims({ width: w, height: Math.floor((w * 800) / 1280) });
+    };
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(outer);
+    return () => ro.disconnect();
+  }, []);
+
   // Inserts straight into the real OnlyFans compose box via the chatter's
   // own slot (server-side Puppeteer focus + keyboard.insertText) - used to
   // go through VNC clipboard-paste + a manual Strg+V, which the direct
@@ -247,8 +275,12 @@ export function OnlyFansViewer({
       // the side touching the Fan CRM panel, and a border there read as a
       // seam between "the real site" and "our overlay" instead of one
       // integrated view. The other 3 sides keep their frame.
-      className="relative h-full bg-gradient-to-br from-[#0A0A0A] to-[#050505] overflow-hidden border-t border-l border-b border-[#C9A86A]/10 rounded-l-lg"
-      style={{ aspectRatio: "1280 / 800" }}
+      className="relative bg-gradient-to-br from-[#0A0A0A] to-[#050505] overflow-hidden border-t border-l border-b border-[#C9A86A]/10 rounded-l-lg"
+      style={
+        videoDims
+          ? { width: videoDims.width, height: videoDims.height, flexShrink: 0 }
+          : { aspectRatio: "1280 / 800", height: "100%" }
+      }
     >
       {phase === "connecting" && (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-black/60 to-[#0A0A0A]/80 z-10 backdrop-blur-sm">
@@ -380,7 +412,7 @@ export function OnlyFansViewer({
   // it against the plain message list or while still connecting would just
   // be an empty, meaningless panel.
   const viewerContent = (
-    <div className="relative w-full h-full flex items-stretch justify-start overflow-hidden bg-[#0A0A0A]">
+    <div ref={viewerOuterRef} className="relative w-full h-full flex items-stretch justify-start overflow-hidden bg-[#0A0A0A]">
       {videoArea}
       {/* Reserved at the same width whether or not a fan chat is open - a
           bare gray gap next to the video read as broken/accidental; a
