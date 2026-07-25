@@ -1870,16 +1870,30 @@ app.post('/insert-script-step', async (req, res) => {
   // regardless of what visibility/opacity any nested component sets on
   // itself. Always removed in the finally below, even on error, so a
   // failed run can never leave the chatter staring at a blank screen.
-  const hideFlow = () =>
-    page
-      .evaluate(() => {
+  // CONFIRMED LIVE: a solid-color cover is itself visible - the chatter
+  // reported "why did a white screen flash" instead of seeing nothing
+  // change at all. A screenshot of the page exactly as it looked the
+  // instant before this started, stretched to cover the viewport, reads
+  // as a completely frozen/unchanged screen instead of an overlay - the
+  // chatter should perceive zero visual change until the real, finished
+  // state is revealed at the end.
+  const hideFlow = async () => {
+    const snapshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 }).catch(() => null);
+    await page
+      .evaluate((imgData) => {
         if (document.getElementById('__etm_hide_flow__')) return;
         var overlay = document.createElement('div');
         overlay.id = '__etm_hide_flow__';
         overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0b0b0d;';
+        if (imgData) {
+          overlay.style.backgroundImage = 'url(data:image/jpeg;base64,' + imgData + ')';
+          overlay.style.backgroundSize = '100% 100%';
+          overlay.style.backgroundRepeat = 'no-repeat';
+        }
         document.body.appendChild(overlay);
-      })
+      }, snapshot)
       .catch(() => {});
+  };
   const revealFlow = () =>
     page
       .evaluate(() => {
@@ -2086,15 +2100,16 @@ app.post('/insert-script-step', async (req, res) => {
     // to a "N ausgewählt" counter. Clicking Close instead of Add is exactly
     // why nothing was ever landing in the compose box before.
     //
-    // CONFIRMED LIVE (this pass): a single evaluate+click right after the
-    // picking loop isn't reliable - the Add button/counter bar is a newly-
-    // mounted Vue component, and this environment's real-world latency for
-    // that to actually render and become clickable runs into multiple
-    // seconds sometimes, not milliseconds. waitForFunction below blocks
-    // until a matching, visible element genuinely exists (up to 4s) rather
-    // than assuming it's already there; the click is then retried up to 5x,
-    // verified against modal-open actually clearing, since a click firing
-    // before the handler is wired up can silently do nothing.
+    // CONFIRMED LIVE (this pass): the whole flow now runs behind the frozen-
+    // screenshot cover above, so how long this actually takes no longer
+    // matters to the chatter - correctness matters far more than speed now.
+    // Confirmed live that the previous budget (4s wait + 5 retries, ~3.5s)
+    // was too short: this environment's real-world latency for the Add
+    // button/counter bar (a newly-mounted Vue component) to render and
+    // become clickable ran past that window, so the retry loop gave up and
+    // moved on while the modal was still open - which then got exposed to
+    // the chatter once the cover was lifted at the end. Both budgets below
+    // are now much more generous.
     await page.waitForFunction(
       () => {
         var candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
@@ -2103,11 +2118,11 @@ app.post('/insert-script-step', async (req, res) => {
           return (txt === 'hinzufügen' || txt === 'hinzufuegen' || txt === 'add') && el.offsetParent !== null;
         });
       },
-      { timeout: 4000 }
+      { timeout: 10000 }
     ).catch(() => {});
 
     let addClicked = false;
-    for (let attempt = 0; attempt < 5 && !addClicked; attempt++) {
+    for (let attempt = 0; attempt < 12 && !addClicked; attempt++) {
       const clicked = await page.evaluate(() => {
         var candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
         var matches = candidates.filter(function (el) {
@@ -2124,13 +2139,13 @@ app.post('/insert-script-step', async (req, res) => {
         return true;
       });
       if (!clicked) {
-        await new Promise((r) => setTimeout(r, 400));
+        await new Promise((r) => setTimeout(r, 600));
         continue;
       }
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 600));
       const stillOpen = await page.evaluate(() => document.body.classList.contains('modal-open'));
       addClicked = !stillOpen;
-      if (!addClicked) await new Promise((r) => setTimeout(r, 300));
+      if (!addClicked) await new Promise((r) => setTimeout(r, 500));
     }
 
     if (price) {
