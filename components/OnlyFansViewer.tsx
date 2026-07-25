@@ -6,7 +6,6 @@ import { loadRFB } from "@/lib/loadRfb";
 import { FanCrmPanel } from "@/components/FanCrmPanel";
 import { ModelNotesPanel } from "@/components/ModelNotesPanel";
 import EmojiPicker from "@/components/layout/EmojiPicker";
-import ScriptPicker from "@/components/layout/ScriptPicker";
 import { updateChatterEmojis } from "@/app/management/crm-connect/actions";
 
 interface OnlyFansViewerProps {
@@ -48,7 +47,6 @@ export function OnlyFansViewer({
   const [error, setError] = useState("");
   const [pasteStatus, setPasteStatus] = useState<"idle" | "done">("idle");
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
-  const [scriptPickerOpen, setScriptPickerOpen] = useState(false);
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const viewerOuterRef = useRef<HTMLDivElement>(null);
@@ -377,19 +375,6 @@ export function OnlyFansViewer({
                   />
                 </div>
               )}
-              {scriptPickerOpen && chatterId && (
-                <div className="relative w-full">
-                  <ScriptPicker
-                    userId={chatterId}
-                    userRole={userRole}
-                    onSelect={(content) => {
-                      handlePasteEmoji(content);
-                      setScriptPickerOpen(false);
-                    }}
-                    onClose={() => setScriptPickerOpen(false)}
-                  />
-                </div>
-              )}
               <div className="w-full max-h-16 overflow-y-auto scrollbar-hide flex flex-wrap items-center gap-1.5 px-2.5 py-2 rounded-xl bg-black/85 border border-[#C9A86A]/40 backdrop-blur-sm shadow-2xl">
                 {emojis.map((emoji, i) => (
                   <button
@@ -408,18 +393,6 @@ export function OnlyFansViewer({
                 >
                   {emojiPickerOpen ? "▾" : "+"}
                 </button>
-                {chatterId && (
-                  <button
-                    onClick={() => {
-                      setScriptPickerOpen((v) => !v);
-                      setEmojiPickerOpen(false);
-                    }}
-                    title="Script Vault"
-                    className="text-sm flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-dashed border-[#9C7A3D]/60 text-[#C9A86A] bg-white/5 hover:bg-[#C9A86A]/20 transition-all"
-                  >
-                    📜
-                  </button>
-                )}
               </div>
             </div>
           )}

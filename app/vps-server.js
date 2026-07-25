@@ -575,6 +575,118 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
 })();
 `;
 
+// %%USER_ID%%/%%USER_ROLE%%/%%API_BASE%% substituted per slot before
+// injection, same convention as SENT_BY_OVERLAY_SCRIPT_TEMPLATE above.
+const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
+(function() {
+  var USER_ID = "%%USER_ID%%";
+  var USER_ROLE = "%%USER_ROLE%%";
+  var API_BASE = "%%API_BASE%%";
+  var BTN_ID = '__etm_script_vault_btn__';
+  var PANEL_ID = '__etm_script_vault_panel__';
+
+  function closePanel() {
+    var panel = document.getElementById(PANEL_ID);
+    if (panel) panel.remove();
+  }
+
+  function insertIntoCompose(text) {
+    var editor = document.querySelector('.js-text-editor[contenteditable="true"]');
+    if (!editor) return;
+    editor.focus();
+    document.execCommand('insertText', false, text);
+  }
+
+  function openPanel(anchorBtn) {
+    closePanel();
+    var panel = document.createElement('div');
+    panel.id = PANEL_ID;
+    panel.style.cssText = 'position:fixed;z-index:99999;background:#0A0A0A;border:1px solid rgba(201,168,106,0.4);border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,0.6);max-height:320px;width:320px;overflow-y:auto;padding:6px;';
+    var rect = anchorBtn.getBoundingClientRect();
+    panel.style.left = Math.max(8, rect.left - 260) + 'px';
+    panel.style.top = rect.top + 'px';
+    panel.style.transform = 'translateY(-100%)';
+
+    var loading = document.createElement('div');
+    loading.textContent = 'Lade Scripts...';
+    loading.style.cssText = 'color:#8A847B;font-size:12px;padding:12px;text-align:center;';
+    panel.appendChild(loading);
+    document.body.appendChild(panel);
+
+    fetch(API_BASE + '/api/crm/list-scripts?userId=' + encodeURIComponent(USER_ID) + '&role=' + encodeURIComponent(USER_ROLE))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        panel.innerHTML = '';
+        var scripts = (data && data.scripts) || [];
+        if (!scripts.length) {
+          var empty = document.createElement('div');
+          empty.textContent = 'Noch keine Scripts verfügbar.';
+          empty.style.cssText = 'color:#8A847B;font-size:12px;padding:12px;text-align:center;';
+          panel.appendChild(empty);
+          return;
+        }
+        scripts.forEach(function(s) {
+          var item = document.createElement('div');
+          item.style.cssText = 'padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:2px;';
+          item.onmouseenter = function() { item.style.background = 'rgba(201,168,106,0.15)'; };
+          item.onmouseleave = function() { item.style.background = 'transparent'; };
+          var title = document.createElement('div');
+          title.textContent = s.title;
+          title.style.cssText = 'color:#E2C48A;font-weight:700;font-size:12px;';
+          var preview = document.createElement('div');
+          preview.textContent = s.script_content;
+          preview.style.cssText = 'color:#8A847B;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;';
+          item.appendChild(title);
+          item.appendChild(preview);
+          item.addEventListener('click', function() {
+            insertIntoCompose(s.script_content);
+            closePanel();
+          });
+          panel.appendChild(item);
+        });
+      })
+      .catch(function() {
+        panel.innerHTML = '';
+        var err = document.createElement('div');
+        err.textContent = 'Fehler beim Laden.';
+        err.style.cssText = 'color:#C35D5D;font-size:12px;padding:12px;text-align:center;';
+        panel.appendChild(err);
+      });
+  }
+
+  document.addEventListener('click', function(e) {
+    var panel = document.getElementById(PANEL_ID);
+    if (panel && !panel.contains(e.target) && e.target.id !== BTN_ID) closePanel();
+  }, true);
+
+  function scan() {
+    var btns = document.querySelector('.b-make-post__actions__btns');
+    if (!btns || document.getElementById(BTN_ID)) return;
+    var btn = document.createElement('button');
+    btn.id = BTN_ID;
+    btn.type = 'button';
+    btn.className = 'g-btn m-with-round-hover m-icon m-icon-only m-gray m-sm-size has-tooltip';
+    btn.setAttribute('aria-label', 'Script Vault');
+    btn.style.cssText = 'font-size:15px;line-height:1;';
+    btn.textContent = String.fromCodePoint(128220);
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (document.getElementById(PANEL_ID)) { closePanel(); return; }
+      openPanel(btn);
+    });
+    btns.appendChild(btn);
+  }
+
+  function start() {
+    scan();
+    new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+  }
+  if (document.body) start();
+  else document.addEventListener('DOMContentLoaded', start);
+})();
+`;
+
 async function applySentByOverlay(page, chatterName, modelId) {
   try {
     const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
@@ -585,6 +697,34 @@ async function applySentByOverlay(page, chatterName, modelId) {
     await page.evaluateOnNewDocument(script);
   } catch (e) {
     console.warn('[SENT-BY-OVERLAY] Could not register:', e.message);
+  }
+}
+
+// Injects a real button into OnlyFans' own compose toolbar (confirmed live
+// via /debug-dom: ".b-make-post__actions__btns" is the icon row ending
+// with the text-format "Aa" button, immediately followed by a flex spacer
+// and then the native "Senden" button) - explicitly requested to sit there
+// rather than in the CRM's own floating overlay, since that overlay lives
+// in a completely different browser (this app's own page), not inside the
+// VNC-streamed remote page at all, so it can never trigger anything in
+// THIS DOM. Clicking it fetches this chatter's visible scripts from
+// list-scripts (CORS-enabled, same cross-origin pattern as
+// log-sent-message) and shows a small native-styled panel; picking one
+// types it into the real compose box via execCommand('insertText'), the
+// standard way to insert text into a contenteditable rich-text editor
+// (OnlyFans' compose box is TipTap/ProseMirror) from outside its own
+// internal state management - setting textContent/innerHTML directly
+// would desync the editor's model.
+async function applyScriptVaultButton(page, userId, role) {
+  try {
+    const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+    const script = SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE
+      .replace('%%USER_ID%%', String(userId || '').replace(/"/g, '\\"'))
+      .replace('%%USER_ROLE%%', String(role || 'chatter').replace(/"/g, '\\"'))
+      .replace('%%API_BASE%%', apiBase.replace(/"/g, '\\"'));
+    await page.evaluateOnNewDocument(script);
+  } catch (e) {
+    console.warn('[SCRIPT-VAULT-BUTTON] Could not register:', e.message);
   }
 }
 
@@ -809,7 +949,7 @@ async function ensureSlotInfra(slot) {
 
 // Launches (or reuses) this slot's Chrome window for the given model,
 // starting from a fresh filesystem copy of that model's live profile.
-async function ensureSlotBrowser(slot, modelId, role, chatterName) {
+async function ensureSlotBrowser(slot, modelId, role, chatterName, userId) {
   if (slot.browser && slot.browser.isConnected() && slot.modelId === modelId) {
     // A slot copied before the admin finished logging in (a chatter can
     // easily open CRM Inbox while Connection Hub is still mid-login)
@@ -890,6 +1030,7 @@ async function ensureSlotBrowser(slot, modelId, role, chatterName) {
   await reserveOverlaySpace(page);
   await applyNavRestrictions(page, role);
   await applySentByOverlay(page, chatterName, modelId);
+  await applyScriptVaultButton(page, userId, role);
 
   // The filesystem copy above can still be stale even when the main
   // session is genuinely logged in: Chrome writes its cookie database to
@@ -981,7 +1122,7 @@ async function assignSlot(userId, modelId, role, chatterName) {
   }
 
   await ensureSlotInfra(slot);
-  await ensureSlotBrowser(slot, modelId, role, chatterName);
+  await ensureSlotBrowser(slot, modelId, role, chatterName, userId);
   slot.lastActivity = Date.now();
   return slot;
 }
