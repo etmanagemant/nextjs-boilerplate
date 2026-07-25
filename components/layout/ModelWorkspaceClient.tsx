@@ -10,12 +10,13 @@ interface ModelInfo {
 interface ModelWorkspaceClientProps {
   model: ModelInfo | null;
   vaultFanLabel: string | null;
+  vaultFanId: string | null;
+  vaultFanPrice: number | null;
 }
 
 type QueueItem = {
   id: string;
   file: File;
-  price: string;
   status: "pending" | "uploading" | "success" | "error";
   error?: string;
 };
@@ -28,9 +29,11 @@ type QueueItem = {
  * Supabase Storage upload, not the dead local-filesystem server action -
  * that one writes to the Vercel deploy's own disk, which doesn't persist
  * in production). OnlyFans files reuse the same Vault-Fan send mechanism
- * as Upload Vault, just locked to this one model.
+ * as Upload Vault, just locked to this one model. Price is set once by
+ * the admin in Upload Vault and applied automatically here - models
+ * never see or enter a price themselves.
  */
-export default function ModelWorkspaceClient({ model, vaultFanLabel }: ModelWorkspaceClientProps) {
+export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId, vaultFanPrice }: ModelWorkspaceClientProps) {
   const [redditQueue, setRedditQueue] = useState<QueueItem[]>([]);
   const [isSendingReddit, setIsSendingReddit] = useState(false);
   const [ofQueue, setOfQueue] = useState<QueueItem[]>([]);
@@ -54,7 +57,6 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel }: ModelWork
     const items: QueueItem[] = Array.from(files).map((file) => ({
       id: `${Date.now()}-${Math.random()}`,
       file,
-      price: "",
       status: "pending",
     }));
     setter((q) => [...q, ...items]);
@@ -83,8 +85,10 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel }: ModelWork
     setIsSendingReddit(false);
   };
 
+  const canSendOf = (!!vaultFanLabel || !!vaultFanId) && vaultFanPrice != null;
+
   const sendOf = async () => {
-    if (!vaultFanLabel) return;
+    if (!canSendOf) return;
     setIsSendingOf(true);
     for (const item of ofQueue) {
       if (item.status === "success") continue;
@@ -93,8 +97,9 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel }: ModelWork
         const formData = new FormData();
         formData.append("file", item.file);
         formData.append("modelId", model.id);
-        formData.append("vaultFanLabel", vaultFanLabel);
-        if (item.price) formData.append("price", item.price);
+        if (vaultFanId) formData.append("vaultFanId", vaultFanId);
+        if (vaultFanLabel) formData.append("vaultFanLabel", vaultFanLabel);
+        if (vaultFanPrice != null) formData.append("price", String(vaultFanPrice));
 
         const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: formData });
         const data = await res.json();
@@ -182,11 +187,11 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel }: ModelWork
           {/* OnlyFans */}
           <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/20">
             <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">🔞 OnlyFans-Dateien</h2>
-            <p className="text-xs text-slate-500 mb-4">Landet automatisch mit Preis in deinem OnlyFans-Tresor.</p>
+            <p className="text-xs text-slate-500 mb-4">Landet automatisch in deinem OnlyFans-Tresor.</p>
 
-            {!vaultFanLabel ? (
+            {!canSendOf ? (
               <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                Dein Admin muss dafür erst den Vault-Fan im Upload Vault einrichten.
+                Dein Admin muss dafür erst den Vault-Fan und den Preis im Upload Vault einrichten.
               </p>
             ) : (
               <>
@@ -218,17 +223,6 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel }: ModelWork
                           <p className="text-xs truncate">{item.file.name}</p>
                           <p className="text-[10px] text-slate-500">{statusLabel[item.status]}{item.error ? ` - ${item.error}` : ""}</p>
                         </div>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="Preis $"
-                          value={item.price}
-                          onChange={(e) =>
-                            setOfQueue((q) => q.map((x) => (x.id === item.id ? { ...x, price: e.target.value } : x)))
-                          }
-                          disabled={item.status !== "pending"}
-                          className="w-24 bg-[#050505] border border-[#9C7A3D]/20 rounded px-2 py-1 text-white text-xs outline-none focus:border-[#C9A86A] disabled:opacity-50"
-                        />
                       </div>
                     ))}
                     <button

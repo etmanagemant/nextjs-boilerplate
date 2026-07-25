@@ -18,7 +18,7 @@ export default async function UploadVaultPage() {
       .select("model_id")
       .eq("is_active", true)
       .order("model_id", { ascending: true }),
-    supabase.from("crm_vault_fan_mapping").select("model_id, vault_fan_label"),
+    supabase.from("crm_vault_fan_mapping").select("model_id, vault_fan_label, vault_fan_id, vault_fan_price"),
   ]);
 
   const userRole = profile?.role || "guest";

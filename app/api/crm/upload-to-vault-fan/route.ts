@@ -9,7 +9,8 @@ export const runtime = "nodejs";
  * Content-Type assumption doesn't fit a file upload. The VPS writes it to
  * a temp path and drives the actual "send as a priced message to the
  * Vault-Fan" automation (see /upload-to-vault-fan on the VPS).
- * POST multipart/form-data: file, modelId, vaultFanLabel, price
+ * POST multipart/form-data: file, modelId, vaultFanId (preferred) or
+ * vaultFanLabel (fallback), price
  */
 export async function POST(req: NextRequest) {
   try {
@@ -21,17 +22,19 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const modelId = formData.get("modelId") as string | null;
-    const vaultFanLabel = (formData.get("vaultFanLabel") as string | null) || "Vault";
+    const vaultFanLabel = (formData.get("vaultFanLabel") as string | null) || "";
+    const vaultFanId = (formData.get("vaultFanId") as string | null) || "";
     const price = formData.get("price") as string | null;
 
-    if (!file || !modelId) {
-      return NextResponse.json({ error: "Missing file or modelId" }, { status: 400 });
+    if (!file || !modelId || (!vaultFanLabel && !vaultFanId)) {
+      return NextResponse.json({ error: "Missing file, modelId, or vaultFanLabel/vaultFanId" }, { status: 400 });
     }
 
     const params = new URLSearchParams({
       modelId,
-      vaultFanLabel,
       fileName: file.name,
+      ...(vaultFanId ? { vaultFanId } : {}),
+      ...(vaultFanLabel ? { vaultFanLabel } : {}),
       ...(price ? { price } : {}),
     });
 

@@ -11,7 +11,9 @@ interface ConnectedModel {
 
 interface VaultFanMapping {
   model_id: string;
-  vault_fan_label: string;
+  vault_fan_label: string | null;
+  vault_fan_id: string | null;
+  vault_fan_price: number | null;
 }
 
 interface UploadVaultClientProps {
@@ -24,7 +26,6 @@ interface UploadVaultClientProps {
 type QueueItem = {
   id: string;
   file: File;
-  price: string;
   status: "pending" | "uploading" | "success" | "error";
   error?: string;
 };
@@ -32,11 +33,11 @@ type QueueItem = {
 /**
  * OnlyFans has no direct bulk-upload-to-vault feature the team uses - per
  * the user's own explanation, the workaround is sending a file as a priced
- * message to a dedicated "Vault-Fan" (another one of their own model
- * accounts, renamed to "Vault" in the chat list), which OnlyFans then
- * archives into the real Vault automatically. This page just picks the
- * model + files + price and lets the VPS drive that send - it never
- * touches Supabase Storage, unlike the old version of this page.
+ * message to a dedicated "Vault-Fan" (a real external fan account, or
+ * historically another one of their own model accounts), which OnlyFans
+ * then archives into the real Vault automatically. Price is set once per
+ * model here (not typed per file, per the user's explicit ask) and
+ * applied automatically to every send.
  */
 export default function UploadVaultClient({
   userId,
@@ -49,39 +50,57 @@ export default function UploadVaultClient({
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [labelDraft, setLabelDraft] = useState("");
+  const [priceDraft, setPriceDraft] = useState("");
   const [savingLabel, setSavingLabel] = useState(false);
+  const [savingPrice, setSavingPrice] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const supabase = createClient();
 
   const currentMapping = mappings.find((m) => m.model_id === activeModelId);
   const vaultFanLabel = currentMapping?.vault_fan_label || "";
+  const vaultFanId = currentMapping?.vault_fan_id || "";
+  const vaultFanPrice = currentMapping?.vault_fan_price;
 
   const selectModel = (modelId: string) => {
     setActiveModelId(modelId);
-    setLabelDraft(mappings.find((m) => m.model_id === modelId)?.vault_fan_label || "Vault");
+    const mapping = mappings.find((m) => m.model_id === modelId);
+    setLabelDraft(mapping?.vault_fan_label || "Vault");
+    setPriceDraft(mapping?.vault_fan_price != null ? String(mapping.vault_fan_price) : "");
   };
 
   useEffect(() => {
-    if (activeModelId) setLabelDraft(mappings.find((m) => m.model_id === activeModelId)?.vault_fan_label || "Vault");
+    if (activeModelId) {
+      const mapping = mappings.find((m) => m.model_id === activeModelId);
+      setLabelDraft(mapping?.vault_fan_label || "Vault");
+      setPriceDraft(mapping?.vault_fan_price != null ? String(mapping.vault_fan_price) : "");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSetVaultFanLabel = async (labelOverride?: string) => {
-    const rawLabel = labelOverride ?? labelDraft;
-    if (!activeModelId || !rawLabel.trim()) return;
+  const saveMapping = async (patch: Partial<VaultFanMapping>) => {
+    const { error } = await supabase
+      .from("crm_vault_fan_mapping")
+      .upsert({ model_id: activeModelId, ...patch, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    setMappings([
+      ...mappings.filter((m) => m.model_id !== activeModelId),
+      {
+        model_id: activeModelId,
+        vault_fan_label: currentMapping?.vault_fan_label ?? null,
+        vault_fan_id: currentMapping?.vault_fan_id ?? null,
+        vault_fan_price: currentMapping?.vault_fan_price ?? null,
+        ...patch,
+      },
+    ]);
+  };
+
+  const handleSetVaultFan = async (item: { label: string; fanId?: string | null }) => {
+    if (!activeModelId) return;
     setSavingLabel(true);
     try {
-      const label = rawLabel.trim();
-      setLabelDraft(label);
-      const { error } = await supabase
-        .from("crm_vault_fan_mapping")
-        .upsert({ model_id: activeModelId, vault_fan_label: label, updated_at: new Date().toISOString() });
-      if (error) throw error;
-      setMappings([
-        ...mappings.filter((m) => m.model_id !== activeModelId),
-        { model_id: activeModelId, vault_fan_label: label },
-      ]);
+      setLabelDraft(item.label);
+      await saveMapping({ vault_fan_label: item.label, vault_fan_id: item.fanId || null });
     } catch (err) {
       console.error("Error saving vault-fan mapping:", err);
       alert("Fehler beim Speichern der Vault-Fan-Zuordnung");
@@ -90,18 +109,43 @@ export default function UploadVaultClient({
     }
   };
 
+  const handleSaveLabelManual = async () => {
+    if (!activeModelId || !labelDraft.trim()) return;
+    setSavingLabel(true);
+    try {
+      // Manual entry has no confirmed fan ID behind it - clears any
+      // previously-picked ID so sending falls back to the (less
+      // reliable) text search rather than silently keeping a stale ID
+      // that no longer matches this typed label.
+      await saveMapping({ vault_fan_label: labelDraft.trim(), vault_fan_id: null });
+    } catch (err) {
+      console.error("Error saving vault-fan mapping:", err);
+      alert("Fehler beim Speichern der Vault-Fan-Zuordnung");
+    } finally {
+      setSavingLabel(false);
+    }
+  };
+
+  const handleSavePrice = async () => {
+    if (!activeModelId || !priceDraft.trim()) return;
+    setSavingPrice(true);
+    try {
+      await saveMapping({ vault_fan_price: Number(priceDraft) || 0 });
+    } catch (err) {
+      console.error("Error saving vault-fan price:", err);
+      alert("Fehler beim Speichern des Preises");
+    } finally {
+      setSavingPrice(false);
+    }
+  };
+
   const addFiles = (files: FileList | File[]) => {
     const items: QueueItem[] = Array.from(files).map((file) => ({
       id: `${Date.now()}-${Math.random()}`,
       file,
-      price: "",
       status: "pending",
     }));
     setQueue([...queue, ...items]);
-  };
-
-  const updatePrice = (id: string, price: string) => {
-    setQueue(queue.map((q) => (q.id === id ? { ...q, price } : q)));
   };
 
   const removeItem = (id: string) => setQueue(queue.filter((q) => q.id !== id));
@@ -116,8 +160,9 @@ export default function UploadVaultClient({
         const formData = new FormData();
         formData.append("file", item.file);
         formData.append("modelId", activeModelId);
-        formData.append("vaultFanLabel", vaultFanLabel || "Vault");
-        if (item.price) formData.append("price", item.price);
+        if (vaultFanId) formData.append("vaultFanId", vaultFanId);
+        if (vaultFanLabel) formData.append("vaultFanLabel", vaultFanLabel);
+        if (vaultFanPrice != null) formData.append("price", String(vaultFanPrice));
 
         const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: formData });
         const data = await res.json();
@@ -144,6 +189,8 @@ export default function UploadVaultClient({
     error: "❌ Fehler",
   };
 
+  const canSend = (!!vaultFanLabel || !!vaultFanId) && vaultFanPrice != null;
+
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#E2C48A]">
       <main className="flex-1 overflow-auto">
@@ -156,7 +203,7 @@ export default function UploadVaultClient({
               </span>
             </h1>
             <p className="text-slate-400 text-sm">
-              Dateien werden automatisch mit Preis an den "Vault"-Fan geschickt - OnlyFans legt sie dann selbst im Tresor ab.
+              Dateien werden automatisch mit dem hier festgelegten Preis an den Vault-Fan geschickt - OnlyFans legt sie dann selbst im Tresor ab.
             </p>
           </div>
 
@@ -179,48 +226,78 @@ export default function UploadVaultClient({
           )}
 
           {activeModelId && (
-            <section className="mb-6 bg-black/40 p-4 rounded-xl border border-[#9C7A3D]/20">
-              <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
-                Vault-Fan für dieses Model
-              </label>
-              <div className="flex items-center gap-3 flex-wrap relative">
-                <button
-                  onClick={() => setPickerOpen((v) => !v)}
-                  className="px-4 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded text-xs uppercase disabled:opacity-40"
-                >
-                  🔍 Im Chat suchen
-                </button>
-                {vaultFanLabel && (
-                  <span className="text-xs text-slate-400">Aktuell: "{vaultFanLabel}"</span>
-                )}
-                {pickerOpen && activeModelId && (
-                  <ChatSearchPicker
-                    modelId={activeModelId}
-                    onSelect={(label) => handleSetVaultFanLabel(label)}
-                    onClose={() => setPickerOpen(false)}
-                  />
-                )}
+            <section className="mb-6 bg-black/40 p-4 rounded-xl border border-[#9C7A3D]/20 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
+                  Vault-Fan für dieses Model
+                </label>
+                <div className="flex items-center gap-3 flex-wrap relative">
+                  <button
+                    onClick={() => setPickerOpen((v) => !v)}
+                    className="px-4 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded text-xs uppercase disabled:opacity-40"
+                  >
+                    🔍 Im Chat suchen
+                  </button>
+                  {vaultFanLabel && (
+                    <span className="text-xs text-slate-400">
+                      Aktuell: "{vaultFanLabel}"{!vaultFanId && " (manuell, kein bestätigter Chat)"}
+                    </span>
+                  )}
+                  {pickerOpen && activeModelId && (
+                    <ChatSearchPicker
+                      modelId={activeModelId}
+                      onSelect={(item) => handleSetVaultFan(item)}
+                      onClose={() => setPickerOpen(false)}
+                    />
+                  )}
+                </div>
+
+                <details className="mt-3">
+                  <summary className="text-[10px] text-slate-500 cursor-pointer hover:text-slate-400">Manuell eintragen</summary>
+                  <div className="flex gap-2 max-w-md mt-2">
+                    <input
+                      type="text"
+                      value={labelDraft}
+                      onChange={(e) => setLabelDraft(e.target.value)}
+                      placeholder="Vault"
+                      className="flex-1 bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
+                    />
+                    <button
+                      onClick={handleSaveLabelManual}
+                      disabled={savingLabel || !labelDraft.trim()}
+                      className="px-4 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded text-xs uppercase disabled:opacity-40"
+                    >
+                      {savingLabel ? "..." : "✓ Speichern"}
+                    </button>
+                  </div>
+                </details>
               </div>
 
-              <details className="mt-3">
-                <summary className="text-[10px] text-slate-500 cursor-pointer hover:text-slate-400">Manuell eintragen</summary>
-                <div className="flex gap-2 max-w-md mt-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
+                  Preis (wird automatisch für jede Datei verwendet)
+                </label>
+                <div className="flex gap-2 max-w-xs">
                   <input
-                    type="text"
-                    value={labelDraft}
-                    onChange={(e) => setLabelDraft(e.target.value)}
-                    placeholder="Vault"
+                    type="number"
+                    step="0.01"
+                    value={priceDraft}
+                    onChange={(e) => setPriceDraft(e.target.value)}
+                    placeholder="z.B. 5.00"
                     className="flex-1 bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
                   />
                   <button
-                    onClick={() => handleSetVaultFanLabel()}
-                    disabled={savingLabel || !labelDraft.trim()}
+                    onClick={handleSavePrice}
+                    disabled={savingPrice || !priceDraft.trim()}
                     className="px-4 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded text-xs uppercase disabled:opacity-40"
                   >
-                    {savingLabel ? "..." : "✓ Speichern"}
+                    {savingPrice ? "..." : "✓ Speichern"}
                   </button>
                 </div>
-              </details>
+                {vaultFanPrice != null && (
+                  <p className="text-[10px] text-slate-500 mt-1">Aktuell gespeichert: ${vaultFanPrice}</p>
+                )}
+              </div>
             </section>
           )}
 
@@ -262,15 +339,6 @@ export default function UploadVaultClient({
                     <p className="text-sm truncate">{item.file.name}</p>
                     <p className="text-[10px] text-slate-500">{statusLabel[item.status]}{item.error ? ` - ${item.error}` : ""}</p>
                   </div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Preis $"
-                    value={item.price}
-                    onChange={(e) => updatePrice(item.id, e.target.value)}
-                    disabled={item.status !== "pending"}
-                    className="w-24 bg-[#050505] border border-[#9C7A3D]/20 rounded px-2 py-1 text-white text-xs outline-none focus:border-[#C9A86A] disabled:opacity-50"
-                  />
                   {item.status === "pending" && (
                     <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-300 text-sm">
                       ✕
@@ -280,10 +348,10 @@ export default function UploadVaultClient({
               ))}
               <button
                 onClick={sendAll}
-                disabled={isSending || !vaultFanLabel}
+                disabled={isSending || !canSend}
                 className="w-full mt-3 px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg disabled:opacity-40"
               >
-                {isSending ? "Wird gesendet..." : !vaultFanLabel ? "Erst Vault-Fan-Namen speichern" : `${queue.length} Datei(en) senden`}
+                {isSending ? "Wird gesendet..." : !canSend ? "Erst Vault-Fan und Preis festlegen" : `${queue.length} Datei(en) senden`}
               </button>
             </section>
           )}

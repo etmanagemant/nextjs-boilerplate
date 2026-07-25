@@ -1883,57 +1883,70 @@ app.post('/insert-script-step', async (req, res) => {
   }
 });
 
-// Navigates a chatter's slot to the real OnlyFans Vault page (confirmed
-// live: https://onlyfans.com/my/vault, same picker UI as the in-chat
-// vault-attach modal but as a full page), so VaultPickerModal's embedded
-// VNC feed opens directly on it for the admin to browse and click-select.
-app.post('/vault-picker-goto', async (req, res) => {
+// Lightweight replacement for an earlier VNC-embedded vault picker - the
+// previous "read whichever items are selected" approach used a generic
+// CSS guess that turned out to match literally every item in the vault
+// grid, not just the ones actually clicked (confirmed live: all 8 files
+// came back "selected" after clicking only 2), on top of opening a
+// separate window showing the entire live OnlyFans interface, which the
+// admin found confusing. This scrapes the full list of visible vault
+// items instead (optionally filtered by the vault's own search box) and
+// lets the admin toggle selection in our OWN UI (VaultSearchPicker) -
+// no dependency on reading OnlyFans' own visual "selected" state at all.
+app.post('/vault-list', async (req, res) => {
   try {
-    const { userId, modelId } = req.body || {};
+    const { userId, modelId, query } = req.body || {};
     if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
     const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
-    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
-    await slot.page.goto('https://onlyfans.com/my/vault', { waitUntil: 'domcontentloaded', timeout: 15000 });
-    res.json({ status: 'success' });
-  } catch (error) {
-    console.error('[VAULT-PICKER-GOTO] Error:', error.message);
-    res.status(200).json({ status: 'error', error: error.message });
-  }
-});
+    if (!slot || !slot.page) return res.json({ status: 'no_slot', items: [] });
+    const page = slot.page;
 
-// Reads back whichever Vault items the admin currently has selected via
-// OnlyFans' own multi-select UI.
-//
-// IMPORTANT / UNVERIFIED: this session's test vault was confirmed
-// completely empty across every category (including a newly-seen
-// "Uploads" one), so there was never any real item to click-select and
-// inspect - the selector below is a best-effort guess at common
-// "selected" state patterns (checked class/attribute), not confirmed DOM.
-// Needs a live pass with real vault content before trusting the captured
-// selection.
-app.post('/vault-picker-selection', async (req, res) => {
-  try {
-    const { userId, modelId } = req.body || {};
-    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
-    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
-    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+    if (!page.url().includes('/my/vault')) {
+      await page.goto('https://onlyfans.com/my/vault', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await new Promise((r) => setTimeout(r, 1000));
+    }
 
-    const items = await slot.page.evaluate(() => {
-      var selected = document.querySelectorAll(
-        '[class*="selected" i], [class*="checked" i][class*="media" i], [class*="media" i][class*="active" i], [aria-checked="true"]'
+    if (query) {
+      const searched = await page.evaluate(() => {
+        var input = document.querySelector('input[name="media_vault_search"]');
+        if (!input) return false;
+        input.focus();
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      });
+      if (searched) {
+        await page.keyboard.type(String(query));
+        await new Promise((r) => setTimeout(r, 900));
+      }
+    } else {
+      await new Promise((r) => setTimeout(r, 300));
+    }
+
+    // UNVERIFIED: best-effort selector for a vault media tile - couldn't
+    // confirm live against real content this session (test vault was
+    // empty). Dedupes by thumbnail URL as a safety net against the
+    // selector matching wrapper + inner elements for the same tile.
+    const items = await page.evaluate(() => {
+      var tiles = document.querySelectorAll(
+        '[class*="media-item" i], [class*="MediaItem" i], [class*="vault" i] [class*="item" i]'
       );
       var out = [];
-      for (var i = 0; i < selected.length; i++) {
-        var el = selected[i];
+      var seen = {};
+      for (var i = 0; i < tiles.length && out.length < 60; i++) {
+        var el = tiles[i];
         var img = el.querySelector('img');
-        var label = el.getAttribute('data-id') || el.getAttribute('aria-label') || (img && img.alt) || 'Datei ' + (i + 1);
-        out.push({ label: label, thumbnailUrl: img ? img.src : undefined });
+        if (!img || !img.src || seen[img.src]) continue;
+        seen[img.src] = true;
+        var label = el.getAttribute('data-id') || img.alt || 'Datei ' + (out.length + 1);
+        out.push({ label: label, thumbnailUrl: img.src });
       }
       return out;
     });
+
     res.json({ status: 'success', items });
   } catch (error) {
-    console.error('[VAULT-PICKER-SELECTION] Error:', error.message);
+    console.error('[VAULT-LIST] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message, items: [] });
   }
 });
@@ -1979,7 +1992,11 @@ app.post('/chat-search', async (req, res) => {
 
     // UNVERIFIED: best-effort name-element selector inside each chat-list
     // item - falls back to the first line of the item's own text if no
-    // dedicated name element matches.
+    // dedicated name element matches. The fan ID comes straight out of
+    // the item's own confirmed-live href (/my/chats/chat/<id>/), so later
+    // sends can jump directly to this exact conversation instead of
+    // re-searching by name - the same label can match more than one
+    // contact, but the ID never can.
     const items = await page.evaluate(() => {
       var links = document.querySelectorAll('.b-chats__item__link');
       var out = [];
@@ -1987,7 +2004,9 @@ app.post('/chat-search', async (req, res) => {
         var el = links[i];
         var nameEl = el.querySelector('[class*="user-name" i], [class*="username" i], [class*="item__name" i]');
         var label = nameEl ? nameEl.textContent.trim() : ((el.innerText || '').split('\n')[0] || '').trim();
-        if (label) out.push({ label: label });
+        var match = (el.getAttribute('href') || '').match(/\/chat\/([^\/]+)\//);
+        var fanId = match ? match[1] : null;
+        if (label) out.push({ label: label, fanId: fanId });
       }
       return out;
     });
@@ -2014,9 +2033,9 @@ app.post('/chat-search', async (req, res) => {
 // timing are best-effort guesses, not confirmed against a real upload -
 // needs a live pass to verify before trusting it for real sends.
 app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), async (req, res) => {
-  const { modelId, vaultFanLabel, price, fileName } = req.query;
-  if (!modelId || !vaultFanLabel || !fileName) {
-    return res.status(400).json({ error: 'Missing modelId, vaultFanLabel, or fileName' });
+  const { modelId, vaultFanLabel, vaultFanId, price, fileName } = req.query;
+  if (!modelId || (!vaultFanLabel && !vaultFanId) || !fileName) {
+    return res.status(400).json({ error: 'Missing modelId, vaultFanLabel/vaultFanId, or fileName' });
   }
   if (!req.body || !req.body.length) {
     return res.status(400).json({ error: 'Missing file body' });
@@ -2028,31 +2047,45 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
 
   const tempPath = path.join('/tmp', `upload-${Date.now()}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`);
   try {
+    let opened;
+    if (vaultFanId) {
+      // Confirmed-unique target: the exact chat URL captured when the
+      // admin picked this contact via the chat-search overlay - no text
+      // search/ambiguity at all, so this can never land on the wrong fan
+      // (which is exactly what happened with the old label-search-only
+      // approach when the label matched more than one contact).
+      await page.goto(`https://onlyfans.com/my/chats/chat/${vaultFanId}/`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await new Promise((r) => setTimeout(r, 1200));
+      opened = true;
+    } else {
+      await page.goto('https://onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Chat-list search (confirmed live: autocomplete="chats-search-input"),
+      // not the within-a-chat search - finds the "Vault"-labeled conversation
+      // by the nickname the user sets on it. Fallback only for mappings
+      // saved before vault_fan_id existed - a non-unique label can click
+      // the wrong contact, which is why the ID path above is preferred.
+      const searched = await page.evaluate(() => {
+        var input = document.querySelector('input[autocomplete="chats-search-input"]');
+        if (!input) return false;
+        input.focus();
+        return true;
+      });
+      if (!searched) return res.json({ status: 'error', error: 'Chat-Suche nicht gefunden' });
+      await page.keyboard.type(String(vaultFanLabel));
+      await new Promise((r) => setTimeout(r, 1200));
+
+      opened = await page.evaluate(() => {
+        var link = document.querySelector('.b-chats__item__link');
+        if (!link) return false;
+        link.click();
+        return true;
+      });
+    }
+
     await fs.writeFile(tempPath, req.body);
 
-    await page.goto('https://onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await new Promise((r) => setTimeout(r, 1000));
-
-    // Chat-list search (confirmed live: autocomplete="chats-search-input"),
-    // not the within-a-chat search - finds the "Vault"-labeled conversation
-    // by the nickname the user sets on it, per their own explanation,
-    // rather than scrolling the chat list.
-    const searched = await page.evaluate(() => {
-      var input = document.querySelector('input[autocomplete="chats-search-input"]');
-      if (!input) return false;
-      input.focus();
-      return true;
-    });
-    if (!searched) return res.json({ status: 'error', error: 'Chat-Suche nicht gefunden' });
-    await page.keyboard.type(String(vaultFanLabel));
-    await new Promise((r) => setTimeout(r, 1200));
-
-    const opened = await page.evaluate(() => {
-      var link = document.querySelector('.b-chats__item__link');
-      if (!link) return false;
-      link.click();
-      return true;
-    });
     if (!opened) return res.json({ status: 'error', error: 'Vault-Fan-Chat nicht gefunden' });
     await new Promise((r) => setTimeout(r, 1200));
 

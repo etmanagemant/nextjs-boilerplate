@@ -2,9 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
+interface ChatItem {
+  label: string;
+  fanId?: string | null;
+}
+
 interface ChatSearchPickerProps {
   modelId: string;
-  onSelect: (label: string) => void;
+  onSelect: (item: ChatItem) => void;
   onClose: () => void;
 }
 
@@ -17,7 +22,7 @@ interface ChatSearchPickerProps {
  */
 export function ChatSearchPicker({ modelId, onSelect, onClose }: ChatSearchPickerProps) {
   const [query, setQuery] = useState("");
-  const [items, setItems] = useState<{ label: string }[]>([]);
+  const [items, setItems] = useState<ChatItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -98,7 +103,7 @@ export function ChatSearchPicker({ modelId, onSelect, onClose }: ChatSearchPicke
               key={i}
               type="button"
               onClick={() => {
-                onSelect(item.label);
+                onSelect(item);
                 onClose();
               }}
               className="w-full text-left px-3 py-2 rounded text-sm text-[#E2C48A] hover:bg-[#C9A86A]/15 transition"
