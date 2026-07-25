@@ -24,6 +24,12 @@ export default async function CalendarPage() {
     }
   }
 
+  // Models haben keinen Schichtplan/Kalender - ihr einziger Bereich ist
+  // das eigene Upload-Workspace.
+  if (role === "model") {
+    redirect("/model-workspace");
+  }
+
   // 2-4. Schichten, Models und alle Profile unabhängig voneinander laden
   const [{ data: shifts }, { data: models }, { data: profiles }] = await Promise.all([
     supabase.from("shifts").select("*"),

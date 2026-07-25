@@ -348,9 +348,12 @@ export default function ContentPlanClient({
           CONTENT PLAN POSTS (EXPLORER GRID)
           ======================================== */}
       <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg">
-        <h2 className="text-sm font-bold mb-6 text-[#C9A86A] uppercase tracking-wider">
+        <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">
           🖼️ Content-Fotos & Plan
         </h2>
+        <p className="text-[11px] text-slate-500 mb-6">
+          Bilder lassen sich direkt aus der Kachel in ein anderes Browser-Tab (z.B. Reddit) ziehen, oder über "⬇ Herunterladen" auf den PC speichern.
+        </p>
 
         {/* UPLOAD ZONE */}
         <div
@@ -430,6 +433,15 @@ export default function ContentPlanClient({
                     >
                       ✏️ Bearbeiten
                     </button>
+                    <a
+                      href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/reddit_content/${post.photo_path}`}
+                      download
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-white/90 text-black px-3 py-1 rounded text-xs font-bold hover:bg-white cursor-pointer"
+                    >
+                      ⬇ Herunterladen
+                    </a>
                   </div>
                 </div>
 

@@ -7,12 +7,9 @@ interface ModelInfo {
   name: string;
 }
 
-type UploadResult = { success?: boolean; fileName?: string; error?: string } | void;
-
 interface ModelWorkspaceClientProps {
   model: ModelInfo | null;
   vaultFanLabel: string | null;
-  uploadAndCreatePost: (formData: FormData) => Promise<UploadResult>;
 }
 
 type QueueItem = {
@@ -26,12 +23,14 @@ type QueueItem = {
 /**
  * A model's entire workspace: two upload buckets tied to their own,
  * admin-assigned model (models.owner_user_id) - no model picker, no
- * access to anyone else's data. Reddit images reuse the same server
- * action the Content Plan page uses; OnlyFans files reuse the same
- * Vault-Fan send mechanism as Upload Vault, just locked to this one
- * model and using whatever nickname the admin already configured there.
+ * access to anyone else's data. Reddit images go through the same
+ * /api/upload-content route the Content Plan page itself uses (real
+ * Supabase Storage upload, not the dead local-filesystem server action -
+ * that one writes to the Vercel deploy's own disk, which doesn't persist
+ * in production). OnlyFans files reuse the same Vault-Fan send mechanism
+ * as Upload Vault, just locked to this one model.
  */
-export default function ModelWorkspaceClient({ model, vaultFanLabel, uploadAndCreatePost }: ModelWorkspaceClientProps) {
+export default function ModelWorkspaceClient({ model, vaultFanLabel }: ModelWorkspaceClientProps) {
   const [redditQueue, setRedditQueue] = useState<QueueItem[]>([]);
   const [isSendingReddit, setIsSendingReddit] = useState(false);
   const [ofQueue, setOfQueue] = useState<QueueItem[]>([]);
@@ -68,11 +67,12 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, uploadAndCr
       setRedditQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "uploading" } : x)));
       try {
         const formData = new FormData();
-        formData.append("model_id", model.id);
         formData.append("file", item.file);
-        const result = await uploadAndCreatePost(formData);
-        if (result && "error" in result && result.error) {
-          setRedditQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "error", error: result.error } : x)));
+        formData.append("modelId", model.id);
+        const res = await fetch("/api/upload-content", { method: "POST", body: formData });
+        const result = await res.json();
+        if (!res.ok || result.error) {
+          setRedditQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "error", error: result.error || "Fehler" } : x)));
         } else {
           setRedditQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "success" } : x)));
         }

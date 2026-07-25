@@ -1,7 +1,6 @@
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import ModelWorkspaceClient from "@/components/layout/ModelWorkspaceClient";
-import { uploadAndCreatePost } from "@/app/content-plan/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +36,6 @@ export default async function ModelWorkspacePage() {
     <ModelWorkspaceClient
       model={model || null}
       vaultFanLabel={vaultFanLabel}
-      uploadAndCreatePost={uploadAndCreatePost}
     />
   );
 }
