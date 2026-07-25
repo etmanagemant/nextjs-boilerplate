@@ -776,11 +776,20 @@ async function ensureSlotInfra(slot) {
     spawn('/usr/bin/setxkbmap', ['de'], { env: { ...process.env, DISPLAY: slot.display }, stdio: 'ignore' });
 
     if (!slot.x11vncProc || slot.x11vncProc.exitCode !== null) {
+      // -noxdamage previously here forces x11vnc into full-screen polling
+      // instead of using the X server's own damage-tracking to know
+      // exactly which pixels changed - polling-based diffing is a known
+      // source of "stale column" artifacts (a screen region that visually
+      // changed but whose diff the polling pass doesn't register, so VNC
+      // clients keep seeing old pixel data there indefinitely). Matches a
+      // persistent vertical line reported live that survived every
+      // page-content and canvas-scaling fix - removing it lets x11vnc use
+      // accurate damage events instead.
       slot.x11vncProc = spawn('/usr/bin/x11vnc', [
         '-display', slot.display,
         '-rfbport', String(slot.vncPort),
         '-rfbauth', '/root/.vnc/login_passwd',
-        '-forever', '-shared', '-noxdamage', '-localhost', '-quiet', '-xkb', '-add_keysyms',
+        '-forever', '-shared', '-localhost', '-quiet', '-xkb', '-add_keysyms',
       ], { stdio: 'ignore' });
       slot.x11vncProc.on('exit', (code) => console.warn(`[SLOT ${slot.id}] x11vnc exited (${code})`));
       await new Promise((r) => setTimeout(r, 300));
@@ -1761,6 +1770,21 @@ app.get('/health', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
+
+// Every restart of this service (deploys, crashes) orphans the previous
+// run's Xvfb/x11vnc/websockify children - they're spawned as detached
+// child processes tracked only in the in-memory CHATTER_SLOTS array, which
+// is gone the moment this process exits, but the children themselves keep
+// running. Confirmed live after this session's many deploy restarts: two
+// separate websockify processes bound to the same slot port at once.
+// Killing anything still using a slot's known ports/displays before this
+// instance spawns its own gives every fresh start a clean slate instead of
+// accumulating duplicates indefinitely.
+for (const slot of CHATTER_SLOTS) {
+  spawn('pkill', ['-9', '-f', `Xvfb ${slot.display} `], { stdio: 'ignore' });
+  spawn('pkill', ['-9', '-f', `x11vnc -display ${slot.display} `], { stdio: 'ignore' });
+  spawn('pkill', ['-9', '-f', `websockify ${slot.wsPort} `], { stdio: 'ignore' });
+}
 
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, '0.0.0.0', () => {
