@@ -248,7 +248,21 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
       // draws its own default focus ring on a focused element regardless
       // of any CSS on that element's children or a differently-scoped
       // sibling, which would explain surviving every fix so far.
-      'main:focus, main:focus-visible { outline: none !important; box-shadow: none !important; }';
+      'main:focus, main:focus-visible { outline: none !important; box-shadow: none !important; }' +
+      // Explicitly requested: gold section dividers matching the CRM's own
+      // theme, in place of OnlyFans' native ones - between the chat list
+      // and the open conversation, and under each header row. Placed after
+      // the blanket border-removal rules above so these actually win
+      // (equal specificity, later in source order). NOTE: the specific
+      // persistent vertical line reported live sits mid-row inside the chat
+      // list itself, not at a panel edge - every targeted CSS guess so far
+      // (borders, scrollbars, outlines, margins, focus rings, all above)
+      // has failed to remove it, which points at a VNC/canvas-encoding tile
+      // seam rather than an actual page element; these new borders don't
+      // specifically chase that theory, just add the requested gold
+      // dividers at the real panel boundaries.
+      '.b-chats__conversations-list { border-right: 2px solid rgba(201,168,106,0.35) !important; } ' +
+      '.b-chats__header, .b-chat__header, .b-header-conversation { border-bottom: 2px solid rgba(201,168,106,0.35) !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
   if (document.head) inject();
@@ -1832,16 +1846,43 @@ app.post('/insert-emoji', async (req, res) => {
 // DOM. Needs a live pass with a model that actually has vault content
 // before trusting this for real sends.
 app.post('/insert-script-step', async (req, res) => {
+  const { userId, modelId, messageText, mediaRefs, price } = req.body || {};
+  if (!userId || !modelId || !messageText) {
+    return res.status(400).json({ error: 'Missing userId, modelId, or messageText' });
+  }
+
+  const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+  if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+  const page = slot.page;
+
+  // Explicitly requested: the chatter should never see the Tresor picker
+  // opening or being clicked through - only the final result, ready to
+  // review and send themselves. visibility:hidden (not display:none) keeps
+  // layout/offsetParent intact so the click-finding logic below still
+  // works normally - it just never gets painted to the VNC-streamed
+  // display while this runs. Always removed in the finally below, even on
+  // error, so a failed run can never leave the chatter staring at a blank
+  // screen.
+  const hideFlow = () =>
+    page
+      .evaluate(() => {
+        if (document.getElementById('__etm_hide_flow__')) return;
+        var s = document.createElement('style');
+        s.id = '__etm_hide_flow__';
+        s.textContent = 'body { visibility: hidden !important; }';
+        document.head.appendChild(s);
+      })
+      .catch(() => {});
+  const revealFlow = () =>
+    page
+      .evaluate(() => {
+        var s = document.getElementById('__etm_hide_flow__');
+        if (s) s.remove();
+      })
+      .catch(() => {});
+
   try {
-    const { userId, modelId, messageText, mediaRefs, price } = req.body || {};
-    if (!userId || !modelId || !messageText) {
-      return res.status(400).json({ error: 'Missing userId, modelId, or messageText' });
-    }
-
-    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
-    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
-    const page = slot.page;
-
+    await hideFlow();
     const focused = await page.evaluate(() => {
       var el = document.querySelector('.js-text-editor[contenteditable="true"], textarea[placeholder*="message" i]');
       if (!el) return false;
@@ -2101,6 +2142,8 @@ app.post('/insert-script-step', async (req, res) => {
   } catch (error) {
     console.error('[INSERT-SCRIPT-STEP] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message });
+  } finally {
+    await revealFlow();
   }
 });
 
