@@ -1878,10 +1878,15 @@ app.post('/insert-script-step', async (req, res) => {
   // chatter should perceive zero visual change until the real, finished
   // state is revealed at the end.
   const hideFlow = async () => {
-    const snapshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 }).catch(() => null);
-    await page
+    console.log('[HIDE-FLOW] Starting screenshot...');
+    const snapshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 }).catch((e) => {
+      console.log('[HIDE-FLOW] Screenshot FAILED:', e.message);
+      return null;
+    });
+    console.log('[HIDE-FLOW] Screenshot done, len=', snapshot ? snapshot.length : 'null');
+    const created = await page
       .evaluate((imgData) => {
-        if (document.getElementById('__etm_hide_flow__')) return;
+        if (document.getElementById('__etm_hide_flow__')) return 'already-existed';
         var overlay = document.createElement('div');
         overlay.id = '__etm_hide_flow__';
         overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0b0b0d;';
@@ -1891,16 +1896,22 @@ app.post('/insert-script-step', async (req, res) => {
           overlay.style.backgroundRepeat = 'no-repeat';
         }
         document.body.appendChild(overlay);
+        return document.getElementById('__etm_hide_flow__') ? 'created' : 'append-failed';
       }, snapshot)
-      .catch(() => {});
+      .catch((e) => 'evaluate-threw: ' + e.message);
+    console.log('[HIDE-FLOW] Overlay creation result:', created);
   };
-  const revealFlow = () =>
-    page
+  const revealFlow = () => {
+    console.log('[REVEAL-FLOW] Removing overlay...');
+    return page
       .evaluate(() => {
         var s = document.getElementById('__etm_hide_flow__');
         if (s) s.remove();
+        return s ? 'removed' : 'was-not-there';
       })
-      .catch(() => {});
+      .then((r) => console.log('[REVEAL-FLOW] Result:', r))
+      .catch((e) => console.log('[REVEAL-FLOW] Error:', e.message));
+  };
 
   try {
     await hideFlow();
@@ -2110,12 +2121,25 @@ app.post('/insert-script-step', async (req, res) => {
     // moved on while the modal was still open - which then got exposed to
     // the chatter once the cover was lifted at the end. Both budgets below
     // are now much more generous.
+    // CONFIRMED LIVE (root cause, finally pinned down via /debug-eval): the
+    // exact match ('hinzufügen' === ...) NEVER succeeded, not even once -
+    // every earlier "it worked" observation this session was actually a
+    // manual click through Claude-in-Chrome, not this code. A live
+    // substring probe (indexOf('hinzuf')) found the real button
+    // instantly, on the exact same page, in the exact same state, where
+    // the exact-match version found zero matches - meaning the "ü" this
+    // file's === comparison expects and the "ü" actually in the DOM's
+    // textContent are almost certainly two different Unicode
+    // representations of the same-looking glyph (precomposed vs. a
+    // combining-character sequence), which render identically but are
+    // never === equal. Matching on the ASCII-only prefix "hinzuf" sidesteps
+    // the whole ambiguity instead of trying to get the umlaut byte-exact.
     await page.waitForFunction(
       () => {
         var candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
         return candidates.some(function (el) {
           var txt = (el.textContent || '').trim().toLowerCase();
-          return (txt === 'hinzufügen' || txt === 'hinzufuegen' || txt === 'add') && el.offsetParent !== null;
+          return (txt.indexOf('hinzuf') !== -1 || txt === 'add') && el.offsetParent !== null;
         });
       },
       { timeout: 10000 }
@@ -2127,7 +2151,7 @@ app.post('/insert-script-step', async (req, res) => {
         var candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
         var matches = candidates.filter(function (el) {
           var txt = (el.textContent || '').trim().toLowerCase();
-          return (txt === 'hinzufügen' || txt === 'hinzufuegen' || txt === 'add') && el.offsetParent !== null;
+          return (txt.indexOf('hinzuf') !== -1 || txt === 'add') && el.offsetParent !== null;
         });
         if (!matches.length) return false;
         matches.sort(function (a, b) {
