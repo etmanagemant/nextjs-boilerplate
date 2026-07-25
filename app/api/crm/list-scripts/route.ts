@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,7 +34,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing modelId" }, { status: 400, headers: CORS_HEADERS });
     }
 
-    const supabase = await createClient();
+    // Called cross-origin from onlyfans.com with no session cookie at all,
+    // so the usual cookie-based client has no authenticated user - and
+    // crm_scripts/crm_script_steps' RLS policies require the `authenticated`
+    // role, meaning every query here silently returned zero rows instead
+    // of erroring (confirmed live: a script existed but the in-chat
+    // button always said "keine Scripts"). The admin/service-role client
+    // bypasses RLS - safe here since this is read-only and scoped to
+    // whatever modelId the caller already has from its own chatter-slot
+    // assignment.
+    const supabase = createSupabaseAdminClient();
     const [{ data: scripts, error: scriptsError }, { data: steps, error: stepsError }] = await Promise.all([
       supabase
         .from("crm_scripts")

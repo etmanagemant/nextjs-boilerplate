@@ -130,8 +130,15 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
                     }`}
                   >
                     {item.thumbnailUrl ? (
+                      // Proxied through our backend - OnlyFans' thumbnail
+                      // URLs are IP-locked to the VPS itself, so loading
+                      // them directly here would just 403.
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.thumbnailUrl} alt={item.label} className="w-full h-full object-cover" />
+                      <img
+                        src={`/api/crm/vault-thumbnail?url=${encodeURIComponent(item.thumbnailUrl)}`}
+                        alt={item.label}
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
                       <div className="w-full h-full bg-[#050505] flex items-center justify-center text-[10px] text-slate-500 p-1 text-center">
                         {item.label}

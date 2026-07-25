@@ -705,9 +705,15 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
     var btn = document.createElement('button');
     btn.id = BTN_ID;
     btn.type = 'button';
-    btn.className = 'g-btn m-with-round-hover m-icon m-icon-only m-gray m-sm-size has-tooltip';
+    btn.className = 'g-btn m-with-round-hover m-icon m-icon-only m-sm-size has-tooltip';
     btn.setAttribute('aria-label', 'Script Vault');
-    btn.style.cssText = 'font-size:15px;line-height:1;';
+    // Branded gold badge instead of blending in with OnlyFans' own plain
+    // gray icon row - stands out as "our" tool at a glance.
+    btn.style.cssText =
+      'font-size:15px;line-height:1;background:linear-gradient(180deg,#E5C158,#9C7A3D);border-radius:50%;' +
+      'box-shadow:0 0 6px rgba(201,168,106,0.7);transition:transform .15s ease,box-shadow .15s ease;';
+    btn.onmouseenter = function() { btn.style.transform = 'scale(1.08)'; btn.style.boxShadow = '0 0 10px rgba(229,193,88,0.9)'; };
+    btn.onmouseleave = function() { btn.style.transform = 'scale(1)'; btn.style.boxShadow = '0 0 6px rgba(201,168,106,0.7)'; };
     btn.textContent = String.fromCodePoint(128220);
     btn.addEventListener('click', function(e) {
       e.preventDefault();
@@ -2446,6 +2452,34 @@ app.post('/vault-media', async (req, res) => {
   } catch (error) {
     console.error('[VAULT-MEDIA] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message, items: [], lists: [] });
+  }
+});
+
+// Confirmed live: the thumbnail URLs /vault-media returns are AWS
+// CloudFront-signed with an IpAddress condition locked to THIS VPS's own
+// outbound IP (OnlyFans' anti-hotlinking measure) - loading them
+// directly in the admin's own browser gets rejected since the request
+// doesn't come from that IP. This proxies the actual image fetch through
+// the VPS itself (Node's own fetch, not the browser's), so the request
+// really does originate from the allowed IP, then streams the bytes
+// back unchanged.
+app.get('/vault-thumbnail', async (req, res) => {
+  const url = req.query.url;
+  if (!url || typeof url !== 'string' || !url.startsWith('https://cdn')) {
+    return res.status(400).json({ error: 'Missing or invalid url' });
+  }
+  try {
+    const upstream = await fetch(url);
+    if (!upstream.ok) {
+      return res.status(upstream.status).end();
+    }
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.end(buffer);
+  } catch (error) {
+    console.error('[VAULT-THUMBNAIL] Error:', error.message);
+    res.status(502).end();
   }
 });
 
