@@ -1938,6 +1938,48 @@ app.post('/vault-picker-selection', async (req, res) => {
   }
 });
 
+// Navigates a chatter's slot to the real OnlyFans chat list, so
+// ChatPickerModal's embedded VNC feed opens directly on it - the admin
+// searches by a name they type themselves and clicks the real contact,
+// instead of blind-guessing a nickname string that has to exactly match
+// what /upload-to-vault-fan later searches for.
+app.post('/chat-picker-goto', async (req, res) => {
+  try {
+    const { userId, modelId } = req.body || {};
+    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
+    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+    await slot.page.goto('https://onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('[CHAT-PICKER-GOTO] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// Reads back whatever text is currently sitting in the chat-list search
+// box (confirmed live selector, same one /upload-to-vault-fan itself
+// types into) - the admin searches + clicks the right chat live in the
+// picker, and this just captures the exact query that found it, so the
+// same string reliably re-finds the same chat later.
+app.post('/chat-picker-selection', async (req, res) => {
+  try {
+    const { userId, modelId } = req.body || {};
+    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
+    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+
+    const label = await slot.page.evaluate(() => {
+      var input = document.querySelector('input[autocomplete="chats-search-input"]');
+      return input ? input.value : '';
+    });
+    res.json({ status: 'success', label: (label || '').trim() });
+  } catch (error) {
+    console.error('[CHAT-PICKER-SELECTION] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message, label: '' });
+  }
+});
+
 // Uploads a local file into a model's OnlyFans Vault indirectly - OnlyFans
 // has no direct bulk-upload-to-vault feature the team uses; the workaround
 // (explained by the user) is sending the file as a priced message to a

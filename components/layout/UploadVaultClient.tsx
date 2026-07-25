@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+import { ChatPickerModal } from "./ChatPickerModal";
 
 interface ConnectedModel {
   id: string;
@@ -49,6 +50,7 @@ export default function UploadVaultClient({
   const [isSending, setIsSending] = useState(false);
   const [labelDraft, setLabelDraft] = useState("");
   const [savingLabel, setSavingLabel] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -65,11 +67,13 @@ export default function UploadVaultClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSetVaultFanLabel = async () => {
-    if (!activeModelId || !labelDraft.trim()) return;
+  const handleSetVaultFanLabel = async (labelOverride?: string) => {
+    const rawLabel = labelOverride ?? labelDraft;
+    if (!activeModelId || !rawLabel.trim()) return;
     setSavingLabel(true);
     try {
-      const label = labelDraft.trim();
+      const label = rawLabel.trim();
+      setLabelDraft(label);
       const { error } = await supabase
         .from("crm_vault_fan_mapping")
         .upsert({ model_id: activeModelId, vault_fan_label: label, updated_at: new Date().toISOString() });
@@ -177,28 +181,48 @@ export default function UploadVaultClient({
           {activeModelId && (
             <section className="mb-6 bg-black/40 p-4 rounded-xl border border-[#9C7A3D]/20">
               <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
-                Name des Vault-Fans für dieses Model (so wie er im OnlyFans-Chat umbenannt wurde, z.B. "Vault")
+                Vault-Fan für dieses Model
               </label>
-              <div className="flex gap-2 max-w-md">
-                <input
-                  type="text"
-                  value={labelDraft}
-                  onChange={(e) => setLabelDraft(e.target.value)}
-                  placeholder="Vault"
-                  className="flex-1 bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
-                />
+              <div className="flex items-center gap-3 flex-wrap">
                 <button
-                  onClick={handleSetVaultFanLabel}
-                  disabled={savingLabel || !labelDraft.trim()}
+                  onClick={() => setPickerOpen(true)}
                   className="px-4 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded text-xs uppercase disabled:opacity-40"
                 >
-                  {savingLabel ? "..." : "✓ Speichern"}
+                  🔍 Live im Chat auswählen
                 </button>
+                {vaultFanLabel && (
+                  <span className="text-xs text-slate-400">Aktuell: "{vaultFanLabel}"</span>
+                )}
               </div>
-              {vaultFanLabel && (
-                <p className="text-[10px] text-slate-500 mt-2">Aktuell gespeichert: "{vaultFanLabel}"</p>
-              )}
+
+              <details className="mt-3">
+                <summary className="text-[10px] text-slate-500 cursor-pointer hover:text-slate-400">Manuell eintragen</summary>
+                <div className="flex gap-2 max-w-md mt-2">
+                  <input
+                    type="text"
+                    value={labelDraft}
+                    onChange={(e) => setLabelDraft(e.target.value)}
+                    placeholder="Vault"
+                    className="flex-1 bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
+                  />
+                  <button
+                    onClick={() => handleSetVaultFanLabel()}
+                    disabled={savingLabel || !labelDraft.trim()}
+                    className="px-4 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded text-xs uppercase disabled:opacity-40"
+                  >
+                    {savingLabel ? "..." : "✓ Speichern"}
+                  </button>
+                </div>
+              </details>
             </section>
+          )}
+
+          {pickerOpen && activeModelId && (
+            <ChatPickerModal
+              modelId={activeModelId}
+              onSelect={(label) => handleSetVaultFanLabel(label)}
+              onClose={() => setPickerOpen(false)}
+            />
           )}
 
           <section
