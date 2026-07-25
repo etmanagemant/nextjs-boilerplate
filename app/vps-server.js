@@ -166,6 +166,13 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
     style.textContent = '.b-chat__messages { padding-bottom: 90px !important; } ' +
       '* { scrollbar-width: none !important; } ' +
       '*::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; } ' +
+      // The visible vertical line through the chat view, reported live and
+      // confirmed via /debug-dom - it's the seam between
+      // .b-chats__conversations-list (the chat list, 395px) and its sibling
+      // .b-chats__conversations-content (the open thread), which meet
+      // exactly where the line sits. Stripping border and box-shadow since
+      // OnlyFans could be using either to draw the divider.
+      '.b-chats__conversations-list, .b-chats__conversations-content { border: none !important; box-shadow: none !important; } ' +
       // Confirmed live via /debug-dom: the chat conversation area
       // (.b-chats, inside <main>) only rendered 984px wide inside the
       // 1280px frame even after the sidebar/main gap fix - some max-width
