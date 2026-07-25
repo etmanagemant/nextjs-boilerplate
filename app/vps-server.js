@@ -166,6 +166,13 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
     style.textContent = '.b-chat__messages { padding-bottom: 90px !important; } ' +
       '* { scrollbar-width: none !important; } ' +
       '*::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; } ' +
+      // Confirmed live via /debug-dom: the chat conversation area
+      // (.b-chats, inside <main>) only rendered 984px wide inside the
+      // 1280px frame even after the sidebar/main gap fix - some max-width
+      // OnlyFans applies for readability on their own full-size layout,
+      // wasting ~232px on the right that the CRM's fixed 1280x800 video
+      // can't spare. Forcing it to fill <main> instead.
+      '.b-chats, .b-chats__conversations, .b-chats__conversations-list { width: 100% !important; max-width: 100% !important; } ' +
       // Stripping the sidebar labels' text (see the nav script) only clears
       // the text node - the item still occupies its original ~226px box,
       // confirmed live via /debug-dom, which read as "empty space where
