@@ -238,7 +238,17 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
       // in play. Forcing every plausible sizing property at once instead
       // of diagnosing each individually - .b-chats already fills <main>'s
       // own box (see above), so widening <main> itself is the last piece.
-      'main { margin-left: 0 !important; width: 100% !important; max-width: 100% !important; flex: 1 1 auto !important; }';
+      'main { margin-left: 0 !important; width: 100% !important; max-width: 100% !important; flex: 1 1 auto !important; outline: none !important; box-shadow: none !important; border: none !important; } ' +
+      // New hypothesis for the persistent line, precisely located at
+      // <main>'s own left edge (confirmed live: <main id="content"
+      // tabindex="-1">, which every previous fix scoped to .b-chats or
+      // .l-header never touched, since <main> is neither). tabindex="-1"
+      // means it's programmatically focusable, and SPAs commonly focus
+      // their main content on route change for accessibility - Chrome
+      // draws its own default focus ring on a focused element regardless
+      // of any CSS on that element's children or a differently-scoped
+      // sibling, which would explain surviving every fix so far.
+      'main:focus, main:focus-visible { outline: none !important; box-shadow: none !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
   if (document.head) inject();
