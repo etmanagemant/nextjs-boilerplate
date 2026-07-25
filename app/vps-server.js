@@ -480,88 +480,85 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
 
   function applyLabelsFromLog() {
     // sentLog is a *fresh* array from the server on every call (fetchLog
-    // runs every 4s), so per-entry "_used" flags never survive between
-    // calls - and logIdx starts at 0 every call too. The bug this fixes:
-    // an already-labeled bubble was being skipped via continue WITHOUT
-    // advancing logIdx past the entry it originally matched, so the next
-    // unlabeled bubble's search still started from the very beginning of
-    // the log and could re-match an earlier (wrong) entry - confirmed
-    // live: two "hallo" messages from the same sender ended up labeled
-    // with two different names. Fix: walk every bubble (labeled or not) to
-    // keep logIdx correctly positioned, only skip *creating* the label
-    // element for ones that already have it.
+    // runs every 4s), so logIdx starts at 0 every call too - stateless by
+    // design, re-derived from scratch each time rather than trusted to
+    // persist. EVERY message needs its own visible "gesendet von X",
+    // always - confirmed live, no suppression for repeats.
+    //
+    // Previously searched AHEAD through the remaining log for any text
+    // match, not just the entry at logIdx - this broke badly on real data:
+    // this test conversation has old bubbles ("test", "hallo") sent before
+    // the logging system even existed, mixed in with later genuinely-
+    // logged messages using the SAME short text. An old unlogged "test"
+    // bubble would match a much LATER real log entry for a different
+    // "test" message and consume it, leaving the actual later bubble with
+    // nothing to match - confirmed live: only the first several log
+    // entries ever got labeled, everything after silently got nothing.
+    // Matching strictly at logIdx only (never searching ahead) fixes this:
+    // a bubble that isn't the log's next expected entry just gets skipped
+    // without consuming anything, so unlogged junk bubbles interleaved
+    // anywhere no longer steal a later duplicate-text entry.
     var mine = document.querySelectorAll('.b-chat__message.m-from-me');
     var logIdx = 0;
-    // EVERY message needs its own visible "gesendet von X" - explicitly
-    // confirmed live after a previous attempt suppressed repeats on a
-    // same-sender streak, mistaking "labels render sloppily positioned"
-    // (the real complaint) for "too many labels shown." The fix for the
-    // actual complaint is the fallback-upgrade logic below, not hiding
-    // labels.
-    for (var i = 0; i < mine.length; i++) {
+    for (var i = 0; i < mine.length && logIdx < sentLog.length; i++) {
       var el = mine[i];
       var text = getBubbleText(el);
-      if (!text) continue;
-      for (var j = logIdx; j < sentLog.length; j++) {
-        if (sentLog[j].message_text === text) {
-          logIdx = j + 1;
-          var chatterName = sentLog[j].chatter_name;
+      if (!text || text !== sentLog[logIdx].message_text) continue;
+      var chatterName = sentLog[logIdx].chatter_name;
+      logIdx++;
 
-          // OnlyFans' own per-message timestamp is a bare <span> with no
-          // class (confirmed live via /debug-dom: <span title="">21:24
-          // </span>, wrapped in a ".b-chat__message__time" span alongside
-          // the read-receipt checkmark), so it can only be found by
-          // matching its text, not a selector. Live data showed EVERY
-          // rendered label using the fallback (block, below the message)
-          // styling, never the inline "time gesendet von X" one - OnlyFans
-          // renders the bubble before its timestamp/read-receipt finishes,
-          // so the very first scan after sending never finds a time span
-          // yet, and the old code treated any created label as permanent,
-          // so it could never upgrade once the real timestamp showed up
-          // moments later. Now a fallback label is marked and revisited on
-          // every scan - once a time span is found, the fallback is
-          // replaced with the proper inline placement instead of staying
-          // wrong forever.
-          var existingLabel = el.querySelector('.' + LABEL_CLASS);
-          var isFallback = existingLabel && existingLabel.dataset.etmFallback === '1';
-          if (existingLabel && !isFallback) break;
+      // OnlyFans' own per-message timestamp is a bare <span> with no
+      // class (confirmed live via /debug-dom: <span title="">21:24
+      // </span>, wrapped in a ".b-chat__message__time" span alongside
+      // the read-receipt checkmark), so it can only be found by
+      // matching its text, not a selector. Live data showed EVERY
+      // rendered label using the fallback (block, below the message)
+      // styling, never the inline "time gesendet von X" one - OnlyFans
+      // renders the bubble before its timestamp/read-receipt finishes,
+      // so the very first scan after sending never finds a time span
+      // yet, and the old code treated any created label as permanent,
+      // so it could never upgrade once the real timestamp showed up
+      // moments later. Now a fallback label is marked and revisited on
+      // every scan - once a time span is found, the fallback is
+      // replaced with the proper inline placement instead of staying
+      // wrong forever.
+      var existingLabel = el.querySelector('.' + LABEL_CLASS);
+      var isFallback = existingLabel && existingLabel.dataset.etmFallback === '1';
+      if (existingLabel && !isFallback) continue;
 
-          var timeSpan = null;
-          var spans = el.querySelectorAll('span');
-          for (var s = 0; s < spans.length; s++) {
-            if (/^\s*\d{1,2}[:.]\d{2}\s*(am|pm)?\s*$/i.test(spans[s].textContent)) {
-              timeSpan = spans[s];
-              break;
-            }
-          }
-          // No timestamp yet and a fallback is already showing - leave it
-          // as-is rather than tearing it down and rebuilding it identically
-          // every 4s.
-          if (!timeSpan && existingLabel) break;
-
-          if (existingLabel) existingLabel.remove();
-          var tag = document.createElement('span');
-          tag.className = LABEL_CLASS;
-          tag.textContent = 'gesendet von ' + chatterName;
-          tag.style.cssText = 'font-size:10px;opacity:0.55;color:inherit;white-space:nowrap;margin-left:4px;';
-          if (timeSpan && timeSpan.parentElement) {
-            timeSpan.parentElement.style.display = 'flex';
-            timeSpan.parentElement.style.alignItems = 'center';
-            timeSpan.insertAdjacentElement('afterend', tag);
-          } else {
-            // Some messages render with the timestamp hidden until hover
-            // (the m-time-hidden modifier seen live) - fall back to
-            // anchoring on the message container itself rather than
-            // silently dropping the label, and mark it so a later scan
-            // can still upgrade it once/if a real timestamp appears.
-            tag.dataset.etmFallback = '1';
-            tag.style.display = 'block';
-            tag.style.textAlign = 'right';
-            tag.style.marginTop = '2px';
-            el.appendChild(tag);
-          }
+      var timeSpan = null;
+      var spans = el.querySelectorAll('span');
+      for (var s = 0; s < spans.length; s++) {
+        if (/^\s*\d{1,2}[:.]\d{2}\s*(am|pm)?\s*$/i.test(spans[s].textContent)) {
+          timeSpan = spans[s];
           break;
         }
+      }
+      // No timestamp yet and a fallback is already showing - leave it
+      // as-is rather than tearing it down and rebuilding it identically
+      // every 4s.
+      if (!timeSpan && existingLabel) continue;
+
+      if (existingLabel) existingLabel.remove();
+      var tag = document.createElement('span');
+      tag.className = LABEL_CLASS;
+      tag.textContent = 'gesendet von ' + chatterName;
+      tag.style.cssText = 'font-size:10px;opacity:0.55;color:inherit;white-space:nowrap;margin-left:4px;';
+      if (timeSpan && timeSpan.parentElement) {
+        timeSpan.parentElement.style.display = 'flex';
+        timeSpan.parentElement.style.alignItems = 'center';
+        timeSpan.insertAdjacentElement('afterend', tag);
+      } else {
+        // Some messages render with the timestamp hidden until hover
+        // (the m-time-hidden modifier seen live) - fall back to
+        // anchoring on the message container itself rather than
+        // silently dropping the label, and mark it so a later scan
+        // can still upgrade it once/if a real timestamp appears.
+        tag.dataset.etmFallback = '1';
+        tag.style.display = 'block';
+        tag.style.textAlign = 'right';
+        tag.style.marginTop = '2px';
+        el.appendChild(tag);
       }
     }
   }
