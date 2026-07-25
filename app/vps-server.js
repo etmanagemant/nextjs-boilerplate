@@ -505,61 +505,31 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
       var text = getBubbleText(el);
       if (!text || text !== sentLog[logIdx].message_text) continue;
       var chatterName = sentLog[logIdx].chatter_name;
+      var sentAt = sentLog[logIdx].sent_at;
       logIdx++;
+      if (el.querySelector('.' + LABEL_CLASS)) continue;
 
-      // OnlyFans' own per-message timestamp is a bare <span> with no
-      // class (confirmed live via /debug-dom: <span title="">21:24
-      // </span>, wrapped in a ".b-chat__message__time" span alongside
-      // the read-receipt checkmark), so it can only be found by
-      // matching its text, not a selector. Live data showed EVERY
-      // rendered label using the fallback (block, below the message)
-      // styling, never the inline "time gesendet von X" one - OnlyFans
-      // renders the bubble before its timestamp/read-receipt finishes,
-      // so the very first scan after sending never finds a time span
-      // yet, and the old code treated any created label as permanent,
-      // so it could never upgrade once the real timestamp showed up
-      // moments later. Now a fallback label is marked and revisited on
-      // every scan - once a time span is found, the fallback is
-      // replaced with the proper inline placement instead of staying
-      // wrong forever.
-      var existingLabel = el.querySelector('.' + LABEL_CLASS);
-      var isFallback = existingLabel && existingLabel.dataset.etmFallback === '1';
-      if (existingLabel && !isFallback) continue;
-
-      var timeSpan = null;
-      var spans = el.querySelectorAll('span');
-      for (var s = 0; s < spans.length; s++) {
-        if (/^\s*\d{1,2}[:.]\d{2}\s*(am|pm)?\s*$/i.test(spans[s].textContent)) {
-          timeSpan = spans[s];
-          break;
-        }
-      }
-      // No timestamp yet and a fallback is already showing - leave it
-      // as-is rather than tearing it down and rebuilding it identically
-      // every 4s.
-      if (!timeSpan && existingLabel) continue;
-
-      if (existingLabel) existingLabel.remove();
-      var tag = document.createElement('span');
+      // Previously tried to find OnlyFans' own per-message timestamp span
+      // (a bare, class-less <span>) and insert the label right after it -
+      // fragile in practice: confirmed live it consistently failed to find
+      // a match (regex verified correct in isolation, span verified
+      // present via direct DOM inspection, yet every single label still
+      // fell back), for a reason never pinned down despite repeated
+      // attempts. The log already has this message's own real send time
+      // (sentAt, from Supabase) - rendering "HH:MM gesendet von X" as one
+      // self-contained element removes the dependency on finding and
+      // pairing with OnlyFans' own DOM entirely, guaranteeing the exact
+      // one-line format every time instead of sometimes falling back to a
+      // stacked layout.
+      var timeStr = '';
+      try {
+        timeStr = new Date(sentAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {}
+      var tag = document.createElement('div');
       tag.className = LABEL_CLASS;
-      tag.textContent = 'gesendet von ' + chatterName;
-      tag.style.cssText = 'font-size:10px;opacity:0.55;color:inherit;white-space:nowrap;margin-left:4px;';
-      if (timeSpan && timeSpan.parentElement) {
-        timeSpan.parentElement.style.display = 'flex';
-        timeSpan.parentElement.style.alignItems = 'center';
-        timeSpan.insertAdjacentElement('afterend', tag);
-      } else {
-        // Some messages render with the timestamp hidden until hover
-        // (the m-time-hidden modifier seen live) - fall back to
-        // anchoring on the message container itself rather than
-        // silently dropping the label, and mark it so a later scan
-        // can still upgrade it once/if a real timestamp appears.
-        tag.dataset.etmFallback = '1';
-        tag.style.display = 'block';
-        tag.style.textAlign = 'right';
-        tag.style.marginTop = '2px';
-        el.appendChild(tag);
-      }
+      tag.textContent = (timeStr ? timeStr + ' ' : '') + 'gesendet von ' + chatterName;
+      tag.style.cssText = 'font-size:10px;opacity:0.55;color:inherit;white-space:nowrap;display:block;text-align:right;margin-top:2px;';
+      el.appendChild(tag);
     }
   }
 

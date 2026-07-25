@@ -317,18 +317,18 @@ export function OnlyFansViewer({
               anywhere, with nowhere useful to paste into. */}
           {currentFan && (
             // Positioned to match OnlyFans' own message compose box, not
-            // centered on the whole 1280x800 frame - confirmed via a live
-            // DOM measurement (the compose textarea sits at left 35.9%-
-            // 81.9%, top 86.25% of the frame, not full-width). Re-measured
-            // after fixing the sidebar/main-content gap elsewhere this
-            // session - that fix shifted all of OnlyFans' own content ~216px
-            // left, which moved the real compose box out from under the
-            // old hardcoded 75% center without anything here changing.
-            // reserveOverlaySpace (VPS-side) pads the real message list so
-            // this never covers actual chat content.
+            // centered on the whole 1280x800 frame - re-measured again
+            // after widening <main> to fill the full frame (VPS-side, this
+            // session): the compose box itself grew wider along with
+            // everything else, so this needed a second recalibration on
+            // top of the first (left 35.9%-81.9% -> now left 35.9%-98.75%,
+            // center ~67.3%, width ~63% of the 1280x800 frame). Explicitly
+            // requested to span the compose field's full width, not just
+            // part of it. reserveOverlaySpace (VPS-side) pads the real
+            // message list so this never covers actual chat content.
             <div
               className="absolute z-20 flex flex-col items-center gap-1.5"
-              style={{ left: "58.9%", bottom: "14%", transform: "translateX(-50%)", width: "46%" }}
+              style={{ left: "67.3%", bottom: "14%", transform: "translateX(-50%)", width: "63%" }}
             >
               {emojiPickerOpen && (
                 <div className="relative w-full">
