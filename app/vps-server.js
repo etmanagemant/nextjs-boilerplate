@@ -1819,39 +1819,69 @@ app.post('/insert-script-step', async (req, res) => {
     if (!opened) return res.json({ status: 'partial', message: 'Text eingefügt, Tresor-Button nicht gefunden' });
     await new Promise((r) => setTimeout(r, 800));
 
-    // Click each picked media item by its label - the picker (VaultPickerModal)
-    // already captured these labels via live click-selection in the real
-    // Vault, so this re-opens the in-chat attach modal and searches for each
-    // one by name rather than guessing a single generic search term.
-    // UNVERIFIED: couldn't confirm the result-click selector live (empty
-    // test vault this session) - best-effort common pattern.
+    // Click each picked media item. The gallery picker (VaultGalleryPicker)
+    // now hands over the REAL thumbnail URL for each item (sniffed
+    // straight from OnlyFans' own Vault API response) - matching the
+    // attach modal's own thumbnails against that exact URL is far more
+    // reliable than clicking "the first result" (which is exactly the
+    // class of bug that sent an Upload Vault file to the wrong fan
+    // before the fan-ID fix). Falls back to "first result after a label
+    // search" only for older/manual media_refs with no thumbnailUrl.
+    // UNVERIFIED: couldn't confirm the attach modal's own thumbnail
+    // selector live against real content yet - needs a live pass.
     let pickedCount = 0;
     for (const item of items) {
-      const searched = await page.evaluate(() => {
-        var input = document.querySelector('input[name="media_vault_search"]');
-        if (!input) return false;
-        input.focus();
-        input.value = '';
-        return true;
-      });
-      if (searched) {
-        await page.keyboard.type(item.label);
-        await new Promise((r) => setTimeout(r, 1000));
-      }
+      let picked = false;
 
-      const picked = await page.evaluate(() => {
-        var candidates = document.querySelectorAll(
-          '[class*="media-item" i] img, [class*="thumb" i] img, [class*="MediaItem" i], [class*="vault"] [class*="item" i]'
-        );
-        for (var i = 0; i < candidates.length; i++) {
-          var el = candidates[i].closest('[class*="item" i]') || candidates[i];
-          if (el && el.offsetParent !== null) {
+      if (item.thumbnailUrl) {
+        for (let attempt = 0; attempt < 4 && !picked; attempt++) {
+          picked = await page.evaluate((url) => {
+            var img = Array.from(document.querySelectorAll('img')).find(function (i) { return i.src === url; });
+            if (!img) return false;
+            var el = img.closest('[class*="item" i]') || img;
             el.click();
             return true;
+          }, item.thumbnailUrl);
+          if (!picked) {
+            // Scroll the attach modal's own list to load more before
+            // giving up - best-effort, container selector unconfirmed.
+            await page.evaluate(() => {
+              var container = document.querySelector('[class*="vault" i] [class*="list" i], [class*="vault" i] [class*="scroll" i]');
+              if (container) container.scrollTop += container.clientHeight;
+            });
+            await new Promise((r) => setTimeout(r, 700));
           }
         }
-        return false;
-      });
+      }
+
+      if (!picked) {
+        const searched = await page.evaluate(() => {
+          var input = document.querySelector('input[name="media_vault_search"]');
+          if (!input) return false;
+          input.focus();
+          input.value = '';
+          return true;
+        });
+        if (searched) {
+          await page.keyboard.type(item.label);
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+
+        picked = await page.evaluate(() => {
+          var candidates = document.querySelectorAll(
+            '[class*="media-item" i] img, [class*="thumb" i] img, [class*="MediaItem" i], [class*="vault"] [class*="item" i]'
+          );
+          for (var i = 0; i < candidates.length; i++) {
+            var el = candidates[i].closest('[class*="item" i]') || candidates[i];
+            if (el && el.offsetParent !== null) {
+              el.click();
+              return true;
+            }
+          }
+          return false;
+        });
+      }
+
       if (picked) pickedCount++;
       await new Promise((r) => setTimeout(r, 400));
     }

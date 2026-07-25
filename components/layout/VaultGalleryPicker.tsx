@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 interface MediaRef {
   label: string;
   thumbnailUrl?: string;
+  id?: string;
 }
 
 interface VaultList {

@@ -7,6 +7,7 @@ import { VaultGalleryPicker } from "@/components/layout/VaultGalleryPicker";
 interface MediaRef {
   label: string;
   thumbnailUrl?: string;
+  id?: string;
 }
 
 interface ScriptStep {
