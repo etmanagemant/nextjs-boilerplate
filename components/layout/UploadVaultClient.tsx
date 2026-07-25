@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
-import { ChatPickerModal } from "./ChatPickerModal";
+import { ChatSearchPicker } from "./ChatSearchPicker";
 
 interface ConnectedModel {
   id: string;
@@ -183,15 +183,22 @@ export default function UploadVaultClient({
               <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
                 Vault-Fan für dieses Model
               </label>
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap relative">
                 <button
-                  onClick={() => setPickerOpen(true)}
+                  onClick={() => setPickerOpen((v) => !v)}
                   className="px-4 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded text-xs uppercase disabled:opacity-40"
                 >
-                  🔍 Live im Chat auswählen
+                  🔍 Im Chat suchen
                 </button>
                 {vaultFanLabel && (
                   <span className="text-xs text-slate-400">Aktuell: "{vaultFanLabel}"</span>
+                )}
+                {pickerOpen && activeModelId && (
+                  <ChatSearchPicker
+                    modelId={activeModelId}
+                    onSelect={(label) => handleSetVaultFanLabel(label)}
+                    onClose={() => setPickerOpen(false)}
+                  />
                 )}
               </div>
 
@@ -215,14 +222,6 @@ export default function UploadVaultClient({
                 </div>
               </details>
             </section>
-          )}
-
-          {pickerOpen && activeModelId && (
-            <ChatPickerModal
-              modelId={activeModelId}
-              onSelect={(label) => handleSetVaultFanLabel(label)}
-              onClose={() => setPickerOpen(false)}
-            />
           )}
 
           <section

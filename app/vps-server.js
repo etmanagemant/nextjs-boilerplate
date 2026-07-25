@@ -1938,45 +1938,64 @@ app.post('/vault-picker-selection', async (req, res) => {
   }
 });
 
-// Navigates a chatter's slot to the real OnlyFans chat list, so
-// ChatPickerModal's embedded VNC feed opens directly on it - the admin
-// searches by a name they type themselves and clicks the real contact,
-// instead of blind-guessing a nickname string that has to exactly match
-// what /upload-to-vault-fan later searches for.
-app.post('/chat-picker-goto', async (req, res) => {
+// Lightweight replacement for an earlier VNC-embedded chat picker - the
+// admin explicitly asked for a plain searchable list built into our own
+// UI (overlay under the button), not a separate window showing the
+// entire live OnlyFans interface. Runs on the model's own main session
+// (modelSessions), the same one /upload-to-vault-fan itself sends
+// through - not a chatter slot, so this never competes with an active
+// chatter for one of the 4 limited slots. Types the query into OnlyFans'
+// own chat-list search box and scrapes back the visible result names;
+// no VNC/canvas involved at all.
+app.post('/chat-search', async (req, res) => {
   try {
-    const { userId, modelId } = req.body || {};
-    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
-    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
-    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
-    await slot.page.goto('https://onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
-    res.json({ status: 'success' });
-  } catch (error) {
-    console.error('[CHAT-PICKER-GOTO] Error:', error.message);
-    res.status(200).json({ status: 'error', error: error.message });
-  }
-});
+    const { modelId, query } = req.body || {};
+    if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+    const session = modelSessions[modelId];
+    if (!session || !session.page) return res.json({ status: 'no_session', items: [] });
+    const page = session.page;
 
-// Reads back whatever text is currently sitting in the chat-list search
-// box (confirmed live selector, same one /upload-to-vault-fan itself
-// types into) - the admin searches + clicks the right chat live in the
-// picker, and this just captures the exact query that found it, so the
-// same string reliably re-finds the same chat later.
-app.post('/chat-picker-selection', async (req, res) => {
-  try {
-    const { userId, modelId } = req.body || {};
-    if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
-    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
-    if (!slot || !slot.page) return res.json({ status: 'no_slot' });
+    if (!page.url().includes('/my/chats')) {
+      await page.goto('https://onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await new Promise((r) => setTimeout(r, 800));
+    }
 
-    const label = await slot.page.evaluate(() => {
+    const focused = await page.evaluate(() => {
       var input = document.querySelector('input[autocomplete="chats-search-input"]');
-      return input ? input.value : '';
+      if (!input) return false;
+      input.focus();
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
     });
-    res.json({ status: 'success', label: (label || '').trim() });
+    if (!focused) return res.json({ status: 'error', error: 'Chat-Suche nicht gefunden', items: [] });
+
+    if (query) {
+      await page.keyboard.type(String(query));
+      await new Promise((r) => setTimeout(r, 900));
+    } else {
+      await new Promise((r) => setTimeout(r, 300));
+    }
+
+    // UNVERIFIED: best-effort name-element selector inside each chat-list
+    // item - falls back to the first line of the item's own text if no
+    // dedicated name element matches.
+    const items = await page.evaluate(() => {
+      var links = document.querySelectorAll('.b-chats__item__link');
+      var out = [];
+      for (var i = 0; i < links.length && out.length < 20; i++) {
+        var el = links[i];
+        var nameEl = el.querySelector('[class*="user-name" i], [class*="username" i], [class*="item__name" i]');
+        var label = nameEl ? nameEl.textContent.trim() : ((el.innerText || '').split('\n')[0] || '').trim();
+        if (label) out.push({ label: label });
+      }
+      return out;
+    });
+
+    res.json({ status: 'success', items });
   } catch (error) {
-    console.error('[CHAT-PICKER-SELECTION] Error:', error.message);
-    res.status(200).json({ status: 'error', error: error.message, label: '' });
+    console.error('[CHAT-SEARCH] Error:', error.message);
+    res.status(200).json({ status: 'error', error: error.message, items: [] });
   }
 });
 

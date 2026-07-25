@@ -6,12 +6,12 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Reads back whatever text is currently in the caller's chatter slot's
- * chat-list search box - the admin searches + clicks the right contact
- * live in ChatPickerModal, then this captures the exact query string that
- * found it, so /upload-to-vault-fan can reliably re-find the same chat
- * later by typing the same thing.
- * POST /api/crm/chat-picker/selection  Body: { modelId }
+ * Searches the model's real OnlyFans chat list for a name and returns
+ * the matching contact names - drives the actual chat-list search box
+ * server-side and scrapes the results, so the admin gets a plain,
+ * searchable list in our own UI instead of a separate embedded live
+ * OnlyFans view.
+ * POST /api/crm/chat-search  Body: { modelId, query }
  */
 export async function POST(req: NextRequest) {
   try {
@@ -19,14 +19,14 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const { modelId } = await req.json();
+    const { modelId, query } = await req.json();
     if (!modelId) {
       return NextResponse.json({ error: "Missing modelId" }, { status: 400 });
     }
 
-    const vpsRes = await vpsFetch("/chat-picker-selection", {
+    const vpsRes = await vpsFetch("/chat-search", {
       method: "POST",
-      body: JSON.stringify({ userId: user.id, modelId }),
+      body: JSON.stringify({ modelId, query: query || "" }),
     });
     if (!vpsRes.ok) {
       return NextResponse.json({ error: "VPS unreachable" }, { status: 502 });
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const data = await vpsRes.json();
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("[CHAT-PICKER-SELECTION] Error:", error.message);
+    console.error("[CHAT-SEARCH] Error:", error.message);
     return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
   }
 }
