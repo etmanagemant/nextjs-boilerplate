@@ -212,7 +212,13 @@ const RESERVE_OVERLAY_SPACE_SCRIPT = `
       // self-correcting "left" JS logic already masks the position part,
       // but never touched the width main lost to it - removing the margin
       // outright fixes both at once.
-      'main { margin-left: 0 !important; }';
+      // margin-left:0 (above) fixed <main>'s position but NOT its width -
+      // confirmed live it stayed capped at 984px even with margin
+      // confirmed 0, so a separate max-width/flex-basis constraint is also
+      // in play. Forcing every plausible sizing property at once instead
+      // of diagnosing each individually - .b-chats already fills <main>'s
+      // own box (see above), so widening <main> itself is the last piece.
+      'main { margin-left: 0 !important; width: 100% !important; max-width: 100% !important; flex: 1 1 auto !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
   if (document.head) inject();
