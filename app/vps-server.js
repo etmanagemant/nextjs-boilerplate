@@ -1177,6 +1177,46 @@ async function ensureSlotBrowser(slot, modelId, role, chatterName, userId) {
     console.warn(`[SLOT ${slot.id}] Navigation warning:`, e.message);
   }
 
+  // CONFIRMED LIVE: right after a VPS restart, this whole function can run
+  // BEFORE autoReconnectAllModels() finishes restoring the main session -
+  // modelSessions[modelId] is still undefined at the exact moment above,
+  // so the live-cookie overlay block never runs at all (silently, nothing
+  // to overlay), and the slot is left on the raw login page. Nothing else
+  // was re-triggering ensureSlotBrowser for this slot afterwards (the
+  // reuse-check above only runs on a LATER call, which a chatter's tab
+  // doesn't necessarily make again soon), so this self-heals inline
+  // instead of waiting on that: give the main session a few seconds to
+  // finish restoring, then redo the overlay + reload once it has.
+  let slotLoginState = await getLoginState(page);
+  for (let attempt = 0; attempt < 5 && !slotLoginState.isLoggedIn; attempt++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const freshMain = modelSessions[modelId];
+    if (!freshMain) continue;
+    const mainState = await getLoginState(freshMain.page);
+    if (!mainState.isLoggedIn) continue;
+    try {
+      const liveCookies = await freshMain.page.cookies();
+      const cleaned = liveCookies.map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path }));
+      for (const cookie of cleaned) {
+        await page.setCookie(cookie).catch(() => {});
+      }
+      // CONFIRMED LIVE: page.reload() just reloads whatever URL the page
+      // is CURRENTLY sitting at - by this point that's the login page
+      // itself (OnlyFans already redirected there on the earlier failed
+      // attempt), and reloading a static login form doesn't re-run
+      // whatever client-side check would notice the cookie jar is now
+      // valid and bounce forward. Navigating to /my/chats again re-runs
+      // that auth gate fresh, exactly like the very first attempt did.
+      await page.goto('https://onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    } catch (e) {
+      console.warn(`[SLOT ${slot.id}] Self-heal retry ${attempt + 1} failed:`, e.message);
+    }
+    slotLoginState = await getLoginState(page);
+  }
+  if (!slotLoginState.isLoggedIn) {
+    console.warn(`[SLOT ${slot.id}] Still not logged in after self-heal retries`);
+  }
+
   slot.browser = browser;
   slot.page = page;
   slot.modelId = modelId;
@@ -1345,6 +1385,19 @@ async function getOrCreateSession(modelId, restoreCookies) {
     }
   }
 
+  if (restoreCookies) {
+    // CONFIRMED LIVE: OnlyFans doesn't always reject an invalid session
+    // with an immediate server-side redirect - sometimes the initial
+    // response still serves /my/chats and a CLIENT-SIDE script bounces to
+    // the login page a moment later. waitUntil:'domcontentloaded' above
+    // can resolve BEFORE that client-side redirect fires, so checking the
+    // URL immediately after goto caught it mid-flight and reported success
+    // for a session OnlyFans was already about to reject. Giving it a
+    // moment to settle before this function's caller (autoReconnectAllModels)
+    // checks getLoginState avoids that false positive.
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
   const session = { browser, page, lastActivity: Date.now(), createdAt: new Date() };
   modelSessions[modelId] = session;
   return session;
@@ -1380,7 +1433,18 @@ async function getLoginState(page) {
   // is not proof of login. 'auth_id' is only set once actually authenticated.
   const sessCookie = cookies.find((c) => c.name === 'sess');
   const authIdCookie = cookies.find((c) => c.name === 'auth_id');
-  const isLoggedIn = !!sessCookie?.value && !!authIdCookie?.value && !pageUrl.includes('/login');
+  // CONFIRMED LIVE: rejecting an invalid/expired session doesn't always
+  // land on a URL containing "/login" - visiting a gated page (e.g.
+  // /my/chats) while logged out redirects to the bare root domain with a
+  // "?return_to=%2Fmy%2Fchats" query param instead, which this check used
+  // to miss entirely (no "/login" substring), so a session OnlyFans had
+  // already invalidated still read back as isLoggedIn:true as long as the
+  // stale sess/auth_id cookie NAMES were still present with some value -
+  // auth_id's value itself was never actually validated against OnlyFans,
+  // only that the cookie existed. Rejecting the return_to redirect too
+  // closes that gap.
+  const isLoggedIn =
+    !!sessCookie?.value && !!authIdCookie?.value && !pageUrl.includes('/login') && !pageUrl.includes('return_to=');
 
   return { isLoggedIn, cookieCount: cookies.length, pageUrl, checkFailed };
 }
