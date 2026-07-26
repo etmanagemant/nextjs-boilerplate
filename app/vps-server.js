@@ -2796,35 +2796,59 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
       // the input to exist and its value to actually match what we typed
       // before ever touching Send - if the price can't be confirmed, this
       // aborts with an error instead of silently sending unpriced content.
+      // CONFIRMED LIVE (via debug-dom, in /insert-script-step's identical
+      // price popup): the old '[at-attr*="price" i]'/'input[name*="price"
+      // i]' guesses never matched - the real toggle is '[at-attr="price_btn"]'
+      // and the input has name="" (empty) with autocomplete="price-input"
+      // as its only stable handle. This route had the same broken guess
+      // and was reported live failing with exactly the "Preisfeld nicht
+      // gefunden" error this check exists to prevent - fixed to match the
+      // proven-working selectors instead of guessing again.
       await page.evaluate(() => {
-        var toggle = document.querySelector(
-          '[at-attr*="price" i], [class*="add-price" i], [class*="set-price" i], [aria-label*="preis" i], [aria-label*="price" i]'
-        );
+        var toggle = document.querySelector('[at-attr="price_btn"]');
         if (toggle) toggle.click();
       });
-      await new Promise((r) => setTimeout(r, 500));
-
-      const priceFocused = await page.evaluate(() => {
-        var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
-        if (!input) return false;
-        input.focus();
-        input.value = '';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        return true;
-      });
+      const priceFocused = await page
+        .waitForFunction(
+          () => {
+            var input = document.querySelector('input[autocomplete="price-input"]');
+            if (!input) return false;
+            input.focus();
+            input.value = '';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            return true;
+          },
+          { timeout: 3000 }
+        )
+        .then(() => true)
+        .catch(() => false);
       if (!priceFocused) {
         return res.json({ status: 'error', error: 'Preisfeld nicht gefunden - nicht gesendet, damit nichts kostenlos verschickt wird' });
       }
       await page.keyboard.type(String(price));
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 200));
 
       const priceConfirmed = await page.evaluate((expected) => {
-        var input = document.querySelector('input[name*="price" i], input[placeholder*="price" i], input[placeholder*="preis" i]');
+        var input = document.querySelector('input[autocomplete="price-input"]');
         return !!(input && input.value && input.value.replace(',', '.').indexOf(String(expected)) !== -1);
       }, price);
       if (!priceConfirmed) {
         return res.json({ status: 'error', error: 'Preis konnte nicht bestätigt werden - nicht gesendet, damit nichts kostenlos verschickt wird' });
       }
+      // CONFIRMED (matching /insert-script-step's proven flow): this popup
+      // also needs its own explicit "Speichern" click to commit the price -
+      // typing into the field alone doesn't persist it before Send.
+      const priceSaved = await page.evaluate(() => {
+        var candidates = Array.from(document.querySelectorAll('button, [role="button"]'));
+        var btn = candidates.find(function (el) { return (el.textContent || '').trim().toLowerCase() === 'speichern'; });
+        if (!btn) return false;
+        btn.click();
+        return true;
+      });
+      if (!priceSaved) {
+        return res.json({ status: 'error', error: 'Preis konnte nicht gespeichert werden (Speichern-Button nicht gefunden) - nicht gesendet, damit nichts kostenlos verschickt wird' });
+      }
+      await new Promise((r) => setTimeout(r, 200));
     }
 
     await page.evaluate(() => {

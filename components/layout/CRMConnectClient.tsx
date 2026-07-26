@@ -73,6 +73,15 @@ export default function CRMConnectClient({
   const [modelBeingConnected, setModelBeingConnected] = useState<Model | null>(null);
   const [savingOwnerFor, setSavingOwnerFor] = useState<string | null>(null);
 
+  // Vault-Preis: previously a live-editable field on the Upload Vault page
+  // itself, right next to the file queue - explicitly moved here per the
+  // user's request, so the day-to-day upload flow has no price field to
+  // touch at all. Set once per model, applied automatically to every
+  // upload from here on (Upload Vault and the model role's own upload).
+  const [vaultPrices, setVaultPrices] = useState<Map<string, number | null>>(new Map());
+  const [priceDrafts, setPriceDrafts] = useState<Map<string, string>>(new Map());
+  const [savingPriceFor, setSavingPriceFor] = useState<string | null>(null);
+
   const supabase = createClient();
 
   const handleSetOwner = async (modelId: string, ownerUserId: string) => {
@@ -94,7 +103,43 @@ export default function CRMConnectClient({
 
   useEffect(() => {
     fetchSessions();
+    fetchVaultPrices();
   }, []);
+
+  const fetchVaultPrices = async () => {
+    try {
+      const { data } = await supabase.from("crm_vault_fan_mapping").select("model_id, vault_fan_price");
+      const priceMap = new Map<string, number | null>();
+      const draftMap = new Map<string, string>();
+      (data || []).forEach((row: any) => {
+        priceMap.set(row.model_id, row.vault_fan_price);
+        draftMap.set(row.model_id, row.vault_fan_price != null ? String(row.vault_fan_price) : "");
+      });
+      setVaultPrices(priceMap);
+      setPriceDrafts(draftMap);
+    } catch (err) {
+      console.error("Error fetching vault prices:", err);
+    }
+  };
+
+  const handleSetVaultPrice = async (modelId: string) => {
+    const draft = priceDrafts.get(modelId) || "";
+    if (!draft.trim()) return;
+    setSavingPriceFor(modelId);
+    try {
+      const value = Number(draft) || 0;
+      const { error } = await supabase
+        .from("crm_vault_fan_mapping")
+        .upsert({ model_id: modelId, vault_fan_price: value, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      setVaultPrices(new Map(vaultPrices).set(modelId, value));
+    } catch (err) {
+      console.error("Error saving vault price:", err);
+      alert("Fehler beim Speichern des Preises");
+    } finally {
+      setSavingPriceFor(null);
+    }
+  };
 
   const fetchSessions = async () => {
     setIsLoadingSessions(true);
@@ -265,6 +310,36 @@ export default function CRMConnectClient({
                             </option>
                           ))}
                       </select>
+                    </div>
+
+                    {/* Vault-Preis: der einzige Ort, an dem dieser Preis
+                        eingestellt wird - Upload Vault und die Model-Rolle
+                        zeigen kein Preisfeld mehr, sondern wenden diesen
+                        Wert automatisch auf jeden Upload an. */}
+                    <div className="mb-4">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        💰 Vault-Preis (automatisch für jeden Upload)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={priceDrafts.get(model.id) ?? ""}
+                          onChange={(e) => setPriceDrafts(new Map(priceDrafts).set(model.id, e.target.value))}
+                          placeholder="z.B. 5.00"
+                          className="flex-1 bg-[#050505] border border-[#9C7A3D]/20 rounded px-2 py-1.5 text-white text-xs outline-none focus:border-[#C9A86A]"
+                        />
+                        <button
+                          onClick={() => handleSetVaultPrice(model.id)}
+                          disabled={savingPriceFor === model.id || !(priceDrafts.get(model.id) || "").trim()}
+                          className="px-3 py-1.5 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded text-[10px] uppercase disabled:opacity-40"
+                        >
+                          {savingPriceFor === model.id ? "..." : "✓"}
+                        </button>
+                      </div>
+                      {vaultPrices.get(model.id) != null && (
+                        <p className="text-[10px] text-slate-500 mt-1">Aktuell: ${vaultPrices.get(model.id)}</p>
+                      )}
                     </div>
 
                     {/* Action Buttons */}

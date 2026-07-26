@@ -36,8 +36,10 @@ type QueueItem = {
  * message to a dedicated "Vault-Fan" (a real external fan account, or
  * historically another one of their own model accounts), which OnlyFans
  * then archives into the real Vault automatically. Price is set once per
- * model here (not typed per file, per the user's explicit ask) and
- * applied automatically to every send.
+ * model in the Connection Hub (CRMConnectClient) - explicitly moved there
+ * per the user's ask so this page's day-to-day upload flow has no price
+ * field to touch at all; it's just read here (read-only) and applied
+ * automatically to every send.
  */
 export default function UploadVaultClient({
   userId,
@@ -50,9 +52,7 @@ export default function UploadVaultClient({
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [labelDraft, setLabelDraft] = useState("");
-  const [priceDraft, setPriceDraft] = useState("");
   const [savingLabel, setSavingLabel] = useState(false);
-  const [savingPrice, setSavingPrice] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const supabase = createClient();
@@ -66,14 +66,12 @@ export default function UploadVaultClient({
     setActiveModelId(modelId);
     const mapping = mappings.find((m) => m.model_id === modelId);
     setLabelDraft(mapping?.vault_fan_label || "Vault");
-    setPriceDraft(mapping?.vault_fan_price != null ? String(mapping.vault_fan_price) : "");
   };
 
   useEffect(() => {
     if (activeModelId) {
       const mapping = mappings.find((m) => m.model_id === activeModelId);
       setLabelDraft(mapping?.vault_fan_label || "Vault");
-      setPriceDraft(mapping?.vault_fan_price != null ? String(mapping.vault_fan_price) : "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -123,19 +121,6 @@ export default function UploadVaultClient({
       alert("Fehler beim Speichern der Vault-Fan-Zuordnung");
     } finally {
       setSavingLabel(false);
-    }
-  };
-
-  const handleSavePrice = async () => {
-    if (!activeModelId || !priceDraft.trim()) return;
-    setSavingPrice(true);
-    try {
-      await saveMapping({ vault_fan_price: Number(priceDraft) || 0 });
-    } catch (err) {
-      console.error("Error saving vault-fan price:", err);
-      alert("Fehler beim Speichern des Preises");
-    } finally {
-      setSavingPrice(false);
     }
   };
 
@@ -203,7 +188,7 @@ export default function UploadVaultClient({
               </span>
             </h1>
             <p className="text-slate-400 text-sm">
-              Dateien werden automatisch mit dem hier festgelegten Preis an den Vault-Fan geschickt - OnlyFans legt sie dann selbst im Tresor ab.
+              Dateien werden automatisch mit dem im Connection Hub hinterlegten Preis an den Vault-Fan geschickt - OnlyFans legt sie dann selbst im Tresor ab.
             </p>
           </div>
 
@@ -273,30 +258,20 @@ export default function UploadVaultClient({
                 </details>
               </div>
 
+              {/* Preis wird nicht mehr hier eingestellt - fester Wert pro
+                  Model, einmal im Connection Hub hinterlegt und automatisch
+                  auf jeden Upload angewendet. Nur noch reine Anzeige hier,
+                  damit der Upload-Ablauf kein Preisfeld zum Anfassen hat. */}
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
-                  Preis (wird automatisch für jede Datei verwendet)
-                </label>
-                <div className="flex gap-2 max-w-xs">
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={priceDraft}
-                    onChange={(e) => setPriceDraft(e.target.value)}
-                    placeholder="z.B. 5.00"
-                    className="flex-1 bg-[#050505] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
-                  />
-                  <button
-                    onClick={handleSavePrice}
-                    disabled={savingPrice || !priceDraft.trim()}
-                    className="px-4 py-2 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded text-xs uppercase disabled:opacity-40"
-                  >
-                    {savingPrice ? "..." : "✓ Speichern"}
-                  </button>
-                </div>
-                {vaultFanPrice != null && (
-                  <p className="text-[10px] text-slate-500 mt-1">Aktuell gespeichert: ${vaultFanPrice}</p>
+                <label className="block text-xs font-bold text-slate-400 mb-1 uppercase">Preis</label>
+                {vaultFanPrice != null ? (
+                  <p className="text-sm text-[#C9A86A] font-bold">${vaultFanPrice}</p>
+                ) : (
+                  <p className="text-sm text-red-400">Noch kein Preis hinterlegt</p>
                 )}
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Wird automatisch auf jeden Upload angewendet - einstellbar im Connection Hub, nicht hier.
+                </p>
               </div>
             </section>
           )}
@@ -351,7 +326,13 @@ export default function UploadVaultClient({
                 disabled={isSending || !canSend}
                 className="w-full mt-3 px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg disabled:opacity-40"
               >
-                {isSending ? "Wird gesendet..." : !canSend ? "Erst Vault-Fan und Preis festlegen" : `${queue.length} Datei(en) senden`}
+                {isSending
+                  ? "Wird gesendet..."
+                  : !canSend
+                  ? !vaultFanLabel && !vaultFanId
+                    ? "Erst Vault-Fan festlegen"
+                    : "Preis fehlt - im Connection Hub hinterlegen"
+                  : `${queue.length} Datei(en) senden`}
               </button>
             </section>
           )}
