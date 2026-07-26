@@ -143,7 +143,7 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
                 placeholder={`Hier die Nachricht für ${modelName} eintragen...`}
                 required
                 rows={2}
-                className="w-full px-3 py-2 border border-slate-700 rounded-md text-white bg-slate-950 focus:outline-none focus:border-[#C9A86A] text-xs resize-none"
+                className="w-full px-3 py-2 border border-[#9C7A3D]/30 rounded-md text-white bg-[#050505] focus:outline-none focus:border-[#C9A86A] text-xs resize-none"
               />
             </div>
           ))}

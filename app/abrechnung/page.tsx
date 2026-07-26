@@ -234,7 +234,7 @@ export default function AbrechnungPage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-bold text-white">{daten.name}</h2>
               {daten.role === "moderator" ? (
-                <span className="bg-purple-600/20 border border-purple-500/30 text-purple-300 text-[10px] font-mono px-2 py-0.5 rounded">💰 EUR {daten.hourlyRate.toFixed(2)}/h</span>
+                <span className="bg-[#9C7A3D]/10 border border-[#9C7A3D]/30 text-[#C9A86A] text-[10px] font-mono px-2 py-0.5 rounded">💰 EUR {daten.hourlyRate.toFixed(2)}/h</span>
               ) : (
                 <span className="bg-[#9C7A3D]/10 border border-[#9C7A3D]/30 text-[#C9A86A] text-[10px] font-mono px-2 py-0.5 rounded">{daten.rate}% Provision</span>
               )}
@@ -247,13 +247,13 @@ export default function AbrechnungPage() {
               
               {daten.role === "moderator" ? (
                 <>
-                  <div className="bg-[#050505]/60 p-2 rounded border border-purple-500/20">
+                  <div className="bg-[#050505]/60 p-2 rounded border border-[#9C7A3D]/20">
                     <div className="text-slate-400 font-bold text-[10px] mb-1">💰 STUNDENHONORAR</div>
-                    <div className="font-mono font-bold text-purple-300">${(daten.hourlyRate * daten.hours).toFixed(2)}</div>
+                    <div className="font-mono font-bold text-[#C9A86A]">${(daten.hourlyRate * daten.hours).toFixed(2)}</div>
                   </div>
-                  <div className="bg-[#050505]/60 p-2 rounded border border-pink-500/20">
+                  <div className="bg-[#050505]/60 p-2 rounded border border-[#E5C158]/20">
                     <div className="text-slate-400 font-bold text-[10px] mb-1">🎁 PRÄMIE</div>
-                    <div className="font-mono font-bold text-pink-300">${daten.praemie.toFixed(2)}</div>
+                    <div className="font-mono font-bold text-[#E5C158]">${daten.praemie.toFixed(2)}</div>
                   </div>
                   <div className="bg-[#050505]/60 p-2 rounded border border-emerald-500/20">
                     <div className="text-slate-400 font-bold text-[10px] mb-1">💵 AUSZAHLUNG</div>

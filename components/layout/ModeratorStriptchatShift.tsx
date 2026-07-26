@@ -54,7 +54,7 @@ function PrivateShowTimer({ startedAt }: { startedAt: string }) {
   const mins = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
   return (
-    <span className="text-purple-400 font-mono font-bold bg-purple-500/10 border border-purple-500/20 px-2 py-1 rounded ml-2">
+    <span className="text-[#E2C48A] font-mono font-bold bg-[#9C7A3D]/10 border border-[#9C7A3D]/20 px-2 py-1 rounded ml-2">
       🎭 {pad2(hrs)}:{pad2(mins)}:{pad2(secs)}
     </span>
   );
@@ -584,24 +584,24 @@ export default function ModeratorStriptchatShift({
             const showState = privateShowStates[modelId] || { startedAt: null, totalHours: 0 };
             
             return (
-              <div key={modelId} className="bg-purple-600/10 border border-purple-500/20 rounded p-3 space-y-2">
+              <div key={modelId} className="bg-[#9C7A3D]/10 border border-[#9C7A3D]/20 rounded p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-purple-300">{modelName}</span>
+                  <span className="text-xs font-bold text-[#C9A86A]">{modelName}</span>
                   {showState.startedAt && (
                     <PrivateShowTimer startedAt={showState.startedAt} />
                   )}
                 </div>
-                
+
                 <div className="text-[11px] text-slate-400">
-                  Total: <span className="text-purple-400 font-bold">{showState.totalHours.toFixed(2)}h</span>
+                  Total: <span className="text-[#C9A86A] font-bold">{showState.totalHours.toFixed(2)}h</span>
                 </div>
-                
+
                 <button
                   onClick={() => handleTogglePrivateShow(modelId)}
                   className={`w-full font-bold py-2 rounded text-xs transition cursor-pointer ${
                     showState.startedAt
                       ? "bg-red-600 hover:bg-red-700 text-white"
-                      : "bg-purple-600 hover:bg-purple-700 text-white"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
                   }`}
                 >
                   {showState.startedAt ? "🎭 Beenden" : "🎭 Starten"}
@@ -673,37 +673,37 @@ export default function ModeratorStriptchatShift({
           {/* 20 Shows = 50€ */}
           <div className={`p-3 rounded border transition ${
             totalPrivateShowCount >= 20
-              ? "bg-blue-600/30 border-blue-500/50"
+              ? "bg-[#9C7A3D]/30 border-[#C9A86A]/50"
               : "bg-slate-900/30 border-slate-700/30"
           }`}>
-            <div className="text-xs font-bold text-blue-400 mb-1">20 Shows</div>
+            <div className="text-xs font-bold text-[#C9A86A] mb-1">20 Shows</div>
             <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
               <div
-                className={`h-full transition-all ${totalPrivateShowCount >= 20 ? "bg-blue-500" : "bg-slate-600"}`}
+                className={`h-full transition-all ${totalPrivateShowCount >= 20 ? "bg-[#C9A86A]" : "bg-slate-600"}`}
                 style={{ width: `${Math.min(100, (totalPrivateShowCount / 20) * 100)}%` }}
               />
             </div>
             <div className="text-xs text-slate-400">{totalPrivateShowCount}/20</div>
-            <div className="text-[10px] font-bold text-blue-400 mt-1">💰 50€</div>
-            {totalPrivateShowCount >= 20 && <div className="text-[10px] font-bold text-blue-400">✅ FREIGESCHALTEN!</div>}
+            <div className="text-[10px] font-bold text-[#C9A86A] mt-1">💰 50€</div>
+            {totalPrivateShowCount >= 20 && <div className="text-[10px] font-bold text-[#C9A86A]">✅ FREIGESCHALTEN!</div>}
           </div>
 
           {/* 25 Shows = 70€ */}
           <div className={`p-3 rounded border transition ${
             totalPrivateShowCount >= 25
-              ? "bg-purple-600/30 border-purple-500/50"
+              ? "bg-[#E5C158]/30 border-[#E5C158]/50"
               : "bg-slate-900/30 border-slate-700/30"
           }`}>
-            <div className="text-xs font-bold text-purple-400 mb-1">25 Shows</div>
+            <div className="text-xs font-bold text-[#E5C158] mb-1">25 Shows</div>
             <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
               <div
-                className={`h-full transition-all ${totalPrivateShowCount >= 25 ? "bg-purple-500" : "bg-slate-600"}`}
+                className={`h-full transition-all ${totalPrivateShowCount >= 25 ? "bg-[#E5C158]" : "bg-slate-600"}`}
                 style={{ width: `${Math.min(100, (totalPrivateShowCount / 25) * 100)}%` }}
               />
             </div>
             <div className="text-xs text-slate-400">{totalPrivateShowCount}/25</div>
-            <div className="text-[10px] font-bold text-purple-400 mt-1">💰 70€ 🏆</div>
-            {totalPrivateShowCount >= 25 && <div className="text-[10px] font-bold text-purple-400">✅ FREIGESCHALTEN!</div>}
+            <div className="text-[10px] font-bold text-[#E5C158] mt-1">💰 70€ 🏆</div>
+            {totalPrivateShowCount >= 25 && <div className="text-[10px] font-bold text-[#E5C158]">✅ FREIGESCHALTEN!</div>}
           </div>
         </div>
       </div>

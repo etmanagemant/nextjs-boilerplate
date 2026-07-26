@@ -31,7 +31,7 @@ export default function MassMessageListClient({ aktuelleWoche, archivierteMonate
               <span className="text-xs font-black text-[#C9A86A] uppercase tracking-wide">Model: {n.model_name}</span>
               <span className="text-[10px] text-slate-500 font-semibold">{n.datum}</span>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button type="button" onClick={() => { setEditingId(n.id); setEditText(n.message_text); }} className="text-[11px] text-blue-400 font-bold cursor-pointer">✏️</button>
+                <button type="button" onClick={() => { setEditingId(n.id); setEditText(n.message_text); }} className="text-[11px] text-[#C9A86A] font-bold cursor-pointer">✏️</button>
                 <form action={deleteMassMessage}>
                   <input type="hidden" name="id" value={n.id} />
                   <button type="submit" onClick={(e) => { if (!window.confirm("Diese Nachricht löschen?")) e.preventDefault(); }} className="text-[11px] text-red-400 font-bold cursor-pointer">🗑️</button>

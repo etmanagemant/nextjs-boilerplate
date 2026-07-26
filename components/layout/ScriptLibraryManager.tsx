@@ -116,8 +116,8 @@ export default function ScriptLibraryManager({
   const categoryColors: Record<string, string> = {
     greeting: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
     offer: "bg-gold-500/20 text-gold-300 border-gold-500/30",
-    follow_up: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-    custom: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+    follow_up: "bg-[#9C7A3D]/20 text-[#C9A86A] border-[#9C7A3D]/30",
+    custom: "bg-stone-500/20 text-stone-300 border-stone-500/30",
   };
 
   return (
@@ -291,7 +291,7 @@ export default function ScriptLibraryManager({
                         🌍 Global
                       </span>
                     ) : (
-                      <span className="text-xs px-2 py-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      <span className="text-xs px-2 py-1 rounded bg-stone-500/20 text-stone-300 border border-stone-500/30">
                         👤 Personal
                       </span>
                     )}

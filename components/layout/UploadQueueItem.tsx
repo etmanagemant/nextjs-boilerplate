@@ -5,7 +5,7 @@ import type { UploadItemStatus } from "@/lib/uploadVaultBatch";
 
 const STATUS_STYLE: Record<UploadItemStatus, { label: string; className: string }> = {
   pending: { label: "Wartet", className: "bg-slate-500/15 text-slate-400 border-slate-500/30" },
-  uploading: { label: "Wird hochgeladen...", className: "bg-blue-500/15 text-blue-300 border-blue-500/30 animate-pulse" },
+  uploading: { label: "Wird hochgeladen...", className: "bg-[#C9A86A]/15 text-[#E2C48A] border-[#C9A86A]/30 animate-pulse" },
   staged: { label: "Hochgeladen, wartet auf Versand", className: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
   success: { label: "Gesendet", className: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
   error: { label: "Fehler", className: "bg-red-500/15 text-red-300 border-red-500/30" },

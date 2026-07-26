@@ -38,8 +38,8 @@ export default function ModelPlatformSelect({ modelId, defaultPlatform }: { mode
 
   const platformColors: Record<string, string> = {
     onlyfans: "bg-orange-600/20 border-orange-500/40 text-orange-300",
-    stripchat: "bg-purple-600/20 border-purple-500/40 text-purple-300",
-    both: "bg-blue-600/20 border-blue-500/40 text-blue-300"
+    stripchat: "bg-[#9C7A3D]/20 border-[#9C7A3D]/40 text-[#C9A86A]",
+    both: "bg-[#E5C158]/20 border-[#E5C158]/40 text-[#E5C158]"
   };
 
   return (

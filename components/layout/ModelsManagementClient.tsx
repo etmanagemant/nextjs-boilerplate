@@ -172,7 +172,7 @@ export default function ModelsManagementClient({
                   <span className="font-semibold text-white tracking-wide">{model.name}</span>
                   <button
                     onClick={() => handleEditStart(model.id, model.name)}
-                    className="text-[11px] bg-blue-600/60 text-white px-2 py-1 rounded font-bold hover:bg-blue-700 transition cursor-pointer"
+                    className="text-[11px] bg-[#9C7A3D]/60 text-white px-2 py-1 rounded font-bold hover:bg-[#9C7A3D] transition cursor-pointer"
                   >
                     ✏️ Bearbeiten
                   </button>

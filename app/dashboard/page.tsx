@@ -240,10 +240,10 @@ export default function DashboardPage() {
 
         {/* KPI Boxen */}
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <div className="bg-gradient-to-br from-purple-950/40 to-purple-900/20 border border-purple-500/30 rounded-xl p-5 shadow-lg">
-            <div className="text-[10px] font-black text-purple-300 uppercase tracking-widest mb-2">Stripchat Brutto</div>
-            <div className="text-2xl font-black text-purple-100">${moderatorStriptchatStats.striptchatBrutto.toFixed(2)}</div>
-            <div className="text-xs text-purple-400 mt-1">Gesamt-Umsatz</div>
+          <div className="bg-gradient-to-br from-[#3c2f16]/40 to-[#5e4922]/20 border border-[#9C7A3D]/30 rounded-xl p-5 shadow-lg">
+            <div className="text-[10px] font-black text-[#C9A86A] uppercase tracking-widest mb-2">Stripchat Brutto</div>
+            <div className="text-2xl font-black text-[#E2C48A]">${moderatorStriptchatStats.striptchatBrutto.toFixed(2)}</div>
+            <div className="text-xs text-[#C9A86A] mt-1">Gesamt-Umsatz</div>
           </div>
 
           <div className="bg-gradient-to-br from-green-950/40 to-green-900/20 border border-green-500/30 rounded-xl p-5 shadow-lg">
@@ -252,10 +252,10 @@ export default function DashboardPage() {
             <div className="text-xs text-green-400 mt-1">Nach Plattformgebühr</div>
           </div>
 
-          <div className="bg-gradient-to-br from-blue-950/40 to-blue-900/20 border border-blue-500/30 rounded-xl p-5 shadow-lg">
-            <div className="text-[10px] font-black text-blue-300 uppercase tracking-widest mb-2">Privat-Show Stunden</div>
-            <div className="text-2xl font-black text-blue-100">{moderatorStriptchatStats.totalPrivateShowHours.toFixed(2)}h</div>
-            <div className="text-xs text-blue-400 mt-1">Gesamt-Zeit</div>
+          <div className="bg-gradient-to-br from-[#3c2f16]/40 to-[#5e4922]/20 border border-[#E5C158]/30 rounded-xl p-5 shadow-lg">
+            <div className="text-[10px] font-black text-[#E5C158] uppercase tracking-widest mb-2">Privat-Show Stunden</div>
+            <div className="text-2xl font-black text-[#E2C48A]">{moderatorStriptchatStats.totalPrivateShowHours.toFixed(2)}h</div>
+            <div className="text-xs text-[#E5C158] mt-1">Gesamt-Zeit</div>
           </div>
         </section>
       </main>
