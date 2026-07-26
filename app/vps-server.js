@@ -2954,9 +2954,13 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
     // wasn't, is exactly the failure mode this guards against. OnlyFans
     // resets the compose box (attachments + price badge cleared) once a
     // send actually completes - polling for that is the proxy used here.
-    // UNVERIFIED (needs one live confirmation): if this proxy turns out
-    // to be wrong, this fails loudly with an error instead of a false
-    // "success", never the other way around.
+    // CONFIRMED LIVE: this proxy itself is correct (files sent with an
+    // 11-file batch did go out to OnlyFans), but the fixed 10s timeout
+    // wasn't - uploading/processing 11 real photos server-side on
+    // OnlyFans' end took longer than that, so every file in the batch
+    // got wrongly reported as failed despite actually sending. Scaled the
+    // same way as the earlier attach-readiness wait, for the same reason
+    // (bigger batches genuinely need more time, not a fixed guess).
     const sendConfirmed = await page
       .waitForFunction(
         () => {
@@ -2964,7 +2968,7 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
           var stillHasPriceBadge = priceInput && priceInput.value && priceInput.value.trim() !== '';
           return !stillHasPriceBadge;
         },
-        { timeout: 10000 }
+        { timeout: Math.min(60000, 10000 + filePaths.length * 3000) }
       )
       .then(() => true)
       .catch(() => false);

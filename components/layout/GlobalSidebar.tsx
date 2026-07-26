@@ -32,6 +32,38 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
   const searchParams = useSearchParams();
   const isAdmin = role === "admin";
   const [models, setModels] = useState<ConnectedModel[]>([]);
+  // CONFIRMED LIVE: the fixed 224px sidebar plus its matching 224px content
+  // padding (app/layout.tsx) ate almost half the screen on a phone -
+  // models do most of their uploading from there. Off-canvas below the md
+  // breakpoint (hidden by default, slides in over the content as an
+  // overlay instead of pushing it) - unchanged, always-visible behavior
+  // on desktop.
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  const hamburgerButton = (
+    <button
+      onClick={() => setMobileOpen((v) => !v)}
+      className="md:hidden fixed top-3 left-3 z-50 w-11 h-11 flex items-center justify-center rounded-lg bg-[#0A0A0A] border border-[#9C7A3D]/40 text-[#C9A86A] shadow-lg"
+      aria-label="Menü"
+    >
+      {mobileOpen ? "✕" : "☰"}
+    </button>
+  );
+
+  const backdrop = mobileOpen && (
+    <div
+      className="md:hidden fixed inset-0 z-30 bg-black/70 backdrop-blur-sm"
+      onClick={() => setMobileOpen(false)}
+    />
+  );
+
+  const asideBase =
+    "fixed left-0 top-32 bottom-0 w-56 z-40 bg-[#0A0A0A] border-r border-[#9C7A3D]/30 flex flex-col py-4 px-2 gap-1 overflow-y-auto scrollbar-hide transition-transform duration-300 md:translate-x-0 " +
+    (mobileOpen ? "translate-x-0" : "-translate-x-full");
 
   const inOnlyFansSection = ONLYFANS_SECTION_PATHS.some((p) => pathname.startsWith(p));
 
@@ -68,7 +100,10 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
   // Abrechnung etc.) apply to them.
   if (role === "model") {
     return (
-      <aside className="fixed left-0 top-32 bottom-0 w-56 z-40 bg-[#0A0A0A] border-r border-[#9C7A3D]/30 flex flex-col py-4 px-2 gap-1 overflow-y-auto scrollbar-hide">
+      <>
+        {hamburgerButton}
+        {backdrop}
+        <aside className={asideBase}>
         <p className="px-3 pb-2 text-xs font-bold text-slate-500 uppercase tracking-widest">Tools</p>
         <Link
           href="/model-workspace"
@@ -103,7 +138,8 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
           <span className="text-lg flex-shrink-0">🎬</span>
           <span>Stripchat</span>
         </Link>
-      </aside>
+        </aside>
+      </>
     );
   }
 
@@ -142,7 +178,10 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
   const activeModelId = searchParams.get("model");
 
   return (
-    <aside className="fixed left-0 top-32 bottom-0 w-56 z-40 bg-[#0A0A0A] border-r border-[#9C7A3D]/30 flex flex-col py-4 px-2 gap-1 overflow-y-auto scrollbar-hide">
+    <>
+      {hamburgerButton}
+      {backdrop}
+      <aside className={asideBase}>
       <p className="px-3 pb-2 text-xs font-bold text-slate-500 uppercase tracking-widest">Tools</p>
       {items.map((item, i) => {
         const isActive = pathname === item.href;
@@ -219,6 +258,7 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
           </div>
         );
       })}
-    </aside>
+      </aside>
+    </>
   );
 }

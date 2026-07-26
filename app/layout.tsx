@@ -57,7 +57,7 @@ export default async function RootLayout({
           <>
             <GlobalTopBar />
             <GlobalSidebar role={role} />
-            <main className="pt-32 pl-56 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
+            <main className="pt-32 pl-0 md:pl-56 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
               {children}
             </main>
           </>

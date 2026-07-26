@@ -39,7 +39,7 @@ export default async function CalendarPage() {
   const profileMap = new Map((profiles || []).map(p => [p.user_id, p.role || "chatter"]));
 
   return (
-    <main className="min-h-screen bg-slate-950 p-4">
+    <main className="min-h-screen bg-[#0A0A0A] p-4">
       <WeeklyCalendar 
         sichereShifts={shifts || []} 
         modelsListe={models || []} 
