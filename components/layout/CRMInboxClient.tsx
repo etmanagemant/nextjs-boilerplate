@@ -45,9 +45,13 @@ export default function CRMInboxClient({
   const searchParams = useSearchParams();
   const modelFromUrl = searchParams.get("model");
 
-  const [selectedModel, setSelectedModel] = useState<string | null>(
-    modelFromUrl || (connectedModels.length > 0 ? connectedModels[0].id : null)
-  );
+  // CONFIRMED LIVE: falling back to the first connected model when no
+  // ?model= is in the URL meant the plain "OnlyFans" sidebar link (which
+  // intentionally links to /crm-inbox with no model - it should show the
+  // shift-reminder landing) auto-selected a model anyway, immediately
+  // opening a live VNC session nobody asked for. Only the model-specific
+  // sidebar link actually carries ?model= - respect that distinction.
+  const [selectedModel, setSelectedModel] = useState<string | null>(modelFromUrl);
   const [emojis, setEmojis] = useState<string[]>([]);
 
   useEffect(() => {
@@ -58,10 +62,12 @@ export default function CRMInboxClient({
     loadEmojis();
   }, [chatterId]);
 
+  // Always follow the URL, including back to null - navigating from a
+  // model's VNC view to the plain "OnlyFans" link (no ?model=) via
+  // client-side routing must return to the landing page, not leave the
+  // previous model's session showing.
   useEffect(() => {
-    if (modelFromUrl) {
-      setSelectedModel(modelFromUrl);
-    }
+    setSelectedModel(modelFromUrl);
   }, [modelFromUrl]);
 
   return (
