@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sendFilesInBatches, type UploadItemStatus } from "@/lib/uploadVaultBatch";
 import UploadQueueItem from "./UploadQueueItem";
+
+const formatSeconds = (totalSeconds: number) => {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
 
 interface ModelInfo {
   id: string;
@@ -47,6 +53,24 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
   // scroll distance on its own, on top of the sticky send bar below.
   const [activeTab, setActiveTab] = useState<"reddit" | "onlyfans">("reddit");
 
+  // Voice-memo recording straight from the upload page - OnlyFans accepts
+  // audio the same as any other attachment, so a recorded memo just joins
+  // the normal OnlyFans queue/send pipeline as a File, no separate path.
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [recordError, setRecordError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordStreamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      recordStreamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
   if (!model) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
@@ -73,6 +97,48 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
 
   const removeRedditItem = (id: string) => setRedditQueue((q) => q.filter((x) => x.id !== id));
   const removeOfItem = (id: string) => setOfQueue((q) => q.filter((x) => x.id !== id));
+
+  const startRecording = async () => {
+    setRecordError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordStreamRef.current = stream;
+      // iOS Safari only supports mp4/aac, Chrome/Android only webm/opus -
+      // picking whichever this browser actually supports instead of
+      // hardcoding one avoids a silent empty recording on the other platform.
+      const preferredTypes = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+      const mimeType = preferredTypes.find((t) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t));
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      recordChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(recordChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const ext = (recorder.mimeType || "").includes("mp4") ? "m4a" : "webm";
+        const file = new File([blob], `sprachnachricht-${Date.now()}.${ext}`, { type: blob.type });
+        addFiles(setOfQueue, [file]);
+        stream.getTracks().forEach((t) => t.stop());
+        recordStreamRef.current = null;
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecordSeconds(0);
+      setIsRecording(true);
+      recordTimerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
+    } catch {
+      setRecordError("Mikrofon-Zugriff nicht möglich - bitte im Browser erlauben.");
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+  };
 
   const sendReddit = async () => {
     setIsSendingReddit(true);
@@ -234,7 +300,7 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
                   </div>
                 )}
                 <label
-                  className="block mb-4 p-6 sm:p-8 rounded-2xl border-2 border-dashed border-[#9C7A3D]/40 bg-gradient-to-b from-black/40 to-black/20 hover:border-[#C9A86A]/70 hover:from-[#C9A86A]/5 active:scale-[0.99] transition-all cursor-pointer text-center"
+                  className="block mb-3 p-6 sm:p-8 rounded-2xl border-2 border-dashed border-[#9C7A3D]/40 bg-gradient-to-b from-black/40 to-black/20 hover:border-[#C9A86A]/70 hover:from-[#C9A86A]/5 active:scale-[0.99] transition-all cursor-pointer text-center"
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
@@ -251,6 +317,29 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
                   <div className="text-4xl mb-2">📁</div>
                   <span className="text-sm text-slate-400">Dateien auswählen oder hierher ziehen</span>
                 </label>
+
+                <button
+                  type="button"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={isSendingOf}
+                  className={`w-full mb-4 min-h-[52px] rounded-2xl border-2 font-bold uppercase tracking-wider text-xs transition flex items-center justify-center gap-2 disabled:opacity-40 ${
+                    isRecording
+                      ? "border-red-500/60 bg-red-500/10 text-red-300"
+                      : "border-[#9C7A3D]/40 bg-gradient-to-b from-black/40 to-black/20 text-slate-300 hover:border-[#C9A86A]/70 hover:text-[#E2C48A]"
+                  }`}
+                >
+                  {isRecording ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                      ⏹️ Aufnahme stoppen ({formatSeconds(recordSeconds)})
+                    </>
+                  ) : (
+                    <>🎙️ Sprachnachricht aufnehmen</>
+                  )}
+                </button>
+                {recordError && (
+                  <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-4">{recordError}</p>
+                )}
 
                 {ofQueue.length > 0 && (
                   <div className="space-y-2">

@@ -41,18 +41,23 @@ export default function UploadQueueItem({
   }, [file]);
 
   const isVideo = file.type.startsWith("video");
+  const isAudio = file.type.startsWith("audio");
   const style = STATUS_STYLE[status];
   const size = compact ? "w-12 h-12" : "w-14 h-14";
 
   return (
     <div className="flex items-center gap-3 bg-black/40 p-2.5 rounded-xl border border-[#9C7A3D]/10">
-      <div className={`${size} flex-shrink-0 rounded-lg overflow-hidden bg-black/60 border border-[#9C7A3D]/20`}>
-        {previewUrl &&
+      <div className={`${size} flex-shrink-0 rounded-lg overflow-hidden bg-black/60 border border-[#9C7A3D]/20 flex items-center justify-center`}>
+        {isAudio ? (
+          <span className="text-xl">🎙️</span>
+        ) : (
+          previewUrl &&
           (isVideo ? (
             <video src={previewUrl} muted preload="metadata" className="w-full h-full object-cover" />
           ) : (
             <img src={previewUrl} alt="" className="w-full h-full object-cover" />
-          ))}
+          ))
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <p className={`truncate ${compact ? "text-xs" : "text-sm"}`}>{file.name}</p>
