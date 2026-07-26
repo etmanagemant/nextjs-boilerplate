@@ -2954,13 +2954,20 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
     // wasn't, is exactly the failure mode this guards against. OnlyFans
     // resets the compose box (attachments + price badge cleared) once a
     // send actually completes - polling for that is the proxy used here.
-    // CONFIRMED LIVE: this proxy itself is correct (files sent with an
-    // 11-file batch did go out to OnlyFans), but the fixed 10s timeout
-    // wasn't - uploading/processing 11 real photos server-side on
-    // OnlyFans' end took longer than that, so every file in the batch
-    // got wrongly reported as failed despite actually sending. Scaled the
-    // same way as the earlier attach-readiness wait, for the same reason
-    // (bigger batches genuinely need more time, not a fixed guess).
+    // CONFIRMED LIVE (twice now): this proxy itself is correct - the
+    // price input really does disappear from the DOM once a send truly
+    // completes (checked live moments after a "failed" report and found
+    // zero price inputs present, matching a fully reset compose box) -
+    // but it can take longer than expected, especially from a phone:
+    // real camera photos are typically several MB each versus the much
+    // smaller test images used earlier, and OnlyFans has to actually
+    // receive/process all of that before resetting. A first fix (scaling
+    // up to 60s) still wasn't enough for an 11-file phone batch. Given
+    // the real risk here isn't slowness but a chatter panic-retrying a
+    // send that actually already went out (billing the fan twice for the
+    // same content), correctness matters far more than how long this
+    // takes - much larger budget, and the error message itself now says
+    // not to blindly resend.
     const sendConfirmed = await page
       .waitForFunction(
         () => {
@@ -2968,14 +2975,14 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
           var stillHasPriceBadge = priceInput && priceInput.value && priceInput.value.trim() !== '';
           return !stillHasPriceBadge;
         },
-        { timeout: Math.min(60000, 10000 + filePaths.length * 3000) }
+        { timeout: Math.min(180000, 15000 + filePaths.length * 6000) }
       )
       .then(() => true)
       .catch(() => false);
     if (!sendConfirmed) {
       return res.json({
         status: 'error',
-        error: 'Senden konnte nicht bestätigt werden - bitte in der Live-Ansicht prüfen, ob die Nachricht rausging',
+        error: 'Senden konnte nicht bestätigt werden, ABER die Nachricht ist evtl. trotzdem rausgegangen - bitte erst in der Live-Ansicht prüfen, bevor erneut gesendet wird (sonst doppelte Abbuchung möglich)',
       });
     }
 
