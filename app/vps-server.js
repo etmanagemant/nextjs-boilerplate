@@ -1137,24 +1137,32 @@ async function ensureSlotBrowser(slot, modelId, role, chatterName, userId) {
   if (mainSession) {
     try {
       const liveCookies = await mainSession.page.cookies();
-      // CONFIRMED LIVE: page.cookies() returns CDP's Network.Cookie shape,
-      // which includes read-only fields (size, session) that Network.
-      // setCookie's CookieParam type rejects outright - passing the raw
-      // objects straight back into setCookie has been throwing "Invalid
-      // cookie fields" this whole session, silently caught by this same
-      // try/catch, so this overlay has never actually applied. Stripping
-      // down to just the fields setCookie accepts fixes it for real.
-      const cleaned = liveCookies.map((c) => ({
-        name: c.name,
-        value: c.value,
-        domain: c.domain,
-        path: c.path,
-        expires: c.expires,
-        httpOnly: c.httpOnly,
-        secure: c.secure,
-        sameSite: c.sameSite,
-      }));
-      if (cleaned.length) await page.setCookie(...cleaned);
+      // CONFIRMED LIVE (two attempts): page.cookies() returns CDP's
+      // Network.Cookie shape, which carries extra attributes (expires,
+      // sameSite, httpOnly, secure, plus read-only ones like size/session)
+      // that Network.setCookies' batch validation can reject wholesale if
+      // even ONE cookie in the array has an incompatible combination (e.g.
+      // a Cloudflare/analytics cookie with a prefixed name or an sameSite/
+      // secure mismatch) - "Invalid cookie fields" failed the ENTIRE batch
+      // both with the raw objects and with a still-too-generous 8-field
+      // subset. getOrCreateSession's own cookie restore (used by
+      // autoReconnectAllModels) only ever sends name/value/domain/path and
+      // has never failed - matching that exact minimal shape here instead
+      // of trying to preserve every original attribute.
+      const cleaned = liveCookies.map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path }));
+      if (cleaned.length) {
+        try {
+          await page.setCookie(...cleaned);
+        } catch (batchErr) {
+          // Belt-and-braces: if even the minimal shape fails as a batch
+          // (some single cookie's value/name itself is the problem, not
+          // the extra fields), set them one at a time so the auth cookies
+          // that DO work still land instead of an all-or-nothing failure.
+          for (const cookie of cleaned) {
+            await page.setCookie(cookie).catch(() => {});
+          }
+        }
+      }
     } catch (e) {
       console.warn(`[SLOT ${slot.id}] Live cookie overlay failed:`, e.message);
     }
