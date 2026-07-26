@@ -604,27 +604,33 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
       logIdx++;
       if (el.querySelector('.' + LABEL_CLASS)) continue;
 
-      // Previously tried to find OnlyFans' own per-message timestamp span
-      // (a bare, class-less <span>) and insert the label right after it -
-      // fragile in practice: confirmed live it consistently failed to find
-      // a match (regex verified correct in isolation, span verified
-      // present via direct DOM inspection, yet every single label still
-      // fell back), for a reason never pinned down despite repeated
-      // attempts. The log already has this message's own real send time
-      // (sentAt, from Supabase) - rendering "HH:MM gesendet von X" as one
-      // self-contained element removes the dependency on finding and
-      // pairing with OnlyFans' own DOM entirely, guaranteeing the exact
-      // one-line format every time instead of sometimes falling back to a
-      // stacked layout.
-      var timeStr = '';
-      try {
-        timeStr = new Date(sentAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-      } catch (e) {}
-      var tag = document.createElement('div');
+      // CONFIRMED LIVE (via debug-eval, full untruncated bubble HTML): the
+      // earlier attempt at this looked for "a bare, class-less <span>" and
+      // could never find a reliable match - but the real element is
+      // '.b-chat__message__time' (holds both the time text AND the
+      // read-receipt checkmark svg together), a normal classed element,
+      // not classless at all. Appending our label INSIDE it puts it on
+      // the exact same line as OnlyFans' own "18:50 ✓" instead of a
+      // separate stacked line below. Falls back to the old self-contained
+      // "HH:MM gesendet von X" block if OnlyFans ever changes this markup
+      // again, so a missing selector degrades to a still-readable label
+      // instead of silently showing nothing.
+      var timeContainer = el.querySelector('.b-chat__message__time');
+      var tag = document.createElement(timeContainer ? 'span' : 'div');
       tag.className = LABEL_CLASS;
-      tag.textContent = (timeStr ? timeStr + ' ' : '') + 'gesendet von ' + chatterName;
-      tag.style.cssText = 'font-size:10px;opacity:0.55;color:inherit;white-space:nowrap;display:block;text-align:right;margin-top:2px;';
-      el.appendChild(tag);
+      if (timeContainer) {
+        tag.textContent = ' gesendet von ' + chatterName;
+        tag.style.cssText = 'font-size:10px;opacity:0.55;color:inherit;white-space:nowrap;';
+        timeContainer.appendChild(tag);
+      } else {
+        var timeStr = '';
+        try {
+          timeStr = new Date(sentAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {}
+        tag.textContent = (timeStr ? timeStr + ' ' : '') + 'gesendet von ' + chatterName;
+        tag.style.cssText = 'font-size:10px;opacity:0.55;color:inherit;white-space:nowrap;display:block;text-align:right;margin-top:2px;';
+        el.appendChild(tag);
+      }
     }
   }
 
