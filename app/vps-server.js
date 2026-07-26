@@ -2195,8 +2195,18 @@ app.post('/insert-script-step', async (req, res) => {
       .catch((e) => console.log('[REVEAL-FLOW] Error:', e.message));
   };
 
+  // Temporary timing breakdown - the user reported 5-7s total and asked
+  // for 1-5s. The waits below already resolve as early as OnlyFans allows
+  // rather than sleeping a fixed guess, so the remaining time is either
+  // our own small fixed delays (now trimmed) or OnlyFans' own modal/Vue
+  // render time we can't shortcut - these checkpoints show which on the
+  // next live run instead of guessing further. Remove once diagnosed.
+  const t0 = Date.now();
+  const lap = (label) => console.log(`[INSERT-TIMING] ${label}: +${Date.now() - t0}ms`);
+
   try {
     await hideFlow();
+    lap('hideFlow done');
     const focused = await page.evaluate(() => {
       var el = document.querySelector('.js-text-editor[contenteditable="true"], textarea[placeholder*="message" i]');
       if (!el) return false;
@@ -2205,6 +2215,7 @@ app.post('/insert-script-step', async (req, res) => {
     });
     if (!focused) return res.json({ status: 'no_input', message: 'Kein offenes Nachrichtenfeld gefunden' });
     await page.keyboard.type(messageText);
+    lap('message typed');
 
     // Same hard-gate pattern as /upload-to-vault-fan's price step: confirmed
     // live once already (there) that blindly typing a price without
@@ -2224,20 +2235,29 @@ app.post('/insert-script-step', async (req, res) => {
         var toggle = document.querySelector('[at-attr="price_btn"]');
         if (toggle) toggle.click();
       });
-      await page.waitForSelector('input[autocomplete="price-input"]', { timeout: 3000 }).catch(() => {});
-      const priceFocused = await page.evaluate(() => {
-        var input = document.querySelector('input[autocomplete="price-input"]');
-        if (!input) return false;
-        input.focus();
-        input.value = '';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        return true;
-      });
+      // Merged the old waitForSelector + separate focus/clear evaluate into
+      // one waitForFunction: same wait for OnlyFans to render the popup,
+      // but one round trip instead of two - the focus/clear happens the
+      // instant the input exists rather than as a second, later step.
+      const priceFocused = await page
+        .waitForFunction(
+          () => {
+            var input = document.querySelector('input[autocomplete="price-input"]');
+            if (!input) return false;
+            input.focus();
+            input.value = '';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            return true;
+          },
+          { timeout: 3000 }
+        )
+        .then(() => true)
+        .catch(() => false);
       if (!priceFocused) {
         return { ok: false, error: 'Preisfeld nicht gefunden - nicht gesendet, damit nichts kostenlos verschickt wird' };
       }
       await page.keyboard.type(String(expectedPrice));
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 50));
       const priceConfirmed = await page.evaluate((expected) => {
         var input = document.querySelector('input[autocomplete="price-input"]');
         return !!(input && input.value && input.value.replace(',', '.').indexOf(String(expected)) !== -1);
@@ -2255,7 +2275,7 @@ app.post('/insert-script-step', async (req, res) => {
       if (!saved) {
         return { ok: false, error: 'Preis konnte nicht gespeichert werden (Speichern-Button nicht gefunden) - nicht gesendet, damit nichts kostenlos verschickt wird' };
       }
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 50));
       return { ok: true };
     };
 
@@ -2263,6 +2283,7 @@ app.post('/insert-script-step', async (req, res) => {
     if (items.length === 0) {
       if (price) {
         const priceResult = await setPriceOrFail(price);
+        lap('price set (no media)');
         if (!priceResult.ok) return res.json({ status: 'error', error: priceResult.error });
       }
       slot.lastActivity = Date.now();
@@ -2282,6 +2303,7 @@ app.post('/insert-script-step', async (req, res) => {
     // instead of always paying the full guess, so the visible "flash" of
     // OnlyFans' own attach window is as short as it can be.
     await page.waitForSelector('[class*="checkbox-control" i] [at-attr="checkbox"]', { timeout: 4000 }).catch(() => {});
+    lap('vault modal + grid ready');
 
     // Click each picked media item. The gallery picker (VaultGalleryPicker)
     // now hands over the REAL thumbnail URL for each item (sniffed
@@ -2343,7 +2365,7 @@ app.post('/insert-script-step', async (req, res) => {
               var container = document.querySelector('[class*="vault" i] [class*="list" i], [class*="vault" i] [class*="scroll" i]');
               if (container) container.scrollTop += container.clientHeight;
             });
-            await new Promise((r) => setTimeout(r, 250));
+            await new Promise((r) => setTimeout(r, 150));
           }
         }
       }
@@ -2377,8 +2399,9 @@ app.post('/insert-script-step', async (req, res) => {
       }
 
       if (picked) pickedCount++;
-      await new Promise((r) => setTimeout(r, 80));
+      await new Promise((r) => setTimeout(r, 40));
     }
+    lap(`items picked (${pickedCount}/${items.length})`);
 
     if (pickedCount === 0) {
       return res.json({
@@ -2464,18 +2487,21 @@ app.post('/insert-script-step', async (req, res) => {
       // closes rather than always paying the full amount even when it
       // closes in ~150ms, which is the common case.
       let stillOpen = true;
-      for (let waited = 0; waited < 600 && stillOpen; waited += 100) {
-        await new Promise((r) => setTimeout(r, 100));
+      for (let waited = 0; waited < 600 && stillOpen; waited += 50) {
+        await new Promise((r) => setTimeout(r, 50));
         stillOpen = await page.evaluate(() => document.body.classList.contains('modal-open'));
       }
       addClicked = !stillOpen;
       if (!addClicked) await new Promise((r) => setTimeout(r, 500));
     }
+    lap('add clicked, modal closed');
 
     if (price) {
       const priceResult = await setPriceOrFail(price);
+      lap('price set (with media)');
       if (!priceResult.ok) return res.json({ status: 'error', error: priceResult.error });
     }
+    lap('TOTAL before response');
 
     slot.lastActivity = Date.now();
     const allPicked = pickedCount === items.length;
