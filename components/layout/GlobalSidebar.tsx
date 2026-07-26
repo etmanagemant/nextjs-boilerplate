@@ -7,10 +7,10 @@ import { isAdminTierRole, hasFeatureAccess, type GrantableFeatureKey } from "@/l
 
 interface GlobalSidebarProps {
   role: string;
-  // Feature keys an admin explicitly granted this role via the Management
-  // page's Rechte-Kontrollzentrum - only ever populated for non-admin-tier
-  // roles (see app/layout.tsx), empty/ignored for admin/content-manager.
-  grantedFeatures?: string[];
+  // This role's explicit feature_key -> enabled rows from the Management
+  // page's Rechte-Kontrollzentrum (see app/layout.tsx) - a plain object
+  // since Map isn't serializable across the server/client boundary.
+  grantedFeatures?: Record<string, boolean>;
 }
 
 interface NavItem {
@@ -25,7 +25,7 @@ interface NavItem {
 // as two sidebars stacked side by side once this global one existed too.
 const ONLYFANS_SECTION_PATHS = ["/crm-inbox", "/management/crm-connect", "/script-vault", "/upload-vault"];
 
-export default function GlobalSidebar({ role, grantedFeatures = [] }: GlobalSidebarProps) {
+export default function GlobalSidebar({ role, grantedFeatures = {} }: GlobalSidebarProps) {
   const pathname = usePathname();
   // Content-manager gets the exact same view/rights as admin everywhere
   // EXCEPT the Management page itself (Mitarbeiter- und Rollen-Verwaltung)
@@ -38,8 +38,7 @@ export default function GlobalSidebar({ role, grantedFeatures = [] }: GlobalSide
   // instead, so an explicit grant shows them even for a non-admin-tier role.
   const isAdmin = role === "admin";
   const isAdminTier = isAdminTierRole(role);
-  const grantedSet = new Set(grantedFeatures);
-  const canUse = (key: GrantableFeatureKey) => hasFeatureAccess(role, key, grantedSet);
+  const canUse = (key: GrantableFeatureKey) => hasFeatureAccess(role, key, grantedFeatures);
   // CONFIRMED LIVE: the fixed 224px sidebar plus its matching 224px content
   // padding (app/layout.tsx) ate almost half the screen on a phone -
   // models do most of their uploading from there. Off-canvas below the md

@@ -9,7 +9,7 @@ import {
   getContentPlanPosts,
 } from "./actions";
 import { hasFeatureAccess } from "@/lib/roles";
-import { fetchGrantedFeatureKeys } from "@/lib/getRolePermissions";
+import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +37,7 @@ export default async function ContentPlanPage({
       isAllowed = true;
     } else {
       const profile = await getCurrentProfile(user.id);
-      const granted = await fetchGrantedFeatureKeys(supabase, profile?.role);
+      const granted = await fetchRolePermissionMap(supabase, profile?.role);
       isAllowed = hasFeatureAccess(profile?.role, "content-plan", granted);
     }
 

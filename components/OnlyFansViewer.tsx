@@ -7,7 +7,7 @@ import { FanCrmPanel } from "@/components/FanCrmPanel";
 import { ModelNotesPanel } from "@/components/ModelNotesPanel";
 import EmojiPicker from "@/components/layout/EmojiPicker";
 import { updateChatterEmojis } from "@/app/management/crm-connect/actions";
-import { isAdminTierRole } from "@/lib/roles";
+import { isAdminTierRole, hasFeatureAccess } from "@/lib/roles";
 
 interface OnlyFansViewerProps {
   modelId: string;
@@ -19,6 +19,10 @@ interface OnlyFansViewerProps {
   onEmojisChange?: (emojis: string[]) => void;
   chatterId?: string;
   userRole?: string;
+  // This role's explicit feature_key -> enabled rows from the Management
+  // page's Rechte-Kontrollzentrum - see the "onlyfans-model-notes-edit"
+  // check below.
+  permissions?: Record<string, boolean>;
 }
 
 const DEFAULT_EMOJIS = ["😊", "😂", "🔥", "❤️", "😍", "👏", "🎉", "😘", "🥵", "💦", "😉", "🙈"];
@@ -42,8 +46,13 @@ export function OnlyFansViewer({
   onEmojisChange,
   chatterId,
   userRole = "chatter",
+  permissions = {},
 }: OnlyFansViewerProps) {
   const isAdmin = isAdminTierRole(userRole);
+  // Whether Model-Notizen is editable vs read-only - the one thing inside
+  // the live OnlyFans mask itself that's gated per-role, now configurable
+  // via the Rechte-Kontrollzentrum instead of a flat admin-tier check.
+  const canEditModelNotes = hasFeatureAccess(userRole, "onlyfans-model-notes-edit", permissions);
   const [phase, setPhase] = useState<"connecting" | "live" | "no-session" | "error">("connecting");
   const [error, setError] = useState("");
   const [pasteStatus, setPasteStatus] = useState<"idle" | "done">("idle");
@@ -456,7 +465,7 @@ export function OnlyFansViewer({
               metadata={currentFan.metadata}
               lastEditedBy={currentFan.lastEditedBy}
               onSaved={pollCurrentFan}
-              isAdmin={isAdmin}
+              isAdmin={canEditModelNotes}
             />
           ) : (
             <div className="w-80 flex-shrink-0 h-full bg-[#0A0A0A] flex flex-col">
@@ -464,7 +473,7 @@ export function OnlyFansViewer({
                 <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">👤 Fan CRM</h2>
                 <p className="text-[11px] text-slate-500 mt-1">Öffne einen Fan-Chat in OnlyFans für Fan-Details.</p>
               </div>
-              <ModelNotesPanel modelId={modelId} isAdmin={isAdmin} />
+              <ModelNotesPanel modelId={modelId} isAdmin={canEditModelNotes} />
             </div>
           )}
         </>

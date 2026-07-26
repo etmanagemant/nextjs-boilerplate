@@ -2,7 +2,7 @@ import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import { updateAgencySettings } from "@/app/abrechnung/actions";
 import { hasFeatureAccess } from "@/lib/roles";
-import { fetchGrantedFeatureKeys } from "@/lib/getRolePermissions";
+import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export default async function BuchhaltungPage() {
   // Harte Absicherung: Chatter fliegen sofort raus!
   if (!user) { redirect("/login"); }
   const adminCheck = await getCurrentProfile(user.id);
-  const grantedBuchhaltung = await fetchGrantedFeatureKeys(supabase, adminCheck?.role);
+  const grantedBuchhaltung = await fetchRolePermissionMap(supabase, adminCheck?.role);
   if (user.email !== "etmanagement@gmail.com" && !hasFeatureAccess(adminCheck?.role, "buchhaltung", grantedBuchhaltung)) { redirect("/"); }
 
   // Daten parallel laden

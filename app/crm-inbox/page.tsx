@@ -3,6 +3,7 @@ import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import CRMInboxClient from "@/components/layout/CRMInboxClient";
+import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,10 @@ export default async function CRMInboxPage() {
       }));
     }
 
-    const { data: allShifts } = await supabase.from("shifts").select("*");
+    const [{ data: allShifts }, permMap] = await Promise.all([
+      supabase.from("shifts").select("*"),
+      fetchRolePermissionMap(supabase, userRole),
+    ]);
 
     return (
       <CRMInboxClient
@@ -71,6 +75,7 @@ export default async function CRMInboxPage() {
         allShifts={allShifts || []}
         userEmail={user.email || ""}
         userId={user.id}
+        permissions={Object.fromEntries(permMap)}
       />
     );
   } catch (err) {

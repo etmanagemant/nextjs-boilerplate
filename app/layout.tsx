@@ -1,7 +1,6 @@
 import "./globals.css";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
-import { fetchGrantedFeatureKeys } from "@/lib/getRolePermissions";
-import { isAdminTierRole } from "@/lib/roles";
+import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
 import GlobalSidebar from "@/components/layout/GlobalSidebar";
 import GlobalTopBar from "@/components/layout/GlobalTopBar";
 import WaitingForRole from "@/components/layout/WaitingForRole";
@@ -45,12 +44,11 @@ export default async function RootLayout({
     }
   }
 
-  // Only chatter/moderator (non-admin-tier) ever have explicit grants to
-  // look up - admin/content-manager already get everything, no need to
-  // spend a query on it.
-  const grantedFeatures = user && !pending && !isAdminTierRole(role)
-    ? Array.from(await fetchGrantedFeatureKeys(supabase, role))
-    : [];
+  // Fetched for every role now, including admin/content-manager - the
+  // Rechte-Kontrollzentrum lets the Hauptadmin override a default for any
+  // role, not just grant extras to chatter/moderator (see lib/roles.ts).
+  const permMap = user && !pending ? await fetchRolePermissionMap(supabase, role) : new Map();
+  const grantedFeatures = Object.fromEntries(permMap);
 
   return (
     <html lang="de" className="dark">

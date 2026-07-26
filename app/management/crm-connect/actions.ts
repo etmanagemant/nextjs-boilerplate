@@ -3,7 +3,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 import { hasFeatureAccess, type GrantableFeatureKey } from "@/lib/roles";
-import { fetchGrantedFeatureKeys } from "@/lib/getRolePermissions";
+import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
 
 // Shared by every action below - admin-tier always passes, a chatter/
 // moderator explicitly granted the relevant feature via the Management
@@ -21,7 +21,7 @@ async function assertFeatureAccess(
     .select("role")
     .eq("user_id", userId)
     .maybeSingle();
-  const granted = await fetchGrantedFeatureKeys(supabase, profile?.role);
+  const granted = await fetchRolePermissionMap(supabase, profile?.role);
   if (!hasFeatureAccess(profile?.role, featureKey, granted)) {
     throw new Error("Unauthorized: Admin access required");
   }

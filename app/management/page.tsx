@@ -5,9 +5,7 @@ import { updateMitarbeiterRolle, updateMitarbeiterName, deleteMitarbeiter, updat
 import { revalidatePath } from "next/cache";
 import RoleSelect from "@/components/layout/RoleSelect";
 import PermissionCheckbox from "@/components/layout/PermissionCheckbox";
-import { GRANTABLE_FEATURES } from "@/lib/roles";
-
-const GRANTABLE_ROLES = ["chatter", "moderator"] as const;
+import { GRANTABLE_FEATURES, PERMISSION_GRID_ROLES, hasFeatureAccess } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -171,14 +169,14 @@ export default async function ManagementPage() {
       <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 shadow-lg">
         <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">Rechte-Kontrollzentrum</h2>
         <p className="text-[11px] text-slate-500 mb-4">
-          Zusätzliche Seiten-Zugriffe für Chatter/Moderator freischalten - Admin und Content-Managerin haben ohnehin immer alles.
+          Seiten-Zugriffe und OnlyFans-Funktionen pro Rolle freischalten oder sperren - Admin/Content-Managerin starten hier mit allem angehakt, lassen sich aber genauso umstellen.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
-                <th className="p-3">Seite</th>
-                {GRANTABLE_ROLES.map((r) => (
+                <th className="p-3">Funktion</th>
+                {PERMISSION_GRID_ROLES.map((r) => (
                   <th key={r} className="p-3 text-center capitalize">{r}</th>
                 ))}
               </tr>
@@ -187,12 +185,12 @@ export default async function ManagementPage() {
               {GRANTABLE_FEATURES.map((feature) => (
                 <tr key={feature.key} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
                   <td className="p-3 text-white">{feature.label}</td>
-                  {GRANTABLE_ROLES.map((r) => (
+                  {PERMISSION_GRID_ROLES.map((r) => (
                     <td key={r} className="p-3 text-center">
                       <PermissionCheckbox
                         role={r}
                         featureKey={feature.key}
-                        defaultChecked={permMap.get(r)?.get(feature.key) ?? false}
+                        defaultChecked={hasFeatureAccess(r, feature.key, permMap.get(r) ?? new Map())}
                         onUpdateAction={updateRolePermission}
                       />
                     </td>

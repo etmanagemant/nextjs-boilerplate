@@ -2,7 +2,7 @@ import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import MassMessageListClient from "@/components/layout/MassMessageListClient";
 import { hasFeatureAccess } from "@/lib/roles";
-import { fetchGrantedFeatureKeys } from "@/lib/getRolePermissions";
+import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export default async function MassMessagesPage() {
 
   if (user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" && user.email !== "etmanagement@gmail.com") {
     const profile = await getCurrentProfile(user.id);
-    const granted = await fetchGrantedFeatureKeys(supabase, profile?.role);
+    const granted = await fetchRolePermissionMap(supabase, profile?.role);
     if (!hasFeatureAccess(profile?.role, "massmessage", granted)) {
       redirect("/");
     }

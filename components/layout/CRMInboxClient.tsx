@@ -27,6 +27,10 @@ interface CRMInboxClientProps {
   allShifts?: Shift[];
   userEmail?: string;
   userId?: string;
+  // This role's explicit feature_key -> enabled rows from the Management
+  // page's Rechte-Kontrollzentrum - currently only used for the OnlyFans-
+  // mask-level "Model-Notizen bearbeiten" toggle, see OnlyFansViewer.
+  permissions?: Record<string, boolean>;
 }
 
 // Live-Ansicht (VNC-Spiegelung des echten OnlyFans-Fensters) ist der einzige
@@ -44,6 +48,7 @@ export default function CRMInboxClient({
   allShifts = [],
   userEmail = "",
   userId = "",
+  permissions = {},
 }: CRMInboxClientProps) {
   const searchParams = useSearchParams();
   const modelFromUrl = searchParams.get("model");
@@ -110,6 +115,7 @@ export default function CRMInboxClient({
                 onEmojisChange={setEmojis}
                 chatterId={chatterId}
                 userRole={userRole}
+                permissions={permissions}
               />
             </div>
           )}
