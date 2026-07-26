@@ -1973,6 +1973,22 @@ app.post('/sync-chats', async (req, res) => {
       }, qs);
     }
 
+    // CONFIRMED LIVE: right after a fresh login, Supabase has no synced
+    // messages yet for most/any conversations, so EVERY conversation in
+    // the list looks "new" on the very first real sync pass - deep-
+    // fetching all of them in one go (up to 50, ~300ms apart) is a burst
+    // of ~15s of rapid automated requests immediately following a login,
+    // which is exactly the shape of traffic anti-bot systems flag. This
+    // model's session went invalid within minutes of reconnecting,
+    // right when this route would have been doing exactly that. Capping
+    // how many conversations get deep-fetched per call spreads a large
+    // backlog across many 90s cycles instead of bursting it all at once -
+    // new incoming messages (the actual point of this sync) are almost
+    // always only 1-2 conversations per cycle anyway; it's only the
+    // one-time backlog right after a fresh login that was ever large.
+    const MAX_DEEP_FETCHES_PER_SYNC = 5;
+    let deepFetchCount = 0;
+
     const conversations = [];
     for (const c of chatsData.list) {
       const fanId = c.withUser && c.withUser.id;
@@ -1990,8 +2006,9 @@ app.post('/sync-chats', async (req, res) => {
       };
 
       const knownId = known[String(fanId)];
-      const hasNew = conv.lastMessageId && conv.lastMessageId !== String(knownId || '');
+      const hasNew = conv.lastMessageId && conv.lastMessageId !== String(knownId || '') && deepFetchCount < MAX_DEEP_FETCHES_PER_SYNC;
       if (hasNew) {
+        deepFetchCount++;
         try {
           const msgData = await page.evaluate(async (fid) => {
             const r = await fetch(`https://onlyfans.com/api2/v2/chats/${fid}/messages?limit=20&order=desc&skip_users=all`, {
