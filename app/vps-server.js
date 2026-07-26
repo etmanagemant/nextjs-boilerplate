@@ -1795,22 +1795,40 @@ app.post('/sync-live', async (req, res) => {
 
   try {
     if (discover) {
-      // One-off discovery pass: navigate to the real chats page and record
-      // every /api2/ call the app itself makes, to find the real endpoint
-      // instead of guessing.
+      // One-off discovery pass: navigate to the real chats page (and,
+      // if discoverFanId is given, into that specific conversation too)
+      // and record every /api2/ call the app itself makes AND its response
+      // body, to find the real endpoints/shapes instead of guessing.
+      const { discoverFanId } = req.body || {};
       const calls = [];
       const onRequest = (r) => {
-        if (r.url().includes('/api2/')) calls.push(`${r.method()} ${r.url()}`);
+        if (r.url().includes('/api2/')) calls.push({ method: r.method(), url: r.url() });
+      };
+      const bodies = {};
+      const onResponse = async (r) => {
+        const url = r.url();
+        if (!url.includes('/api2/')) return;
+        try {
+          bodies[url] = JSON.stringify(await r.json()).slice(0, 6000);
+        } catch (e) {
+          /* non-JSON or already consumed - skip */
+        }
       };
       session.page.on('request', onRequest);
+      session.page.on('response', onResponse);
       try {
         await session.page.goto('https://onlyfans.com/my/chats', { waitUntil: 'networkidle2', timeout: 20000 });
+        await new Promise((r) => setTimeout(r, 1500));
+        if (discoverFanId) {
+          await session.page.goto(`https://onlyfans.com/my/chats/chat/${discoverFanId}/`, { waitUntil: 'networkidle2', timeout: 20000 });
+          await new Promise((r) => setTimeout(r, 1500));
+        }
       } catch (e) {
         console.warn(`[SYNC-LIVE] Discovery nav warning for ${modelId}:`, e.message);
       }
-      await new Promise((r) => setTimeout(r, 2000));
       session.page.off('request', onRequest);
-      return res.json({ status: 'success', modelId, discovered: calls, pageUrl: session.page.url() });
+      session.page.off('response', onResponse);
+      return res.json({ status: 'success', modelId, discovered: calls, bodies, pageUrl: session.page.url() });
     }
 
     // This used to fall back to a guessed endpoint (/api2/v2/chats?...) that
@@ -1849,6 +1867,22 @@ app.post('/sync-live', async (req, res) => {
 // shape below is a best guess (same as the old, never-live-tested
 // Browserless version) - run POST /sync-live with discover:true against a
 // real logged-in session to confirm/correct it, same as the chats endpoint.
+// Sends a real chat message for the Native Chat Mode custom UI (Task #58 -
+// no VNC involved at all here, unlike /insert-script-step which explicitly
+// leaves a review-before-send step for a human watching over VNC). The
+// previous implementation tried a raw signed fetch() to an
+// ONLYFANS_SEND_MESSAGE_ENDPOINT that was never configured (OnlyFans signs
+// these requests with headers only its own front-end JS computes - the
+// same reason /vault-media reads real API responses instead of crafting
+// its own request) AND never actually used fanId to navigate anywhere, so
+// every send just POSTed into whatever conversation the shared session's
+// page happened to already be on. Rewritten to reuse the exact same
+// proven DOM-automation pattern as /upload-to-vault-fan (which already
+// reliably auto-sends with zero review step): navigate straight to this
+// fan's own chat URL, type into the real compose box, click the real
+// Send button - hard-gated at every step so a selector miss reports a
+// clear error instead of silently doing nothing or sending to the wrong
+// fan.
 app.post('/send-message', async (req, res) => {
   const { modelId, fanId, text } = req.body || {};
   if (!modelId || !fanId || !text) {
@@ -1860,35 +1894,68 @@ app.post('/send-message', async (req, res) => {
     return res.json({ status: 'no_live_session', modelId });
   }
   session.lastActivity = Date.now();
+  const page = session.page;
+
+  // Same invisible-flow treatment as /insert-script-step - if an admin
+  // happens to have this exact model open in a VNC live view (Connection
+  // Hub's own stream, or Focus Mode) at the same moment a Native Chat Mode
+  // send fires on this shared main session, they should see nothing
+  // change until the real, finished state, not a flash of navigation.
+  const hideFlow = async () => {
+    const snapshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 }).catch(() => null);
+    await page
+      .evaluate((imgData) => {
+        if (document.getElementById('__etm_hide_flow__')) return;
+        var overlay = document.createElement('img');
+        overlay.id = '__etm_hide_flow__';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;width:100%;height:100%;object-fit:fill;background:#0b0b0d;';
+        if (imgData) overlay.src = 'data:image/jpeg;base64,' + imgData;
+        document.body.appendChild(overlay);
+      }, snapshot)
+      .catch(() => {});
+  };
+  const revealFlow = () =>
+    page
+      .evaluate(() => {
+        var s = document.getElementById('__etm_hide_flow__');
+        if (s) s.remove();
+      })
+      .catch(() => {});
 
   try {
-    // No longer guessing a default here either (see the same fix on
-    // /sync-live) - a wrong guess means every send attempt POSTs a
-    // malformed request to OnlyFans for no benefit. Confirm the real
-    // endpoint via discover:true first.
-    const endpoint = process.env.ONLYFANS_SEND_MESSAGE_ENDPOINT;
-    if (!endpoint) {
-      return res.json({ status: 'not_configured', modelId, message: 'ONLYFANS_SEND_MESSAGE_ENDPOINT not set - run discover:true against a live session first' });
-    }
-    const data = await session.page.evaluate(async (url, messageText) => {
-      const res = await fetch(url, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: messageText }),
-      });
-      const bodyText = await res.text();
-      try {
-        return { ok: res.ok, status: res.status, json: JSON.parse(bodyText) };
-      } catch (e) {
-        return { ok: res.ok, status: res.status, text: bodyText.slice(0, 500) };
-      }
-    }, endpoint, text);
+    await hideFlow();
 
-    res.json({ status: 'success', modelId, data });
+    await page.goto(`https://onlyfans.com/my/chats/chat/${fanId}/`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await page.waitForSelector('.js-text-editor[contenteditable="true"], textarea[placeholder*="message" i]', { timeout: 10000 }).catch(() => {});
+
+    const focused = await page.evaluate(() => {
+      var el = document.querySelector('.js-text-editor[contenteditable="true"], textarea[placeholder*="message" i]');
+      if (!el) return false;
+      el.focus();
+      return true;
+    });
+    if (!focused) {
+      return res.json({ status: 'error', error: 'Nachrichtenfeld nicht gefunden - Chat-Seite evtl. nicht geladen' });
+    }
+    await page.keyboard.type(text);
+    await new Promise((r) => setTimeout(r, 200));
+
+    const sent = await page.evaluate(() => {
+      var btn = document.querySelector('[at-attr="send_btn"]');
+      if (!btn || btn.disabled) return false;
+      btn.click();
+      return true;
+    });
+    if (!sent) {
+      return res.json({ status: 'error', error: 'Senden-Button nicht gefunden oder deaktiviert - Text wurde eingefügt, aber nicht gesendet' });
+    }
+
+    res.json({ status: 'success', modelId, fanId });
   } catch (error) {
     console.error(`[SEND-MESSAGE] Error for ${modelId}:`, error.message);
     res.status(200).json({ status: 'error', error: error.message });
+  } finally {
+    await revealFlow();
   }
 });
 
