@@ -18,6 +18,11 @@ export interface UploadTarget {
   vaultFanId?: string;
   vaultFanLabel?: string;
   price: number;
+  // Only set by Upload Vault (a real logged-in chatter/admin) - never by
+  // the model workspace's own upload, per the user's explicit ask that a
+  // model's own uploads never get a "gesendet von" label. Its presence is
+  // what the VPS route uses to decide whether to log attribution at all.
+  chatterName?: string;
 }
 
 export interface BatchFile {
@@ -60,6 +65,7 @@ async function sendOneBatch(
       formData.append("price", String(target.price));
       formData.append("batchId", batchId);
       formData.append("isLastInBatch", isLast ? "true" : "false");
+      if (target.chatterName) formData.append("chatterName", target.chatterName);
 
       const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: formData });
       const data = await res.json();

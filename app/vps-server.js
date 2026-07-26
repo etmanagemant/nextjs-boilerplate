@@ -476,6 +476,21 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
     return holder ? holder.textContent.trim() : '';
   }
 
+  // CONFIRMED LIVE (via debug-eval): an attachment-only bubble carries
+  // 'm-has-media' on the outer .b-chat__message and has no text-holder at
+  // all - text-matching can never attribute these (an empty string isn't
+  // a usable identifier once more than one exists in a conversation). The
+  // attached image itself is: OnlyFans re-signs its CDN thumbnail URLs
+  // (fresh query string) on every page load, but the stable path before
+  // the '?' (domain + /files/<hash>/<size>_<name>.<ext>) doesn't change -
+  // same trick already proven for vault-picker thumbnail matching.
+  function getBubbleMediaKey(el) {
+    if (!el.classList.contains('m-has-media')) return '';
+    var img = el.querySelector('.post_media img, .b-chat__message__media img');
+    if (!img || !img.src) return '';
+    return img.src.split('?')[0];
+  }
+
   function armSendWindow() {
     recentSendUntil = Date.now() + SEND_WINDOW_MS;
   }
@@ -512,14 +527,19 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
       return;
     }
     var text = getBubbleText(el);
-    if (!text) return;
+    var mediaKey = text ? '' : getBubbleMediaKey(el);
+    if (!text && !mediaKey) return;
     el.dataset.etmLogged = '1';
     var fanId = getFanId();
     if (!fanId || !API_BASE) return;
     fetch(API_BASE + '/api/crm/log-sent-message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ modelId: MODEL_ID, fanId: fanId, chatterName: CHATTER_NAME, messageText: text }),
+      body: JSON.stringify(
+        text
+          ? { modelId: MODEL_ID, fanId: fanId, chatterName: CHATTER_NAME, messageText: text }
+          : { modelId: MODEL_ID, fanId: fanId, chatterName: CHATTER_NAME, mediaKey: mediaKey }
+      ),
     }).catch(function() {});
   }
 
@@ -561,14 +581,26 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
     // a bubble that isn't the log's next expected entry just gets skipped
     // without consuming anything, so unlogged junk bubbles interleaved
     // anywhere no longer steal a later duplicate-text entry.
+    // Attachment-only entries (media_key set, message_text null) match by
+    // the bubble's own image src instead of text - same left-to-right,
+    // never-search-ahead matching as text, for the same reason: two
+    // unrelated attachment messages would otherwise be indistinguishable
+    // enough to misattribute (arguably worse than the text case, since
+    // there's no content at all to tell them apart by, only order).
     var mine = document.querySelectorAll('.b-chat__message.m-from-me');
     var logIdx = 0;
     for (var i = 0; i < mine.length && logIdx < sentLog.length; i++) {
       var el = mine[i];
-      var text = getBubbleText(el);
-      if (!text || text !== sentLog[logIdx].message_text) continue;
-      var chatterName = sentLog[logIdx].chatter_name;
-      var sentAt = sentLog[logIdx].sent_at;
+      var entry = sentLog[logIdx];
+      var matched = false;
+      if (entry.message_text) {
+        matched = getBubbleText(el) === entry.message_text;
+      } else if (entry.media_key) {
+        matched = getBubbleMediaKey(el) === entry.media_key;
+      }
+      if (!matched) continue;
+      var chatterName = entry.chatter_name;
+      var sentAt = entry.sent_at;
       logIdx++;
       if (el.querySelector('.' + LABEL_CLASS)) continue;
 
@@ -2722,7 +2754,7 @@ app.post('/chat-search', async (req, res) => {
 // of size 1 collapses to the exact same single-file-per-message behavior
 // as before - there's no separate code path needed for "just one file".
 app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), async (req, res) => {
-  const { modelId, vaultFanLabel, vaultFanId, price, fileName, batchId, isLastInBatch } = req.query;
+  const { modelId, vaultFanLabel, vaultFanId, price, fileName, batchId, isLastInBatch, chatterName } = req.query;
   if (!modelId || (!vaultFanLabel && !vaultFanId) || !fileName) {
     return res.status(400).json({ error: 'Missing modelId, vaultFanLabel/vaultFanId, or fileName' });
   }
@@ -2935,6 +2967,40 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
         status: 'error',
         error: 'Senden konnte nicht bestätigt werden - bitte in der Live-Ansicht prüfen, ob die Nachricht rausging',
       });
+    }
+
+    // "Gesendet von" attribution - only when a real logged-in CRM user
+    // (chatter/admin) drove this send. Per the user's explicit ask, the
+    // model's OWN uploads never get labeled this way (nobody needs to be
+    // told a model sent her own content) - the model workspace's own
+    // caller simply never sends chatterName, so this whole block is
+    // skipped there. Best-effort: a logging failure must never affect the
+    // actual send result, which already succeeded by this point.
+    if (chatterName && vaultFanId) {
+      try {
+        const mediaKeys = await page.evaluate((count) => {
+          var mine = Array.from(document.querySelectorAll('.b-chat__message.m-from-me.m-has-media'));
+          var last = mine.slice(-count);
+          return last
+            .map(function (el) {
+              var img = el.querySelector('.post_media img, .b-chat__message__media img');
+              return img && img.src ? img.src.split('?')[0] : null;
+            })
+            .filter(Boolean);
+        }, filePaths.length);
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+        if (appUrl) {
+          for (const mediaKey of mediaKeys) {
+            await fetch(`${appUrl}/api/crm/log-sent-message`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ modelId, fanId: vaultFanId, chatterName, mediaKey }),
+            }).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn('[UPLOAD-TO-VAULT-FAN] Sent-by logging failed (non-fatal):', e.message);
+      }
     }
 
     res.json({ status: 'success', sentCount: filePaths.length });

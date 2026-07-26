@@ -41,6 +41,7 @@ export default async function UploadVaultPage() {
     <UploadVaultClient
       userId={user.id}
       userRole={userRole}
+      chatterName={profile?.full_name || user.email || "Unbekannt"}
       connectedModels={connectedModels}
       initialMappings={mappings || []}
     />

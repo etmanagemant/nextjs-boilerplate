@@ -25,14 +25,20 @@ export async function OPTIONS() {
  * overlay is authoritative and visible to every viewer (any chatter/admin,
  * any time) rather than only whoever happened to be looking when it was
  * sent.
- * POST  Body: { modelId, fanId, chatterName, messageText }
+ *
+ * mediaKey is the attachment-only equivalent of messageText - a photo/
+ * video message has no text to match a DOM bubble against later, so it's
+ * matched by its attached file's stable CDN path instead (see
+ * CRM_SENT_LOG_MEDIA_KEY.sql). Exactly one of messageText/mediaKey is
+ * required, never both/neither.
+ * POST  Body: { modelId, fanId, chatterName, messageText? , mediaKey? }
  */
 export async function POST(req: NextRequest) {
   try {
-    const { modelId, fanId, chatterName, messageText } = await req.json();
-    if (!modelId || !fanId || !chatterName || !messageText) {
+    const { modelId, fanId, chatterName, messageText, mediaKey } = await req.json();
+    if (!modelId || !fanId || !chatterName || (!messageText && !mediaKey)) {
       return NextResponse.json(
-        { error: "Missing modelId, fanId, chatterName, or messageText" },
+        { error: "Missing modelId, fanId, chatterName, or messageText/mediaKey" },
         { status: 400, headers: CORS_HEADERS }
       );
     }
@@ -42,7 +48,8 @@ export async function POST(req: NextRequest) {
       model_id: modelId,
       fan_id: String(fanId),
       chatter_name: chatterName,
-      message_text: messageText,
+      message_text: messageText || null,
+      media_key: mediaKey || null,
     });
     if (error) throw error;
 
@@ -77,7 +84,7 @@ export async function GET(req: NextRequest) {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("crm_onlyfans_sent_log")
-      .select("chatter_name, message_text, sent_at")
+      .select("chatter_name, message_text, media_key, sent_at")
       .eq("model_id", modelId)
       .eq("fan_id", fanId)
       .order("sent_at", { ascending: true })

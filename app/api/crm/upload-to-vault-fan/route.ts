@@ -38,6 +38,10 @@ export async function POST(req: NextRequest) {
     // drives.
     const batchId = (formData.get("batchId") as string | null) || "";
     const isLastInBatch = (formData.get("isLastInBatch") as string | null) || "";
+    // Only ever set by Upload Vault (a real chatter/admin driving this),
+    // never by the model workspace's own upload - see the VPS route's own
+    // comment for why that's the deciding factor for "gesendet von".
+    const chatterName = (formData.get("chatterName") as string | null) || "";
 
     if (!file || !modelId || (!vaultFanLabel && !vaultFanId)) {
       return NextResponse.json({ error: "Missing file, modelId, or vaultFanLabel/vaultFanId" }, { status: 400 });
@@ -50,6 +54,7 @@ export async function POST(req: NextRequest) {
       ...(vaultFanLabel ? { vaultFanLabel } : {}),
       ...(price ? { price } : {}),
       ...(batchId ? { batchId, isLastInBatch } : {}),
+      ...(chatterName ? { chatterName } : {}),
     });
 
     const buffer = Buffer.from(await file.arrayBuffer());

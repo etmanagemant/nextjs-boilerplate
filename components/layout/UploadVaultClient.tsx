@@ -21,6 +21,7 @@ interface VaultFanMapping {
 interface UploadVaultClientProps {
   userId: string;
   userRole: string;
+  chatterName: string;
   connectedModels: ConnectedModel[];
   initialMappings: VaultFanMapping[];
 }
@@ -46,6 +47,7 @@ type QueueItem = {
 export default function UploadVaultClient({
   userId,
   userRole,
+  chatterName,
   connectedModels,
   initialMappings,
 }: UploadVaultClientProps) {
@@ -147,7 +149,7 @@ export default function UploadVaultClient({
     const pending = queue.filter((q) => q.status !== "success");
     const ok = await sendFilesInBatches(
       pending.map((q) => ({ id: q.id, file: q.file })),
-      { modelId: activeModelId, vaultFanId, vaultFanLabel, price: vaultFanPrice },
+      { modelId: activeModelId, vaultFanId, vaultFanLabel, price: vaultFanPrice, chatterName },
       (id, status, error) => {
         setQueue((q) => q.map((x) => (x.id === id ? { ...x, status, error } : x)));
       }
