@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { ChatSearchPicker } from "./ChatSearchPicker";
 import { sendFilesInBatches, type UploadItemStatus } from "@/lib/uploadVaultBatch";
+import UploadQueueItem from "./UploadQueueItem";
 
 interface ConnectedModel {
   id: string;
@@ -158,14 +159,6 @@ export default function UploadVaultClient({
     if (ok) setAllConfirmed(true);
   };
 
-  const statusLabel: Record<QueueItem["status"], string> = {
-    pending: "⏳ Wartet",
-    uploading: "📤 Wird hochgeladen...",
-    staged: "📦 Hochgeladen, wartet auf Versand",
-    success: "✅ Gesendet",
-    error: "❌ Fehler",
-  };
-
   const canSend = (!!vaultFanLabel || !!vaultFanId) && vaultFanPrice != null;
   const sentCount = queue.filter((q) => q.status === "success").length;
   const progressPercent = queue.length ? Math.round((sentCount / queue.length) * 100) : 0;
@@ -256,22 +249,28 @@ export default function UploadVaultClient({
                   Model, einmal im Connection Hub hinterlegt und automatisch
                   auf jeden Upload angewendet. Nur noch reine Anzeige hier,
                   damit der Upload-Ablauf kein Preisfeld zum Anfassen hat. */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1 uppercase">Preis</label>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1 uppercase">Preis</label>
+                  <p className="text-[10px] text-slate-500">
+                    Automatisch auf jeden Upload angewendet - einstellbar im Connection Hub.
+                  </p>
+                </div>
                 {vaultFanPrice != null ? (
-                  <p className="text-sm text-[#C9A86A] font-bold">${vaultFanPrice}</p>
+                  <span className="px-4 py-2 rounded-full bg-[#C9A86A]/15 border border-[#C9A86A]/40 text-[#E5C158] font-black text-lg">
+                    ${vaultFanPrice}
+                  </span>
                 ) : (
-                  <p className="text-sm text-red-400">Noch kein Preis hinterlegt</p>
+                  <span className="px-4 py-2 rounded-full bg-red-500/15 border border-red-500/40 text-red-300 text-xs font-bold">
+                    Kein Preis hinterlegt
+                  </span>
                 )}
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Wird automatisch auf jeden Upload angewendet - einstellbar im Connection Hub, nicht hier.
-                </p>
               </div>
             </section>
           )}
 
           <section
-            className="mb-6 p-8 rounded-xl border-2 border-dashed border-[#9C7A3D]/50 bg-black/40 hover:border-[#C9A86A]/70 transition cursor-pointer"
+            className="mb-6 p-10 rounded-2xl border-2 border-dashed border-[#9C7A3D]/40 bg-gradient-to-b from-black/40 to-black/20 hover:border-[#C9A86A]/70 hover:from-[#C9A86A]/5 transition-all cursor-pointer"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
@@ -279,8 +278,8 @@ export default function UploadVaultClient({
             }}
           >
             <div className="text-center">
-              <div className="text-5xl mb-4">📁</div>
-              <p className="text-slate-400 mb-4">Dateien hierher ziehen oder klicken (Mehrfachauswahl möglich)</p>
+              <div className="text-6xl mb-4">📁</div>
+              <p className="text-slate-400 mb-5 text-sm">Dateien hierher ziehen oder klicken (Mehrfachauswahl möglich)</p>
               <label className="inline-block">
                 <input
                   type="file"
@@ -289,7 +288,7 @@ export default function UploadVaultClient({
                   className="hidden"
                   accept="image/*,video/*"
                 />
-                <span className="inline-block px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg cursor-pointer">
+                <span className="inline-block px-8 py-3.5 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-xl uppercase tracking-wider transition shadow-lg hover:shadow-[#C9A86A]/30 cursor-pointer">
                   ➕ Dateien wählen
                 </span>
               </label>
@@ -323,26 +322,18 @@ export default function UploadVaultClient({
                 </div>
               )}
               {queue.map((item) => (
-                <div
+                <UploadQueueItem
                   key={item.id}
-                  className="flex items-center gap-3 bg-black/40 p-3 rounded-lg border border-[#9C7A3D]/10"
-                >
-                  <span className="text-2xl flex-shrink-0">{item.file.type.startsWith("video") ? "🎥" : "🖼️"}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{item.file.name}</p>
-                    <p className="text-[10px] text-slate-500">{statusLabel[item.status]}{item.error ? ` - ${item.error}` : ""}</p>
-                  </div>
-                  {item.status === "pending" && (
-                    <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-300 text-sm">
-                      ✕
-                    </button>
-                  )}
-                </div>
+                  file={item.file}
+                  status={item.status}
+                  error={item.error}
+                  onRemove={() => removeItem(item.id)}
+                />
               ))}
               <button
                 onClick={sendAll}
                 disabled={isSending || !canSend}
-                className="w-full mt-3 px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg disabled:opacity-40"
+                className="w-full mt-3 px-6 py-3.5 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-xl uppercase tracking-wider transition shadow-lg hover:shadow-[#C9A86A]/30 disabled:opacity-40 disabled:shadow-none"
               >
                 {isSending
                   ? `Wird gesendet... (${sentCount}/${queue.length})`

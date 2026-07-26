@@ -47,3 +47,16 @@ WITH CHECK (
     AND profiles.role IN ('admin', 'moderator')
   )
 );
+
+-- Needed so the opportunistic 20-day cleanup in app/api/notifications
+-- (GET) can actually delete old rows - without this, RLS silently
+-- blocks every delete since no policy grants it.
+CREATE POLICY "crm_notifications_delete_admin" ON crm_notifications
+FOR DELETE
+USING (
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.user_id = auth.uid()
+    AND profiles.role IN ('admin', 'moderator')
+  )
+);

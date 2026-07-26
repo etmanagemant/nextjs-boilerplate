@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { sendFilesInBatches, type UploadItemStatus } from "@/lib/uploadVaultBatch";
+import UploadQueueItem from "./UploadQueueItem";
 
 interface ModelInfo {
   id: string;
@@ -121,155 +122,138 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
     }
   };
 
-  const statusLabel: Record<QueueItem["status"], string> = {
-    pending: "⏳ Wartet",
-    uploading: "📤 Wird hochgeladen...",
-    staged: "📦 Hochgeladen, wartet auf Versand",
-    success: "✅ Gesendet",
-    error: "❌ Fehler",
-  };
-
   const ofSentCount = ofQueue.filter((q) => q.status === "success").length;
   const ofProgressPercent = ofQueue.length ? Math.round((ofSentCount / ofQueue.length) * 100) : 0;
 
   return (
-    <div className="flex h-screen bg-[#0A0A0A] text-[#E2C48A]">
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-3xl mx-auto p-6 space-y-8">
-          <div>
-            <h1 className="text-3xl font-black uppercase tracking-wider mb-2">
-              <span>📤</span>{" "}
-              <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">
-                Mein Upload
-              </span>
-            </h1>
-            <p className="text-slate-400 text-sm">{model.name}</p>
-          </div>
-
-          {/* Reddit */}
-          <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/20">
-            <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">📸 Reddit-Bilder</h2>
-            <p className="text-xs text-slate-500 mb-4">Landet automatisch in deinem Content Plan.</p>
-
-            <label
-              className="block mb-4 p-6 rounded-xl border-2 border-dashed border-[#9C7A3D]/50 bg-black/40 hover:border-[#C9A86A]/70 transition cursor-pointer text-center"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (e.dataTransfer.files.length) addFiles(setRedditQueue, e.dataTransfer.files);
-              }}
-            >
-              <input
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={(e) => e.target.files && addFiles(setRedditQueue, e.target.files)}
-                className="hidden"
-              />
-              <div className="text-3xl mb-2">📁</div>
-              <span className="text-sm text-slate-400">Bilder hierher ziehen oder klicken</span>
-            </label>
-
-            {redditQueue.length > 0 && (
-              <div className="space-y-2">
-                {redditQueue.map((item) => (
-                  <div key={item.id} className="flex items-center gap-3 bg-[#050505]/60 p-2.5 rounded-lg border border-[#9C7A3D]/10">
-                    <span className="text-xl flex-shrink-0">🖼️</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs truncate">{item.file.name}</p>
-                      <p className="text-[10px] text-slate-500">{statusLabel[item.status]}{item.error ? ` - ${item.error}` : ""}</p>
-                    </div>
-                  </div>
-                ))}
-                <button
-                  onClick={sendReddit}
-                  disabled={isSendingReddit}
-                  className="w-full mt-2 px-6 py-2.5 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider text-xs transition shadow-lg disabled:opacity-40"
-                >
-                  {isSendingReddit ? "Wird hochgeladen..." : `${redditQueue.length} Bild(er) hochladen`}
-                </button>
-              </div>
-            )}
-          </section>
-
-          {/* OnlyFans */}
-          <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/20">
-            <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">🔞 OnlyFans-Dateien</h2>
-            <p className="text-xs text-slate-500 mb-4">Landet automatisch in deinem OnlyFans-Tresor.</p>
-
-            {!canSendOf ? (
-              <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                Dein Admin muss dafür erst den Vault-Fan und den Preis im Connection Hub einrichten.
-              </p>
-            ) : (
-              <>
-                {ofAllConfirmed && ofQueue.length > 0 && (
-                  <div className="mb-4 p-4 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/10 text-center">
-                    <p className="text-xl mb-1">✅🎉</p>
-                    <p className="text-emerald-300 font-bold text-sm">Medien erfolgreich im OnlyFans Tresor!</p>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Alle {ofQueue.length} Datei(en) bestätigt verschickt - du kannst jetzt sicher weitermachen.
-                    </p>
-                  </div>
-                )}
-                <label
-                  className="block mb-4 p-6 rounded-xl border-2 border-dashed border-[#9C7A3D]/50 bg-black/40 hover:border-[#C9A86A]/70 transition cursor-pointer text-center"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (e.dataTransfer.files.length) addFiles(setOfQueue, e.dataTransfer.files);
-                  }}
-                >
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,video/*"
-                    onChange={(e) => e.target.files && addFiles(setOfQueue, e.target.files)}
-                    className="hidden"
-                  />
-                  <div className="text-3xl mb-2">📁</div>
-                  <span className="text-sm text-slate-400">Dateien hierher ziehen oder klicken</span>
-                </label>
-
-                {ofQueue.length > 0 && (
-                  <div className="space-y-2">
-                    {(isSendingOf || (ofProgressPercent > 0 && ofProgressPercent < 100)) && (
-                      <div className="mb-1">
-                        <div className="flex justify-between text-[10px] text-slate-400 mb-1">
-                          <span>📤 {ofSentCount}/{ofQueue.length} verschickt</span>
-                          <span>{ofProgressPercent}%</span>
-                        </div>
-                        <div className="w-full h-2 bg-black/60 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-[#C9A86A] to-[#E5C158] transition-all duration-300"
-                            style={{ width: `${ofProgressPercent}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    {ofQueue.map((item) => (
-                      <div key={item.id} className="flex items-center gap-3 bg-[#050505]/60 p-2.5 rounded-lg border border-[#9C7A3D]/10">
-                        <span className="text-xl flex-shrink-0">{item.file.type.startsWith("video") ? "🎥" : "🖼️"}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs truncate">{item.file.name}</p>
-                          <p className="text-[10px] text-slate-500">{statusLabel[item.status]}{item.error ? ` - ${item.error}` : ""}</p>
-                        </div>
-                      </div>
-                    ))}
-                    <button
-                      onClick={sendOf}
-                      disabled={isSendingOf}
-                      className="w-full mt-2 px-6 py-2.5 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider text-xs transition shadow-lg disabled:opacity-40"
-                    >
-                      {isSendingOf ? `Wird gesendet... (${ofSentCount}/${ofQueue.length})` : `${ofQueue.length} Datei(en) senden`}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </section>
+    // min-h-screen + normal document flow instead of a fixed h-screen flex
+    // frame - mobile browsers resize their chrome (address bar) as you
+    // scroll, which makes a fixed 100vh container jump/resize awkwardly;
+    // this page doesn't need to fit a fixed frame like the video-heavy
+    // CRM Inbox does, so plain scrolling is both simpler and smoother.
+    <div className="min-h-screen bg-[#0A0A0A] text-[#E2C48A] pb-12">
+      <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wider mb-2">
+            <span>📤</span>{" "}
+            <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">
+              Mein Upload
+            </span>
+          </h1>
+          <p className="text-slate-400 text-sm">{model.name}</p>
         </div>
-      </main>
+
+        {/* Reddit */}
+        <section className="bg-black/40 p-4 sm:p-6 rounded-2xl border border-[#9C7A3D]/20">
+          <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">📸 Reddit-Bilder</h2>
+          <p className="text-xs text-slate-500 mb-4">Landet automatisch in deinem Content Plan.</p>
+
+          <label
+            className="block mb-4 p-6 sm:p-8 rounded-2xl border-2 border-dashed border-[#9C7A3D]/40 bg-gradient-to-b from-black/40 to-black/20 hover:border-[#C9A86A]/70 hover:from-[#C9A86A]/5 active:scale-[0.99] transition-all cursor-pointer text-center"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (e.dataTransfer.files.length) addFiles(setRedditQueue, e.dataTransfer.files);
+            }}
+          >
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              onChange={(e) => e.target.files && addFiles(setRedditQueue, e.target.files)}
+              className="hidden"
+            />
+            <div className="text-4xl mb-2">📁</div>
+            <span className="text-sm text-slate-400">Bilder auswählen oder hierher ziehen</span>
+          </label>
+
+          {redditQueue.length > 0 && (
+            <div className="space-y-2">
+              {redditQueue.map((item) => (
+                <UploadQueueItem key={item.id} file={item.file} status={item.status} error={item.error} compact />
+              ))}
+              <button
+                onClick={sendReddit}
+                disabled={isSendingReddit}
+                className="w-full min-h-[48px] mt-2 px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] active:scale-[0.99] text-black font-bold rounded-xl uppercase tracking-wider text-sm transition shadow-lg disabled:opacity-40"
+              >
+                {isSendingReddit ? "Wird hochgeladen..." : `${redditQueue.length} Bild(er) hochladen`}
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* OnlyFans */}
+        <section className="bg-black/40 p-4 sm:p-6 rounded-2xl border border-[#9C7A3D]/20">
+          <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">🔞 OnlyFans-Dateien</h2>
+          <p className="text-xs text-slate-500 mb-4">Landet automatisch in deinem OnlyFans-Tresor.</p>
+
+          {!canSendOf ? (
+            <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+              Dein Admin muss dafür erst den Vault-Fan und den Preis im Connection Hub einrichten.
+            </p>
+          ) : (
+            <>
+              {ofAllConfirmed && ofQueue.length > 0 && (
+                <div className="mb-4 p-4 rounded-2xl border-2 border-emerald-500/50 bg-gradient-to-b from-emerald-500/10 to-emerald-500/5 text-center">
+                  <p className="text-2xl mb-1">✅🎉</p>
+                  <p className="text-emerald-300 font-bold text-sm">Medien erfolgreich im OnlyFans Tresor!</p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Alle {ofQueue.length} Datei(en) bestätigt verschickt - du kannst jetzt sicher weitermachen.
+                  </p>
+                </div>
+              )}
+              <label
+                className="block mb-4 p-6 sm:p-8 rounded-2xl border-2 border-dashed border-[#9C7A3D]/40 bg-gradient-to-b from-black/40 to-black/20 hover:border-[#C9A86A]/70 hover:from-[#C9A86A]/5 active:scale-[0.99] transition-all cursor-pointer text-center"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files.length) addFiles(setOfQueue, e.dataTransfer.files);
+                }}
+              >
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,video/*"
+                  onChange={(e) => e.target.files && addFiles(setOfQueue, e.target.files)}
+                  className="hidden"
+                />
+                <div className="text-4xl mb-2">📁</div>
+                <span className="text-sm text-slate-400">Dateien auswählen oder hierher ziehen</span>
+              </label>
+
+              {ofQueue.length > 0 && (
+                <div className="space-y-2">
+                  {(isSendingOf || (ofProgressPercent > 0 && ofProgressPercent < 100)) && (
+                    <div className="mb-1">
+                      <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                        <span>📤 {ofSentCount}/{ofQueue.length} verschickt</span>
+                        <span>{ofProgressPercent}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-black/60 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-[#C9A86A] to-[#E5C158] transition-all duration-300"
+                          style={{ width: `${ofProgressPercent}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {ofQueue.map((item) => (
+                    <UploadQueueItem key={item.id} file={item.file} status={item.status} error={item.error} compact />
+                  ))}
+                  <button
+                    onClick={sendOf}
+                    disabled={isSendingOf}
+                    className="w-full min-h-[48px] mt-2 px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] active:scale-[0.99] text-black font-bold rounded-xl uppercase tracking-wider text-sm transition shadow-lg disabled:opacity-40"
+                  >
+                    {isSendingOf ? `Wird gesendet... (${ofSentCount}/${ofQueue.length})` : `${ofQueue.length} Datei(en) senden`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
