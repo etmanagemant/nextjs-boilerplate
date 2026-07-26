@@ -68,7 +68,7 @@ export default function MassMessageListClient({ aktuelleWoche, archivierteMonate
     <div className="space-y-8">
       {/* 1. SEKTION: Aktuelle Woche (Immer ausgeklappt) */}
       <div className="space-y-3">
-        <h3 className="text-xs font-extrabold text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 px-3 py-1.5 rounded-lg tracking-wider uppercase"><span>✨</span> <span>Aktuelle Woche (Neueste Vorlagen)</span></h3>
+        <h3 className="text-xs font-extrabold text-[#C9A86A] bg-[#9C7A3D]/5 border border-[#9C7A3D]/10 px-3 py-1.5 rounded-lg tracking-wider uppercase"><span>✨</span> <span>Aktuelle Woche (Neueste Vorlagen)</span></h3>
         {aktuelleWoche.length > 0 ? renderKarten(aktuelleWoche) : <p className="text-xs text-slate-500 italic p-2">In dieser Woche noch keine Nachrichten erfasst.</p>}
       </div>
 

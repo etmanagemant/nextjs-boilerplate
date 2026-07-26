@@ -124,7 +124,7 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
                 name="model_names" 
                 value={m.name} 
                 onChange={(e) => handleCheckboxChange(m.name, e.target.checked)}
-                className="rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-0" 
+                className="rounded border-slate-700 bg-slate-800 text-[#C9A86A] focus:ring-0"
               />
               {m.name}
             </label>
@@ -143,7 +143,7 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
                 placeholder={`Hier die Nachricht für ${modelName} eintragen...`}
                 required
                 rows={2}
-                className="w-full px-3 py-2 border border-slate-700 rounded-md text-white bg-slate-950 focus:outline-none focus:border-blue-500 text-xs resize-none"
+                className="w-full px-3 py-2 border border-slate-700 rounded-md text-white bg-slate-950 focus:outline-none focus:border-[#C9A86A] text-xs resize-none"
               />
             </div>
           ))}
@@ -169,7 +169,7 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
         </div>
       )}
 
-      <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700 transition disabled:opacity-50 cursor-pointer">
+      <button type="submit" disabled={loading} className="w-full bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black px-4 py-2 rounded-md font-bold uppercase tracking-wider transition disabled:opacity-50 cursor-pointer">
         {loading ? "Wird eingetragen..." : "Schichten & Nachrichten im Kalender eintragen"}
       </button>
     </form>
