@@ -45,7 +45,7 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
   // shouldn't have to scroll past an entire second section just to reach
   // the send button; showing one bucket at a time roughly halves the
   // scroll distance on its own, on top of the sticky send bar below.
-  const [activeTab, setActiveTab] = useState<"reddit" | "onlyfans">("reddit");
+  const [activeTab, setActiveTab] = useState<"reddit" | "onlyfans" | "tools">("reddit");
 
   if (!model) {
     return (
@@ -170,6 +170,14 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
           >
             🔞 OnlyFans{ofQueue.length > 0 ? ` (${ofQueue.length})` : ""}
           </button>
+          <button
+            onClick={() => setActiveTab("tools")}
+            className={`flex-1 min-h-[44px] rounded-lg text-xs font-bold uppercase tracking-wider transition ${
+              activeTab === "tools" ? "bg-[#C9A86A]/20 text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"
+            }`}
+          >
+            🛠️ Tools
+          </button>
         </div>
 
         {/* Reddit */}
@@ -283,6 +291,29 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
               </>
             )}
           </section>
+        )}
+
+        {/* Tools - mock/coming-soon placeholders for now, real building
+            tracked as separate backlog items rather than blocking on. */}
+        {activeTab === "tools" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="bg-black/40 p-6 rounded-2xl border border-[#9C7A3D]/20 text-center">
+              <div className="text-4xl mb-3">📊</div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-[#E2C48A] mb-2">OnlyFans Statistik</h3>
+              <p className="text-xs text-slate-500 mb-4">Deine echten OnlyFans-Zahlen direkt hier einsehen.</p>
+              <span className="inline-block px-3 py-1.5 rounded-lg bg-[#C9A86A]/10 border border-[#C9A86A]/30 text-[#C9A86A] text-[10px] font-bold uppercase tracking-widest">
+                Coming Soon
+              </span>
+            </div>
+            <div className="bg-black/40 p-6 rounded-2xl border border-[#9C7A3D]/20 text-center">
+              <div className="text-4xl mb-3">🎬</div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-[#E2C48A] mb-2">Stripchat</h3>
+              <p className="text-xs text-slate-500 mb-4">Stripchat-Uploads direkt aus deinem Workspace.</p>
+              <span className="inline-block px-3 py-1.5 rounded-lg bg-[#C9A86A]/10 border border-[#C9A86A]/30 text-[#C9A86A] text-[10px] font-bold uppercase tracking-widest">
+                Coming Soon
+              </span>
+            </div>
+          </div>
         )}
       </div>
 
