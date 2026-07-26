@@ -1137,7 +1137,24 @@ async function ensureSlotBrowser(slot, modelId, role, chatterName, userId) {
   if (mainSession) {
     try {
       const liveCookies = await mainSession.page.cookies();
-      if (liveCookies.length) await page.setCookie(...liveCookies);
+      // CONFIRMED LIVE: page.cookies() returns CDP's Network.Cookie shape,
+      // which includes read-only fields (size, session) that Network.
+      // setCookie's CookieParam type rejects outright - passing the raw
+      // objects straight back into setCookie has been throwing "Invalid
+      // cookie fields" this whole session, silently caught by this same
+      // try/catch, so this overlay has never actually applied. Stripping
+      // down to just the fields setCookie accepts fixes it for real.
+      const cleaned = liveCookies.map((c) => ({
+        name: c.name,
+        value: c.value,
+        domain: c.domain,
+        path: c.path,
+        expires: c.expires,
+        httpOnly: c.httpOnly,
+        secure: c.secure,
+        sameSite: c.sameSite,
+      }));
+      if (cleaned.length) await page.setCookie(...cleaned);
     } catch (e) {
       console.warn(`[SLOT ${slot.id}] Live cookie overlay failed:`, e.message);
     }

@@ -86,12 +86,20 @@ export function OnlyFansViewer({
       // learn that on its own, so without this the Connection Hub keeps
       // showing "verbunden" for a model that's actually completely dead.
       // Only fire once per no-session streak, not on every retry tick.
+      // keepCookies: true - CONFIRMED LIVE this raced the VPS's own
+      // autoReconnectAllModels() right after a restart: it silently
+      // restores the model from these exact stored cookies, but this
+      // check can still see "no session" for the first moment or two
+      // while the chatter's own slot browser is still spinning up, and
+      // wiping the cookies here would mean auto-reconnect only ever
+      // works once. is_active still flips to false either way, so
+      // Connection Hub still shows the honest "not connected" state.
       if (!noSessionSyncedRef.current) {
         noSessionSyncedRef.current = true;
         fetch("/api/crm/browser-login/disconnect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modelId }),
+          body: JSON.stringify({ modelId, keepCookies: true }),
         }).catch(() => {});
       }
       setPhase("no-session");

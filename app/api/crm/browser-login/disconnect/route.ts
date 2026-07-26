@@ -5,10 +5,11 @@ import { disconnectModelSession } from "@/lib/crmSession";
 export const dynamic = "force-dynamic";
 
 /**
- * Disconnect a model: clears the stored cookies in Supabase and closes the
- * live browser on the VPS (which also wipes its on-disk Chrome profile), so
- * reconnecting never inherits the previous login's data.
- * POST /api/crm/browser-login/disconnect  Body: { modelId }
+ * Disconnect a model: marks it disconnected in Supabase and closes the live
+ * browser on the VPS (which also wipes its on-disk Chrome profile). By
+ * default also clears the stored cookies, so a manual reconnect never
+ * inherits the previous login's data.
+ * POST /api/crm/browser-login/disconnect  Body: { modelId, keepCookies? }
  */
 export async function POST(req: NextRequest) {
   try {
@@ -17,12 +18,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "error", error: "Unauthorized" }, { status: 403 });
     }
 
-    const { modelId } = await req.json();
+    const { modelId, keepCookies } = await req.json();
     if (!modelId) {
       return NextResponse.json({ status: "error", error: "Missing modelId" }, { status: 400 });
     }
 
-    const { error } = await disconnectModelSession(supabase, modelId);
+    const { error } = await disconnectModelSession(supabase, modelId, "user_initiated", !keepCookies);
     if (error) {
       console.error("[DISCONNECT] Update failed:", error.message);
       return NextResponse.json({ status: "error", error: "Failed to disconnect session" }, { status: 500 });
