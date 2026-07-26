@@ -81,6 +81,28 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
           <span className="text-lg flex-shrink-0">📤</span>
           <span>Mein Upload</span>
         </Link>
+        <Link
+          href="/model-onlyfans-stats"
+          className={`btn-gold-hover-shimmer flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
+            pathname === "/model-onlyfans-stats"
+              ? "bg-[#C9A86A]/20 text-[#C9A86A] border-l-2 border-[#C9A86A]"
+              : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
+          }`}
+        >
+          <span className="text-lg flex-shrink-0">📊</span>
+          <span>OnlyFans</span>
+        </Link>
+        <Link
+          href="/model-stripchat"
+          className={`btn-gold-hover-shimmer flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
+            pathname === "/model-stripchat"
+              ? "bg-[#C9A86A]/20 text-[#C9A86A] border-l-2 border-[#C9A86A]"
+              : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
+          }`}
+        >
+          <span className="text-lg flex-shrink-0">🎬</span>
+          <span>Stripchat</span>
+        </Link>
       </aside>
     );
   }
