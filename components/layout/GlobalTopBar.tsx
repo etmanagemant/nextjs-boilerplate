@@ -3,16 +3,52 @@
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 
+interface Notification {
+  id: number;
+  message: string;
+  model_id: string | null;
+  created_at: string;
+  read_at: string | null;
+}
+
 /**
  * Slim top bar replacing the old full header - logo pinned top-left,
- * account actions pinned top-right. The notifications bell is a UI shell
- * for now (new subs/purchased posts/likes) - showing that data means
- * syncing those OnlyFans events into our own DB first, which doesn't exist
- * yet; wiring it up is separate follow-up work.
+ * account actions pinned top-right. The notifications bell now shows real
+ * data (see app/api/notifications) - currently only "a model finished
+ * uploading a Vault batch" events; empty/invisible for non-admin users
+ * since the API itself gates read access to admin/moderator roles.
  */
 export default function GlobalTopBar() {
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  const loadNotifications = async () => {
+    try {
+      const res = await fetch("/api/notifications");
+      const data = await res.json();
+      setNotifications(data.notifications || []);
+    } catch {
+      /* silently keep whatever was there before - not critical */
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications();
+    // Polling instead of realtime - this is a low-urgency "FYI" bell, not
+    // worth the extra infra for instant delivery.
+    const interval = setInterval(loadNotifications, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const markAsRead = async (id: number) => {
+    setNotifications((n) => n.filter((x) => x.id !== id));
+    try {
+      await fetch("/api/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    } catch {
+      /* already removed optimistically - a failed mark-as-read just means it may reappear on next poll */
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -43,18 +79,40 @@ export default function GlobalTopBar() {
             <button
               onClick={() => setNotifOpen((v) => !v)}
               title="Benachrichtigungen"
-              className="w-10 h-10 flex items-center justify-center rounded-lg text-lg text-[#C9A86A] hover:bg-[#C9A86A]/10 transition border border-transparent hover:border-[#C9A86A]/30"
+              className="relative w-10 h-10 flex items-center justify-center rounded-lg text-lg text-[#C9A86A] hover:bg-[#C9A86A]/10 transition border border-transparent hover:border-[#C9A86A]/30"
             >
               🔔
+              {notifications.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
+                  {notifications.length}
+                </span>
+              )}
             </button>
             {notifOpen && (
-              <div className="absolute right-0 top-12 w-72 bg-[#0F0F12] border border-[#C9A86A]/30 rounded-xl shadow-2xl shadow-black/60 py-2 z-50">
+              <div className="absolute right-0 top-12 w-72 bg-[#0F0F12] border border-[#C9A86A]/30 rounded-xl shadow-2xl shadow-black/60 py-2 z-50 max-h-96 overflow-auto">
                 <p className="px-4 py-2 text-xs font-bold text-[#C9A86A] uppercase tracking-widest border-b border-[#9C7A3D]/20">
                   Benachrichtigungen
                 </p>
-                <p className="px-4 py-6 text-sm text-slate-500 text-center">
-                  Keine neuen Benachrichtigungen
-                </p>
+                {notifications.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-slate-500 text-center">
+                    Keine neuen Benachrichtigungen
+                  </p>
+                ) : (
+                  <div className="divide-y divide-[#9C7A3D]/10">
+                    {notifications.map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() => markAsRead(n.id)}
+                        className="w-full text-left px-4 py-3 hover:bg-[#C9A86A]/5 transition"
+                      >
+                        <p className="text-sm text-[#E2C48A]">{n.message}</p>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          {new Date(n.created_at).toLocaleString()} · zum Ausblenden klicken
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

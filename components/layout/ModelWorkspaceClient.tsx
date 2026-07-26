@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sendFilesInBatches, type UploadItemStatus } from "@/lib/uploadVaultBatch";
 
 interface ModelInfo {
   id: string;
@@ -17,7 +18,7 @@ interface ModelWorkspaceClientProps {
 type QueueItem = {
   id: string;
   file: File;
-  status: "pending" | "uploading" | "success" | "error";
+  status: UploadItemStatus;
   error?: string;
 };
 
@@ -60,6 +61,7 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
       status: "pending",
     }));
     setter((q) => [...q, ...items]);
+    if (setter === setOfQueue) setOfAllConfirmed(false);
   };
 
   const sendReddit = async () => {
@@ -86,43 +88,49 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
   };
 
   const canSendOf = (!!vaultFanLabel || !!vaultFanId) && vaultFanPrice != null;
+  const [ofAllConfirmed, setOfAllConfirmed] = useState(false);
 
   const sendOf = async () => {
-    if (!canSendOf) return;
+    if (!canSendOf || vaultFanPrice == null) return;
     setIsSendingOf(true);
-    for (const item of ofQueue) {
-      if (item.status === "success") continue;
-      setOfQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "uploading" } : x)));
-      try {
-        const formData = new FormData();
-        formData.append("file", item.file);
-        formData.append("modelId", model.id);
-        if (vaultFanId) formData.append("vaultFanId", vaultFanId);
-        if (vaultFanLabel) formData.append("vaultFanLabel", vaultFanLabel);
-        if (vaultFanPrice != null) formData.append("price", String(vaultFanPrice));
-
-        const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.status === "success") {
-          setOfQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "success" } : x)));
-        } else {
-          setOfQueue((q) =>
-            q.map((x) => (x.id === item.id ? { ...x, status: "error", error: data.message || data.error || "Fehler" } : x))
-          );
-        }
-      } catch {
-        setOfQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "error", error: "Netzwerkfehler" } : x)));
+    setOfAllConfirmed(false);
+    const pending = ofQueue.filter((q) => q.status !== "success");
+    const ok = await sendFilesInBatches(
+      pending.map((q) => ({ id: q.id, file: q.file })),
+      { modelId: model.id, vaultFanId: vaultFanId || undefined, vaultFanLabel: vaultFanLabel || undefined, price: vaultFanPrice },
+      (id, status, error) => {
+        setOfQueue((q) => q.map((x) => (x.id === id ? { ...x, status, error } : x)));
       }
-    }
+    );
     setIsSendingOf(false);
+    // CRITICAL per the user's explicit ask: a model must never see "done"
+    // before every file is actually VPS-confirmed sent - see the shared
+    // batching helper for why this can't just mean "no request failed".
+    if (ok) {
+      setOfAllConfirmed(true);
+      // Best-effort - the model's own success screen doesn't depend on
+      // this landing, so a failure here shouldn't block/alarm the model.
+      fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `📤✨ ${model.name} hat ${pending.length} Datei${pending.length > 1 ? "en" : ""} in den OnlyFans-Tresor hochgeladen! 🎉`,
+          modelId: model.id,
+        }),
+      }).catch(() => {});
+    }
   };
 
   const statusLabel: Record<QueueItem["status"], string> = {
     pending: "⏳ Wartet",
-    uploading: "📤 Wird gesendet...",
+    uploading: "📤 Wird hochgeladen...",
+    staged: "📦 Hochgeladen, wartet auf Versand",
     success: "✅ Gesendet",
     error: "❌ Fehler",
   };
+
+  const ofSentCount = ofQueue.filter((q) => q.status === "success").length;
+  const ofProgressPercent = ofQueue.length ? Math.round((ofSentCount / ofQueue.length) * 100) : 0;
 
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#E2C48A]">
@@ -191,10 +199,19 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
 
             {!canSendOf ? (
               <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                Dein Admin muss dafür erst den Vault-Fan und den Preis im Upload Vault einrichten.
+                Dein Admin muss dafür erst den Vault-Fan und den Preis im Connection Hub einrichten.
               </p>
             ) : (
               <>
+                {ofAllConfirmed && ofQueue.length > 0 && (
+                  <div className="mb-4 p-4 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/10 text-center">
+                    <p className="text-xl mb-1">✅🎉</p>
+                    <p className="text-emerald-300 font-bold text-sm">Medien erfolgreich im OnlyFans Tresor!</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Alle {ofQueue.length} Datei(en) bestätigt verschickt - du kannst jetzt sicher weitermachen.
+                    </p>
+                  </div>
+                )}
                 <label
                   className="block mb-4 p-6 rounded-xl border-2 border-dashed border-[#9C7A3D]/50 bg-black/40 hover:border-[#C9A86A]/70 transition cursor-pointer text-center"
                   onDragOver={(e) => e.preventDefault()}
@@ -216,6 +233,20 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
 
                 {ofQueue.length > 0 && (
                   <div className="space-y-2">
+                    {(isSendingOf || (ofProgressPercent > 0 && ofProgressPercent < 100)) && (
+                      <div className="mb-1">
+                        <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                          <span>📤 {ofSentCount}/{ofQueue.length} verschickt</span>
+                          <span>{ofProgressPercent}%</span>
+                        </div>
+                        <div className="w-full h-2 bg-black/60 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-[#C9A86A] to-[#E5C158] transition-all duration-300"
+                            style={{ width: `${ofProgressPercent}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                     {ofQueue.map((item) => (
                       <div key={item.id} className="flex items-center gap-3 bg-[#050505]/60 p-2.5 rounded-lg border border-[#9C7A3D]/10">
                         <span className="text-xl flex-shrink-0">{item.file.type.startsWith("video") ? "🎥" : "🖼️"}</span>
@@ -230,7 +261,7 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
                       disabled={isSendingOf}
                       className="w-full mt-2 px-6 py-2.5 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider text-xs transition shadow-lg disabled:opacity-40"
                     >
-                      {isSendingOf ? "Wird gesendet..." : `${ofQueue.length} Datei(en) senden`}
+                      {isSendingOf ? `Wird gesendet... (${ofSentCount}/${ofQueue.length})` : `${ofQueue.length} Datei(en) senden`}
                     </button>
                   </div>
                 )}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { ChatSearchPicker } from "./ChatSearchPicker";
+import { sendFilesInBatches, type UploadItemStatus } from "@/lib/uploadVaultBatch";
 
 interface ConnectedModel {
   id: string;
@@ -26,7 +27,7 @@ interface UploadVaultClientProps {
 type QueueItem = {
   id: string;
   file: File;
-  status: "pending" | "uploading" | "success" | "error";
+  status: UploadItemStatus;
   error?: string;
 };
 
@@ -131,50 +132,43 @@ export default function UploadVaultClient({
       status: "pending",
     }));
     setQueue([...queue, ...items]);
+    setAllConfirmed(false);
   };
 
   const removeItem = (id: string) => setQueue(queue.filter((q) => q.id !== id));
 
-  const sendAll = async () => {
-    if (!activeModelId || queue.length === 0) return;
-    setIsSending(true);
-    for (const item of queue) {
-      if (item.status === "success") continue;
-      setQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "uploading" } : x)));
-      try {
-        const formData = new FormData();
-        formData.append("file", item.file);
-        formData.append("modelId", activeModelId);
-        if (vaultFanId) formData.append("vaultFanId", vaultFanId);
-        if (vaultFanLabel) formData.append("vaultFanLabel", vaultFanLabel);
-        if (vaultFanPrice != null) formData.append("price", String(vaultFanPrice));
+  const [allConfirmed, setAllConfirmed] = useState(false);
 
-        const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.status === "success") {
-          setQueue((q) => q.map((x) => (x.id === item.id ? { ...x, status: "success" } : x)));
-        } else {
-          setQueue((q) =>
-            q.map((x) => (x.id === item.id ? { ...x, status: "error", error: data.message || data.error || "Fehler" } : x))
-          );
-        }
-      } catch (err) {
-        setQueue((q) =>
-          q.map((x) => (x.id === item.id ? { ...x, status: "error", error: "Netzwerkfehler" } : x))
-        );
+  const sendAll = async () => {
+    if (!activeModelId || queue.length === 0 || vaultFanPrice == null) return;
+    setIsSending(true);
+    setAllConfirmed(false);
+    const pending = queue.filter((q) => q.status !== "success");
+    const ok = await sendFilesInBatches(
+      pending.map((q) => ({ id: q.id, file: q.file })),
+      { modelId: activeModelId, vaultFanId, vaultFanLabel, price: vaultFanPrice },
+      (id, status, error) => {
+        setQueue((q) => q.map((x) => (x.id === id ? { ...x, status, error } : x)));
       }
-    }
+    );
     setIsSending(false);
+    // CRITICAL: only ever shown once every single file across every batch
+    // came back as a VPS-confirmed send, never just "the requests didn't
+    // throw" - see the shared helper's own comment for why.
+    if (ok) setAllConfirmed(true);
   };
 
   const statusLabel: Record<QueueItem["status"], string> = {
     pending: "⏳ Wartet",
-    uploading: "📤 Wird gesendet...",
+    uploading: "📤 Wird hochgeladen...",
+    staged: "📦 Hochgeladen, wartet auf Versand",
     success: "✅ Gesendet",
     error: "❌ Fehler",
   };
 
   const canSend = (!!vaultFanLabel || !!vaultFanId) && vaultFanPrice != null;
+  const sentCount = queue.filter((q) => q.status === "success").length;
+  const progressPercent = queue.length ? Math.round((sentCount / queue.length) * 100) : 0;
 
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-[#E2C48A]">
@@ -302,8 +296,32 @@ export default function UploadVaultClient({
             </div>
           </section>
 
+          {allConfirmed && queue.length > 0 && (
+            <section className="mb-6 p-5 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/10 text-center">
+              <p className="text-2xl mb-1">✅🎉</p>
+              <p className="text-emerald-300 font-bold">Medien erfolgreich im OnlyFans Tresor!</p>
+              <p className="text-xs text-slate-400 mt-1">
+                Alle {queue.length} Datei(en) wurden bestätigt verschickt - du kannst die Seite jetzt sicher verlassen.
+              </p>
+            </section>
+          )}
+
           {queue.length > 0 && (
             <section className="space-y-2 mb-6">
+              {(isSending || (progressPercent > 0 && progressPercent < 100)) && (
+                <div className="mb-3">
+                  <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                    <span>📤 {sentCount}/{queue.length} verschickt</span>
+                    <span>{progressPercent}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-black/60 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#C9A86A] to-[#E5C158] transition-all duration-300"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               {queue.map((item) => (
                 <div
                   key={item.id}
@@ -327,12 +345,12 @@ export default function UploadVaultClient({
                 className="w-full mt-3 px-6 py-3 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black font-bold rounded-lg uppercase tracking-wider transition shadow-lg disabled:opacity-40"
               >
                 {isSending
-                  ? "Wird gesendet..."
+                  ? `Wird gesendet... (${sentCount}/${queue.length})`
                   : !canSend
                   ? !vaultFanLabel && !vaultFanId
                     ? "Erst Vault-Fan festlegen"
                     : "Preis fehlt - im Connection Hub hinterlegen"
-                  : `${queue.length} Datei(en) senden`}
+                  : `${queue.length} Datei(en) senden${queue.length > 1 ? ` (${Math.ceil(queue.length / 20)} Nachricht${Math.ceil(queue.length / 20) > 1 ? "en" : ""})` : ""}`}
               </button>
             </section>
           )}

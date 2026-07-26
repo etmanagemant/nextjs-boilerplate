@@ -31,6 +31,13 @@ export async function POST(req: NextRequest) {
     const vaultFanLabel = (formData.get("vaultFanLabel") as string | null) || "";
     const vaultFanId = (formData.get("vaultFanId") as string | null) || "";
     const price = formData.get("price") as string | null;
+    // Batching (multiple files sent as one OnlyFans message instead of one
+    // message per file): every file in a batch shares the same batchId,
+    // the client marks only the last one isLastInBatch=true - see the VPS
+    // route's own comment for the two-phase stage/commit protocol this
+    // drives.
+    const batchId = (formData.get("batchId") as string | null) || "";
+    const isLastInBatch = (formData.get("isLastInBatch") as string | null) || "";
 
     if (!file || !modelId || (!vaultFanLabel && !vaultFanId)) {
       return NextResponse.json({ error: "Missing file, modelId, or vaultFanLabel/vaultFanId" }, { status: 400 });
@@ -42,6 +49,7 @@ export async function POST(req: NextRequest) {
       ...(vaultFanId ? { vaultFanId } : {}),
       ...(vaultFanLabel ? { vaultFanLabel } : {}),
       ...(price ? { price } : {}),
+      ...(batchId ? { batchId, isLastInBatch } : {}),
     });
 
     const buffer = Buffer.from(await file.arrayBuffer());

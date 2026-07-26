@@ -79,6 +79,10 @@ app.use((req, res, next) => {
 // ============================================================================
 
 const modelSessions = {}; // modelId -> { browser, page, lastActivity, createdAt }
+// batchId -> { modelId, vaultFanId, vaultFanLabel, price, filePaths: [] } -
+// accumulates staged files for one Upload Vault batch (see /upload-to-vault-fan)
+// before the actual OnlyFans automation runs once for the whole batch.
+const pendingUploadBatches = {};
 // Was 20 minutes - but only one session can run at a time anyway
 // (MAX_CONCURRENT_SESSIONS below), so there's no extra RAM cost to keeping
 // the one connected model alive longer. Every time this closed a session,
@@ -2706,8 +2710,19 @@ app.post('/chat-search', async (req, res) => {
 // blindly without checking the field was actually found sends the file
 // as a free message with zero error, so this now hard-gates on the
 // price being verifiably set before Send is ever clicked (see below).
+// CONFIRMED LIVE (2026-07-26): sending 40 files one-by-one meant 40
+// separate OnlyFans messages, each its own chat-open + attach + price +
+// send cycle - both slow and not how a human would batch it. This is now
+// a two-phase protocol driven by the caller: every request writes its one
+// file to disk and stages its path under a shared batchId (fast, no
+// OnlyFans interaction) - only the LAST file of a batch (isLastInBatch)
+// triggers the real automation, attaching every staged file from that
+// batch into ONE compose box and sending ONE priced message for all of
+// them, exactly like a chatter attaching multiple files by hand. A batch
+// of size 1 collapses to the exact same single-file-per-message behavior
+// as before - there's no separate code path needed for "just one file".
 app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), async (req, res) => {
-  const { modelId, vaultFanLabel, vaultFanId, price, fileName } = req.query;
+  const { modelId, vaultFanLabel, vaultFanId, price, fileName, batchId, isLastInBatch } = req.query;
   if (!modelId || (!vaultFanLabel && !vaultFanId) || !fileName) {
     return res.status(400).json({ error: 'Missing modelId, vaultFanLabel/vaultFanId, or fileName' });
   }
@@ -2719,7 +2734,23 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
   if (!session) return res.json({ status: 'no_session' });
   const page = session.page;
 
+  const key = batchId || `single-${Date.now()}-${Math.random()}`;
   const tempPath = path.join('/tmp', `upload-${Date.now()}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+  await fs.writeFile(tempPath, req.body);
+
+  if (!pendingUploadBatches[key]) {
+    pendingUploadBatches[key] = { modelId, vaultFanId, vaultFanLabel, price, filePaths: [] };
+  }
+  pendingUploadBatches[key].filePaths.push(tempPath);
+
+  if (!batchId || isLastInBatch !== 'true') {
+    return res.json({ status: 'staged', stagedCount: pendingUploadBatches[key].filePaths.length });
+  }
+
+  const batch = pendingUploadBatches[key];
+  const filePaths = batch.filePaths;
+  delete pendingUploadBatches[key];
+
   try {
     let opened;
     if (vaultFanId) {
@@ -2758,8 +2789,6 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
       });
     }
 
-    await fs.writeFile(tempPath, req.body);
-
     if (!opened) return res.json({ status: 'error', error: 'Vault-Fan-Chat nicht gefunden' });
 
     // Confirmed live bug: a flat 1200ms wait wasn't enough for the attach
@@ -2783,8 +2812,28 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
     if (!fileChooser) {
       return res.json({ status: 'error', error: 'Datei-Dialog nicht ausgelöst (Selektor unbestätigt)' });
     }
-    await fileChooser.accept([tempPath]);
-    await new Promise((r) => setTimeout(r, 3000));
+    // Puppeteer's fileChooser.accept() takes an array of paths and selects
+    // all of them in one native dialog interaction, exactly like a human
+    // ctrl-clicking multiple files - this is the whole batching mechanism
+    // on the browser side, the rest is just staging paths beforehand.
+    await fileChooser.accept(filePaths);
+    // UNVERIFIED (needs one live confirmation): a fixed 3s wait was fine
+    // for one small file, but a batch of up to 20 (possibly large videos)
+    // can genuinely take longer for OnlyFans to finish uploading/
+    // rendering previews for all of them. Polling for the send button to
+    // become enabled uses OnlyFans' own readiness signal (it presumably
+    // disables Send while attachments are still processing) instead of
+    // guessing a fixed duration - scaled ceiling gives large batches
+    // realistic room without making a single file wait needlessly long.
+    await page
+      .waitForFunction(
+        () => {
+          var btn = document.querySelector('[at-attr="send_btn"]');
+          return !!(btn && !btn.disabled);
+        },
+        { timeout: Math.min(90000, 5000 + filePaths.length * 3000) }
+      )
+      .catch(() => {});
 
     if (price) {
       // Confirmed live bug: this used to blindly page.keyboard.type() the
@@ -2851,17 +2900,49 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
       await new Promise((r) => setTimeout(r, 200));
     }
 
-    await page.evaluate(() => {
+    const clicked = await page.evaluate(() => {
       var btn = document.querySelector('[at-attr="send_btn"]');
-      if (btn && !btn.disabled) btn.click();
+      if (!btn || btn.disabled) return false;
+      btn.click();
+      return true;
     });
+    if (!clicked) {
+      return res.json({ status: 'error', error: 'Senden-Button nicht gefunden oder deaktiviert - nicht gesendet' });
+    }
 
-    res.json({ status: 'success' });
+    // CRITICAL per the user's explicit ask: never report success just
+    // because Send was clicked without proof the message actually went -
+    // a model closing the tab believing it's done, when it silently
+    // wasn't, is exactly the failure mode this guards against. OnlyFans
+    // resets the compose box (attachments + price badge cleared) once a
+    // send actually completes - polling for that is the proxy used here.
+    // UNVERIFIED (needs one live confirmation): if this proxy turns out
+    // to be wrong, this fails loudly with an error instead of a false
+    // "success", never the other way around.
+    const sendConfirmed = await page
+      .waitForFunction(
+        () => {
+          var priceInput = document.querySelector('input[autocomplete="price-input"]');
+          var stillHasPriceBadge = priceInput && priceInput.value && priceInput.value.trim() !== '';
+          return !stillHasPriceBadge;
+        },
+        { timeout: 10000 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    if (!sendConfirmed) {
+      return res.json({
+        status: 'error',
+        error: 'Senden konnte nicht bestätigt werden - bitte in der Live-Ansicht prüfen, ob die Nachricht rausging',
+      });
+    }
+
+    res.json({ status: 'success', sentCount: filePaths.length });
   } catch (error) {
     console.error('[UPLOAD-TO-VAULT-FAN] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message });
   } finally {
-    await fs.unlink(tempPath).catch(() => {});
+    await Promise.all(filePaths.map((p) => fs.unlink(p).catch(() => {})));
   }
 });
 
