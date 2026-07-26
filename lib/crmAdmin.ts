@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { isAdminTierRole } from "@/lib/roles";
 
 const ADMIN_USER_ID = "35498c92-2c4d-4720-a6f7-cc187a4c5fc4";
 const ADMIN_EMAILS = ["etmanagement@gmail.com", "etmanagemant@gmail.com"];
@@ -26,5 +27,5 @@ export async function getRequestAdmin() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  return { supabase, user, isAdmin: profile?.role === "admin" };
+  return { supabase, user, isAdmin: isAdminTierRole(profile?.role) };
 }

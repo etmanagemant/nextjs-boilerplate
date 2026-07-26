@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { isAdminTierRole } from "@/lib/roles";
 
 type WeeklyCalendarProps = {
   sichereShifts: any[];
@@ -122,7 +123,7 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
             // 🔑 KRITISCHE FILTERUNG: Schichten nach Benutzer-Rolle und zugewiesener Mitarbeiter-Rolle filtern
             let schichtenAnDiesemTag = sichereShifts.filter((s) => s.shift_date && s.shift_date === dateKey);
             
-            if (role !== "admin") {
+            if (!isAdminTierRole(role)) {
               // Extrahiere die Rolle des zugewiesenen Mitarbeiters aus den Schicht-Notizen
               schichtenAnDiesemTag = schichtenAnDiesemTag.filter((s) => {
                 let assignedUserRole = "chatter"; // Fallback
@@ -168,7 +169,7 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                         
                         // 🎨 OPTIONALE VISUELLE UNTERSCHEIDUNG FÜR ADMIN
                         let shiftColorClass = "border-[#9C7A3D]/20 bg-[#050505]"; // Default (Chatter - Gold)
-                        if (role === "admin") {
+                        if (isAdminTierRole(role)) {
                           const assignedUserId = schicht.chatter_id || schicht.user_id || schicht.assigned_user_id;
                           const assignedUserRole = profileMap?.get(assignedUserId) || "chatter";
                           if (assignedUserRole === "moderator") {
@@ -178,7 +179,7 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                         
                         return (
                           <div key={schicht.id} className={`rounded-lg border p-3 shadow-md relative group hover:border-[#C9A86A]/50 transition ${shiftColorClass}`}>
-                            {role === "admin" && editingShiftId !== schicht.id && (
+                            {isAdminTierRole(role) && editingShiftId !== schicht.id && (
                               <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button type="button" onClick={() => startEditing(schicht)} className="p-1 bg-[#C9A86A]/10 text-[#C9A86A] rounded hover:bg-[#C9A86A]/20 text-[10px] font-bold cursor-pointer">✏️</button>
                                 <button type="button" onClick={() => handleDeleteShift(schicht.id)} className="p-1 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 text-[10px] font-bold cursor-pointer">🗑️</button>

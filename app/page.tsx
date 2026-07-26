@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import WeeklyCalendar from "@/components/layout/WeeklyCalender";
+import CreateShiftForm from "@/components/layout/CreateShiftForm";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
+import { isAdminTierRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -34,20 +36,30 @@ export default async function CalendarPage() {
   const [{ data: shifts }, { data: models }, { data: profiles }] = await Promise.all([
     supabase.from("shifts").select("*"),
     supabase.from("models").select("id, name").order("name", { ascending: true }),
-    supabase.from("profiles").select("user_id, role, full_name"),
+    supabase.from("profiles").select("user_id, role, full_name, email"),
   ]);
   const profileMap = new Map((profiles || []).map(p => [p.user_id, p.role || "chatter"]));
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] p-4">
-      <WeeklyCalendar 
-        sichereShifts={shifts || []} 
-        modelsListe={models || []} 
-        role={role} 
-        userEmail={user.email || ""} 
+      <WeeklyCalendar
+        sichereShifts={shifts || []}
+        modelsListe={models || []}
+        role={role}
+        userEmail={user.email || ""}
         userId={user.id}
         profileMap={profileMap}
       />
+      {/* Schichtplanung-Formular - vom Management-Control-Panel hierher
+          verschoben, direkt unter den Kalender, den es befüllt. Wie schon
+          auf der alten Seite: gleiche Rechte wie Admin, aber weiterhin
+          nicht für Chatter/Moderator sichtbar. */}
+      {isAdminTierRole(role) && (
+        <section className="w-[98%] mx-auto mt-6 bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/20 shadow-lg">
+          <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Neue Schicht zuteilen & planen</h2>
+          <CreateShiftForm sichereProfile={profiles || []} sichereModels={models || []} />
+        </section>
+      )}
     </main>
   );
 }

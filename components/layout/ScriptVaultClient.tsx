@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { VaultGalleryPicker } from "@/components/layout/VaultGalleryPicker";
+import { isAdminTierRole } from "@/lib/roles";
 
 interface MediaRef {
   label: string;
@@ -419,7 +420,7 @@ export default function ScriptVaultClient({
                         >
                           ✏️ Bearbeiten
                         </button>
-                        {userRole === "admin" && (
+                        {isAdminTierRole(userRole) && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();

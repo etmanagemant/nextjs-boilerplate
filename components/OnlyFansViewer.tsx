@@ -7,6 +7,7 @@ import { FanCrmPanel } from "@/components/FanCrmPanel";
 import { ModelNotesPanel } from "@/components/ModelNotesPanel";
 import EmojiPicker from "@/components/layout/EmojiPicker";
 import { updateChatterEmojis } from "@/app/management/crm-connect/actions";
+import { isAdminTierRole } from "@/lib/roles";
 
 interface OnlyFansViewerProps {
   modelId: string;
@@ -42,7 +43,7 @@ export function OnlyFansViewer({
   chatterId,
   userRole = "chatter",
 }: OnlyFansViewerProps) {
-  const isAdmin = userRole === "admin";
+  const isAdmin = isAdminTierRole(userRole);
   const [phase, setPhase] = useState<"connecting" | "live" | "no-session" | "error">("connecting");
   const [error, setError] = useState("");
   const [pasteStatus, setPasteStatus] = useState<"idle" | "done">("idle");

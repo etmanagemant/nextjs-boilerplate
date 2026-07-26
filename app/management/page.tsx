@@ -3,8 +3,6 @@ import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import { updateMitarbeiterRolle, updateMitarbeiterName, deleteMitarbeiter, updateMitarbeiterCompensation } from "./actions";
 import { revalidatePath } from "next/cache";
-// 🟢 IMPORTE EXAKT BEIBEHALTEN
-import CreateShiftForm from "@/components/layout/CreateShiftForm";
 import RoleSelect from "@/components/layout/RoleSelect";
 
 export const dynamic = "force-dynamic";
@@ -25,14 +23,12 @@ export default async function ManagementPage() {
   if (!isAdmin) { redirect("/"); }
 
   // 🛡️ ERWEITERTES SELECT: Zieht provision_rate + hourly_rate mit aus der Datenbank heraus!
-  const [{ data: profilListe }, { data: modelsListe }, { data: alleSchichten }] = await Promise.all([
+  const [{ data: profilListe }, { data: alleSchichten }] = await Promise.all([
     supabase.from("profiles").select("user_id, role, email, full_name, provision_rate, hourly_rate"),
-    supabase.from("models").select("id, name, platform_type, avatar_url").order("name", { ascending: true }),
     supabase.from("shift_assignments").select("*"),
   ]);
 
   const sichereProfile = profilListe || [];
-  const sichereModels = modelsListe || [];
   const sichereSchichten = alleSchichten || [];
 
   let gesamtStundenAllerUser = 0;
@@ -75,12 +71,6 @@ export default async function ManagementPage() {
       <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 text-center shadow-lg">
         <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Abgeleistete Gesamtstunden (Stechuhr)</div>
         <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-[#C9A86A] mt-2 font-mono tracking-wide">{gesamtStundenAllerUser.toFixed(2)} h</div>
-      </section>
-
-      {/* SCHICHTERSTELLUNG FORMULAR */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 shadow-lg">
-        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Neue Schicht zuteilen & planen</h2>
-        <CreateShiftForm sichereProfile={sichereProfile} sichereModels={sichereModels} />
       </section>
 
       {/* MITARBEITER-VERWALTUNG */}

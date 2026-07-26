@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { fetchChatterEmojis } from "@/app/crm-inbox/actions";
 import { OnlyFansViewer } from "@/components/OnlyFansViewer";
 import NextShiftsWidget from "./NextShiftsWidget";
+import { isAdminTierRole } from "@/lib/roles";
 
 interface ConnectedModel {
   id: string;
@@ -91,7 +92,7 @@ export default function CRMInboxClient({
                 userEmail={userEmail}
                 userId={userId}
                 userFullName={undefined}
-                isAdmin={userRole === "admin"}
+                isAdmin={isAdminTierRole(userRole)}
               />
             </div>
           ) : (

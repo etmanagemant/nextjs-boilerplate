@@ -19,7 +19,7 @@ export default async function CRMInboxPage() {
 
   // Allow: chatter, moderator, admin roles. If no profile, allow (could be admin from auth)
   const userRole = profile?.role || "guest";
-  const isAllowed = ["chatter", "moderator", "admin"].includes(userRole) ||
+  const isAllowed = ["chatter", "moderator", "admin", "content-manager"].includes(userRole) ||
                     user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
                     user.email === "etmanagement@gmail.com" ||
                     user.email === "etmanagemant@gmail.com";

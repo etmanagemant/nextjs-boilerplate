@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
+import { isAdminTierRole } from "@/lib/roles";
 
 // ============================================================================
 // CRM MODEL SESSIONS MANAGEMENT
@@ -39,7 +40,7 @@ export async function updateChatterEmojis(
       .maybeSingle();
 
     if (
-      profile?.role !== "admin" &&
+      !isAdminTierRole(profile?.role) &&
       user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"
     ) {
       throw new Error("Unauthorized: Admin access required");
@@ -92,7 +93,7 @@ export async function addScriptToLibrary(scriptData: ScriptLibraryItem) {
     .maybeSingle();
 
   if (
-    profile?.role !== "admin" &&
+    !isAdminTierRole(profile?.role) &&
     user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"
   ) {
     throw new Error("Unauthorized: Admin access required");
@@ -133,7 +134,7 @@ export async function deleteScriptFromLibrary(scriptId: string) {
     .maybeSingle();
 
   if (
-    profile?.role !== "admin" &&
+    !isAdminTierRole(profile?.role) &&
     user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"
   ) {
     throw new Error("Unauthorized: Admin access required");
@@ -173,7 +174,7 @@ export async function updateScript(
     .maybeSingle();
 
   if (
-    profile?.role !== "admin" &&
+    !isAdminTierRole(profile?.role) &&
     user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"
   ) {
     throw new Error("Unauthorized: Admin access required");

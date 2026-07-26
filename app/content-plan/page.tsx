@@ -8,6 +8,7 @@ import {
   getContentCommunities,
   getContentPlanPosts,
 } from "./actions";
+import { isAdminTierRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export default async function ContentPlanPage({
       isAdmin = true;
     } else {
       const profile = await getCurrentProfile(user.id);
-      if (profile && profile.role === "admin") isAdmin = true;
+      if (profile && isAdminTierRole(profile.role)) isAdmin = true;
     }
 
     if (!isAdmin) {

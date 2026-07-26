@@ -308,6 +308,10 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
                     <p className="text-[11px] text-slate-400 mt-1">
                       Alle {ofQueue.length} Datei(en) bestätigt verschickt - du kannst jetzt sicher weitermachen.
                     </p>
+                    <p className="text-[11px] text-[#E5C158] font-semibold mt-2 flex items-center justify-center gap-1.5">
+                      <span>💌</span>
+                      <span>Danke für den Upload! Deine Content-Managerin wurde benachrichtigt.</span>
+                    </p>
                   </div>
                 )}
                 <label

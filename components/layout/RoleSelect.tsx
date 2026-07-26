@@ -23,6 +23,7 @@ export default function RoleSelect({ userId, defaultRole, onUpdateAction }: Role
         <option value="chatter">🎬 Chatter</option>
         <option value="moderator">🎭 Moderator (Stripchat)</option>
         <option value="model">👤 Model</option>
+        <option value="content-manager">📋 Content-Managerin</option>
         <option value="admin">👑 Admin</option>
       </select>
     </form>

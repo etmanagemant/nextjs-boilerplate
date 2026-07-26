@@ -2,6 +2,7 @@ import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import CRMConnectClient from "@/components/layout/CRMConnectClient";
 import { addModel, deleteModel, updateModelName, updateModelAvatar } from "@/app/management/actions";
+import { isAdminTierRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function CRMConnectPage() {
     isAdmin = true;
   } else {
     const profile = await getCurrentProfile(user.id);
-    if (profile?.role === "admin") {
+    if (isAdminTierRole(profile?.role)) {
       isAdmin = true;
     }
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { isAdminTierRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ async function validateAdmin(req: NextRequest) {
       .eq("user_id", user.id)
       .maybeSingle();
     
-    return profile?.role === "admin";
+    return isAdminTierRole(profile?.role);
   } catch (err) {
     console.error("[validateAdmin] Error:", err);
     return false;

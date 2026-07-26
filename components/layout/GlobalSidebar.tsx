@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
+import { isAdminTierRole } from "@/lib/roles";
 
 interface GlobalSidebarProps {
   role: string;
@@ -30,7 +31,14 @@ const ONLYFANS_SECTION_PATHS = ["/crm-inbox", "/management/crm-connect", "/scrip
 export default function GlobalSidebar({ role }: GlobalSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // Content-manager gets the exact same view/rights as admin everywhere
+  // EXCEPT the Management page itself (Mitarbeiter- und Rollen-Verwaltung)
+  // - the one deliberate carve-out so there's still a single distinguished
+  // "Hauptadmin". isAdmin stays the literal check for that one nav item;
+  // isAdminTier is what everything else (Massmessage, Stripchat, Content
+  // Plan, Buchhaltung, the OnlyFans tools section) should gate on instead.
   const isAdmin = role === "admin";
+  const isAdminTier = isAdminTierRole(role);
   const [models, setModels] = useState<ConnectedModel[]>([]);
   // CONFIRMED LIVE: the fixed 224px sidebar plus its matching 224px content
   // padding (app/layout.tsx) ate almost half the screen on a phone -
@@ -149,7 +157,7 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
     { href: "/crm-inbox", label: "OnlyFans", icon: "🔮" },
   ];
 
-  if (!isAdmin) {
+  if (!isAdminTier) {
     items.push({ href: "/stripchat", label: "Stripchat", icon: "🎬" });
   }
 
@@ -160,8 +168,10 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
   items.push({ href: "/abrechnung", label: "Abrechnung", icon: "💰" });
 
   if (isAdmin) {
+    items.push({ href: "/management", label: "Management", icon: "⚙️" });
+  }
+  if (isAdminTier) {
     items.push(
-      { href: "/management", label: "Management", icon: "⚙️" },
       { href: "/massmessage", label: "Massmessage", icon: "📨" },
       { href: "/stripchat", label: "Stripchat", icon: "🎬" },
       { href: "/content-plan", label: "Content Plan", icon: "📅" },
@@ -173,7 +183,7 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
     { id: "connection", name: "Connection Hub", icon: "🔗", href: "/management/crm-connect", adminOnly: true },
     { id: "scripts", name: "Script Vault", icon: "📜", href: "/script-vault", adminOnly: true },
     { id: "upload", name: "Upload Vault", icon: "📤", href: "/upload-vault", adminOnly: true },
-  ].filter((t) => !t.adminOnly || isAdmin);
+  ].filter((t) => !t.adminOnly || isAdminTier);
 
   const activeModelId = searchParams.get("model");
 

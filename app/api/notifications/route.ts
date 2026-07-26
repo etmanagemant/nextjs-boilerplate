@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Minimal notifications inbox - see CRM_NOTIFICATIONS_SETUP.sql. Read
- * access is admin/moderator-only, enforced both here AND via the table's
+ * access is admin/moderator/content-manager-only, enforced both here AND via the table's
  * own RLS policy (defense in depth - crm_model_sessions proves this
  * project actually relies on DB-level RLS for anything sensitive, not
  * just an app-level check). Posting a notification just requires being
@@ -20,7 +20,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const profile = await getCurrentProfile(user.id);
-  if (profile?.role !== "admin" && profile?.role !== "moderator") {
+  if (profile?.role !== "admin" && profile?.role !== "moderator" && profile?.role !== "content-manager") {
     return NextResponse.json({ notifications: [] });
   }
 
