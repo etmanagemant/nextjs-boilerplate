@@ -3,10 +3,6 @@ import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import CRMInboxClient from "@/components/layout/CRMInboxClient";
-import {
-  fetchActiveFans,
-  fetchScriptLibrary,
-} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -65,20 +61,11 @@ export default async function CRMInboxPage() {
       }));
     }
 
-    // These three don't depend on each other - fetch them together instead
-    // of waiting for each one in turn.
-    const initialModelId = connectedModels[0]?.id;
-    const [fans, scripts, { data: allShifts }] = await Promise.all([
-      initialModelId ? fetchActiveFans(initialModelId) : Promise.resolve([]),
-      fetchScriptLibrary(user.id),
-      supabase.from("shifts").select("*"),
-    ]);
+    const { data: allShifts } = await supabase.from("shifts").select("*");
 
     return (
       <CRMInboxClient
         chatterId={user.id}
-        initialFans={fans || []}
-        initialScripts={scripts || []}
         connectedModels={connectedModels}
         userRole={userRole}
         allShifts={allShifts || []}

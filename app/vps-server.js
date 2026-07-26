@@ -1447,7 +1447,7 @@ async function getOrCreateSession(modelId, restoreCookies) {
     await new Promise((r) => setTimeout(r, 2000));
   }
 
-  const session = { browser, page, lastActivity: Date.now(), createdAt: new Date() };
+  const session = { browser, page, lastActivity: Date.now(), createdAt: new Date(), loggedInSince: null };
   modelSessions[modelId] = session;
   return session;
 }
@@ -1596,29 +1596,17 @@ setInterval(async () => {
   }
 }, 3 * 60 * 1000);
 
-// Periodic background sync - Vercel Hobby plan only allows daily cron, so
-// this VPS (already running 24/7) drives it instead. Just pings the Next.js
-// endpoint, which enumerates active models and calls back into this VPS's
-// own /fetch-inbox for each - no extra cost, no Browserless session budget
-// spent on routine polling.
+// CONFIRMED LIVE (2026-07-26): the periodic background sync that used to
+// run here (real onlyfans.com/api2/ fetches via page.evaluate, feeding a
+// custom CRM chat UI built from synced data) reproducibly killed the
+// OnlyFans session shortly after it ran its real API requests, regardless
+// of how long the session had been logged in first (ruled out timing via
+// a grace period - it still died the moment the requests actually fired).
+// Removed entirely along with the custom chat UI it fed - back to the
+// live VNC view as the only mode, which needs no automated API traffic
+// and stayed logged in for 8+ minutes straight in the same tests.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 const CRON_SECRET = process.env.CRON_SECRET;
-const SYNC_INTERVAL_MS = Number(process.env.SYNC_INTERVAL_MS || 90 * 1000);
-
-if (APP_URL && CRON_SECRET) {
-  setInterval(async () => {
-    try {
-      const res = await fetch(`${APP_URL}/api/cron/sync-chats?secret=${CRON_SECRET}`);
-      const data = await res.json().catch(() => ({}));
-      console.log('[SYNC-LOOP]', res.status, JSON.stringify(data).slice(0, 200));
-    } catch (e) {
-      console.warn('[SYNC-LOOP] Error:', e.message);
-    }
-  }, SYNC_INTERVAL_MS);
-  console.log(`[SYNC-LOOP] Enabled, every ${SYNC_INTERVAL_MS / 1000}s`);
-} else {
-  console.warn('[SYNC-LOOP] Disabled - NEXT_PUBLIC_APP_URL or CRON_SECRET not set');
-}
 
 // Runs once, shortly after this process comes up (see the app.listen()
 // callback near the bottom of this file). Asks Next.js which models were
@@ -1948,244 +1936,6 @@ app.post('/sync-live', async (req, res) => {
   } catch (error) {
     console.error(`[SYNC-LIVE] Error for ${modelId}:`, error.message);
     res.status(200).json({ status: 'error', error: error.message });
-  }
-});
-
-// Real chat/message sync for Native Chat Mode (Task #58) - replaces the
-// broken ONLYFANS_CHATS_ENDPOINT-gated version above. Endpoints below
-// were confirmed live via /sync-live's discover mode:
-//   GET /api2/v2/chats?limit=N&offset=0&skip_users=all&order=recent
-//     -> {list: [{withUser:{id}, unreadMessagesCount, lastMessage:{id,
-//         createdAt, text, fromUser:{id}, mediaCount, isFree}, ...}]}
-//   GET /api2/v2/users/list?cl[]=id1&cl[]=id2  -> {"<id>": {name,
-//     username, avatar, avatarThumbs:{c50,c144}}}
-//   GET /api2/v2/chats/{fanId}/messages?limit=N&order=desc&skip_users=all
-//     -> {list: [{id, text, createdAt, fromUser:{id}, price, media:[...]}]}
-// All three are plain GETs made from the already-authenticated page's own
-// fetch() (credentials:include) - a request from outside the page gets
-// rejected, since OnlyFans signs these with headers only its own
-// front-end JS computes (same reason /vault-media reads real responses
-// instead of building requests itself).
-//
-// Deliberately conservative on request volume: only deep-fetches a
-// conversation's message list when knownLastMessageIds (passed by the
-// caller, sourced from Supabase) shows that conversation has moved since
-// last sync. Hammering every conversation's full message history on
-// every periodic sync cycle regardless of whether anything changed is
-// exactly the kind of repeated, unnecessary request volume that risks
-// looking like scraping to OnlyFans/Cloudflare - this exact session saw a
-// genuinely-valid login get invalidated after enough rapid-fire live
-// testing in a row.
-app.post('/sync-chats', async (req, res) => {
-  const { modelId, knownLastMessageIds } = req.body || {};
-  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
-
-  const session = modelSessions[modelId];
-  if (!session) return res.json({ status: 'no_live_session', modelId });
-  session.lastActivity = Date.now();
-  const page = session.page;
-  const known = knownLastMessageIds || {};
-
-  try {
-    const chatsData = await page.evaluate(async () => {
-      const r = await fetch('https://onlyfans.com/api2/v2/chats?limit=50&offset=0&skip_users=all&order=recent', {
-        credentials: 'include',
-      });
-      return r.ok ? await r.json() : null;
-    });
-    if (!chatsData || !Array.isArray(chatsData.list)) {
-      return res.json({ status: 'error', error: 'Chat-Liste konnte nicht geladen werden' });
-    }
-
-    const fanIds = chatsData.list.map((c) => c.withUser && c.withUser.id).filter(Boolean);
-    let userInfo = {};
-    if (fanIds.length) {
-      const qs = fanIds.map((id) => `cl[]=${id}`).join('&');
-      userInfo = await page.evaluate(async (qs) => {
-        const r = await fetch('https://onlyfans.com/api2/v2/users/list?' + qs, { credentials: 'include' });
-        return r.ok ? await r.json() : {};
-      }, qs);
-    }
-
-    // CONFIRMED LIVE: right after a fresh login, Supabase has no synced
-    // messages yet for most/any conversations, so EVERY conversation in
-    // the list looks "new" on the very first real sync pass - deep-
-    // fetching all of them in one go (up to 50, ~300ms apart) is a burst
-    // of ~15s of rapid automated requests immediately following a login,
-    // which is exactly the shape of traffic anti-bot systems flag. This
-    // model's session went invalid within minutes of reconnecting,
-    // right when this route would have been doing exactly that. Capping
-    // how many conversations get deep-fetched per call spreads a large
-    // backlog across many 90s cycles instead of bursting it all at once -
-    // new incoming messages (the actual point of this sync) are almost
-    // always only 1-2 conversations per cycle anyway; it's only the
-    // one-time backlog right after a fresh login that was ever large.
-    const MAX_DEEP_FETCHES_PER_SYNC = 5;
-    let deepFetchCount = 0;
-
-    const conversations = [];
-    for (const c of chatsData.list) {
-      const fanId = c.withUser && c.withUser.id;
-      if (!fanId) continue;
-      const info = userInfo[fanId] || {};
-      const lastMsg = c.lastMessage || {};
-      const conv = {
-        fanId: String(fanId),
-        name: info.name || null,
-        username: info.username || null,
-        avatarUrl: (info.avatarThumbs && (info.avatarThumbs.c144 || info.avatarThumbs.c50)) || info.avatar || null,
-        unreadCount: c.unreadMessagesCount || 0,
-        lastMessageId: lastMsg.id != null ? String(lastMsg.id) : null,
-        messages: [],
-      };
-
-      const knownId = known[String(fanId)];
-      const hasNew = conv.lastMessageId && conv.lastMessageId !== String(knownId || '') && deepFetchCount < MAX_DEEP_FETCHES_PER_SYNC;
-      if (hasNew) {
-        deepFetchCount++;
-        try {
-          const msgData = await page.evaluate(async (fid) => {
-            const r = await fetch(`https://onlyfans.com/api2/v2/chats/${fid}/messages?limit=20&order=desc&skip_users=all`, {
-              credentials: 'include',
-            });
-            return r.ok ? await r.json() : null;
-          }, fanId);
-          if (msgData && Array.isArray(msgData.list)) {
-            conv.messages = msgData.list.map((m) => ({
-              id: m.id != null ? String(m.id) : null,
-              text: m.text || '',
-              createdAt: m.createdAt || null,
-              price: m.price || 0,
-              // A 1:1 conversation only ever has two possible senders -
-              // the fan or the model - so "not the fan" reliably means
-              // "the model sent this", no need for a separate /users/me
-              // lookup just to compare against.
-              isFromModel: !!(m.fromUser && String(m.fromUser.id) !== String(fanId)),
-              media: Array.isArray(m.media)
-                ? m.media
-                    .map((mm) => ({
-                      type: mm.type,
-                      url: mm.files && mm.files.full && mm.files.full.url,
-                      thumbUrl: mm.files && mm.files.thumb && mm.files.thumb.url,
-                    }))
-                    .filter((mm) => mm.url)
-                : [],
-            }));
-          }
-          // Small pacing gap between conversation-level requests, same
-          // spirit as the request volume comment above.
-          await new Promise((r) => setTimeout(r, 300));
-        } catch (e) {
-          console.warn(`[SYNC-CHATS] Message fetch failed for fan ${fanId} on ${modelId}:`, e.message);
-        }
-      }
-
-      conversations.push(conv);
-    }
-
-    res.json({ status: 'success', modelId, conversations });
-  } catch (error) {
-    console.error(`[SYNC-CHATS] Error for ${modelId}:`, error.message);
-    res.status(200).json({ status: 'error', error: error.message });
-  }
-});
-
-// Send a chat message through the model's live, authenticated session -
-// same page.evaluate(fetch) trick as /sync-live and for the same reason: a
-// fresh cookie-cloned browser gets rejected by OnlyFans even with valid
-// cookies, while this session is proven authenticated. The exact endpoint
-// shape below is a best guess (same as the old, never-live-tested
-// Browserless version) - run POST /sync-live with discover:true against a
-// real logged-in session to confirm/correct it, same as the chats endpoint.
-// Sends a real chat message for the Native Chat Mode custom UI (Task #58 -
-// no VNC involved at all here, unlike /insert-script-step which explicitly
-// leaves a review-before-send step for a human watching over VNC). The
-// previous implementation tried a raw signed fetch() to an
-// ONLYFANS_SEND_MESSAGE_ENDPOINT that was never configured (OnlyFans signs
-// these requests with headers only its own front-end JS computes - the
-// same reason /vault-media reads real API responses instead of crafting
-// its own request) AND never actually used fanId to navigate anywhere, so
-// every send just POSTed into whatever conversation the shared session's
-// page happened to already be on. Rewritten to reuse the exact same
-// proven DOM-automation pattern as /upload-to-vault-fan (which already
-// reliably auto-sends with zero review step): navigate straight to this
-// fan's own chat URL, type into the real compose box, click the real
-// Send button - hard-gated at every step so a selector miss reports a
-// clear error instead of silently doing nothing or sending to the wrong
-// fan.
-app.post('/send-message', async (req, res) => {
-  const { modelId, fanId, text } = req.body || {};
-  if (!modelId || !fanId || !text) {
-    return res.status(400).json({ error: 'Missing modelId, fanId, or text' });
-  }
-
-  const session = modelSessions[modelId];
-  if (!session) {
-    return res.json({ status: 'no_live_session', modelId });
-  }
-  session.lastActivity = Date.now();
-  const page = session.page;
-
-  // Same invisible-flow treatment as /insert-script-step - if an admin
-  // happens to have this exact model open in a VNC live view (Connection
-  // Hub's own stream, or Focus Mode) at the same moment a Native Chat Mode
-  // send fires on this shared main session, they should see nothing
-  // change until the real, finished state, not a flash of navigation.
-  const hideFlow = async () => {
-    const snapshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 }).catch(() => null);
-    await page
-      .evaluate((imgData) => {
-        if (document.getElementById('__etm_hide_flow__')) return;
-        var overlay = document.createElement('img');
-        overlay.id = '__etm_hide_flow__';
-        overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;width:100%;height:100%;object-fit:fill;background:#0b0b0d;';
-        if (imgData) overlay.src = 'data:image/jpeg;base64,' + imgData;
-        document.body.appendChild(overlay);
-      }, snapshot)
-      .catch(() => {});
-  };
-  const revealFlow = () =>
-    page
-      .evaluate(() => {
-        var s = document.getElementById('__etm_hide_flow__');
-        if (s) s.remove();
-      })
-      .catch(() => {});
-
-  try {
-    await hideFlow();
-
-    await page.goto(`https://onlyfans.com/my/chats/chat/${fanId}/`, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await page.waitForSelector('.js-text-editor[contenteditable="true"], textarea[placeholder*="message" i]', { timeout: 10000 }).catch(() => {});
-
-    const focused = await page.evaluate(() => {
-      var el = document.querySelector('.js-text-editor[contenteditable="true"], textarea[placeholder*="message" i]');
-      if (!el) return false;
-      el.focus();
-      return true;
-    });
-    if (!focused) {
-      return res.json({ status: 'error', error: 'Nachrichtenfeld nicht gefunden - Chat-Seite evtl. nicht geladen' });
-    }
-    await page.keyboard.type(text);
-    await new Promise((r) => setTimeout(r, 200));
-
-    const sent = await page.evaluate(() => {
-      var btn = document.querySelector('[at-attr="send_btn"]');
-      if (!btn || btn.disabled) return false;
-      btn.click();
-      return true;
-    });
-    if (!sent) {
-      return res.json({ status: 'error', error: 'Senden-Button nicht gefunden oder deaktiviert - Text wurde eingefügt, aber nicht gesendet' });
-    }
-
-    res.json({ status: 'success', modelId, fanId });
-  } catch (error) {
-    console.error(`[SEND-MESSAGE] Error for ${modelId}:`, error.message);
-    res.status(200).json({ status: 'error', error: error.message });
-  } finally {
-    await revealFlow();
   }
 });
 

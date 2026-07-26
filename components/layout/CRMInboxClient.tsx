@@ -2,27 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  fetchActiveFans,
-  fetchChatMessages,
-  fetchChatterEmojis,
-  fetchScriptLibrary,
-  fetchFanMetadata,
-  fetchModelNotes,
-  updateModelNotes,
-  sendMessage,
-  updateFanNotes,
-  markMessagesAsRead,
-} from "@/app/crm-inbox/actions";
-import {
-  Fan,
-  ChatMessage,
-  ScriptLibrary,
-  FanMetadata,
-} from "@/app/crm-inbox/types";
-import ChatListColumn from "./CRMChatListColumn";
-import ChatThreadColumn from "./CRMChatThreadColumn";
-import SalesCockpitColumn from "./CRMSalesCockpitColumn";
+import { fetchChatterEmojis } from "@/app/crm-inbox/actions";
 import { OnlyFansViewer } from "@/components/OnlyFansViewer";
 import NextShiftsWidget from "./NextShiftsWidget";
 
@@ -39,8 +19,6 @@ interface Shift {
 
 interface CRMInboxClientProps {
   chatterId: string;
-  initialFans: Fan[];
-  initialScripts: ScriptLibrary[];
   connectedModels: ConnectedModel[];
   userRole?: string;
   allShifts?: Shift[];
@@ -48,10 +26,16 @@ interface CRMInboxClientProps {
   userId?: string;
 }
 
+// Live-Ansicht (VNC-Spiegelung des echten OnlyFans-Fensters) ist der einzige
+// Modus - die eigene, aus synchronisierten Daten gebaute Chat-Oberfläche
+// (Native Chat Mode) wurde entfernt, nachdem sich der dafür nötige
+// automatische Daten-Sync live als Ursache für wiederholte Session-Abstürze
+// bestätigt hat (die Session starb reproduzierbar sobald der Sync seine
+// echten OnlyFans-API-Anfragen ausführte, unabhängig vom Timing seit Login).
+// Die Live-Ansicht selbst braucht diesen Sync nicht und lief in denselben
+// Tests über 8 Minuten am Stück stabil.
 export default function CRMInboxClient({
   chatterId,
-  initialFans,
-  initialScripts,
   connectedModels,
   userRole = "chatter",
   allShifts = [],
@@ -64,23 +48,7 @@ export default function CRMInboxClient({
   const [selectedModel, setSelectedModel] = useState<string | null>(
     modelFromUrl || (connectedModels.length > 0 ? connectedModels[0].id : null)
   );
-  const [fans, setFans] = useState<Fan[]>(initialFans);
-  const [selectedFanId, setSelectedFanId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [currentMessage, setCurrentMessage] = useState("");
   const [emojis, setEmojis] = useState<string[]>([]);
-  const [scripts, setScripts] = useState<ScriptLibrary[]>(initialScripts);
-  const [selectedScript, setSelectedScript] = useState<ScriptLibrary | null>(null);
-  const [fanMetadata, setFanMetadata] = useState<FanMetadata | null>(null);
-  const [isLoadingFans, setIsLoadingFans] = useState(false);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [isSavingNotes, setIsSavingNotes] = useState(false);
-  const [modelNotes, setModelNotes] = useState("");
-  const [isSavingModelNotes, setIsSavingModelNotes] = useState(false);
-
-  // OnlyFans Viewer - integrated as 4th column
-  const [selectedOnlyFansModel, setSelectedOnlyFansModel] = useState<string | null>(null);
 
   useEffect(() => {
     const loadEmojis = async () => {
@@ -90,138 +58,11 @@ export default function CRMInboxClient({
     loadEmojis();
   }, [chatterId]);
 
-  // GlobalSidebar's model links navigate to /crm-inbox?model=X - since
-  // selectedModel/selectedOnlyFansModel were only ever set from the URL
-  // once (via useState's initializer), clicking a different model link
-  // while already on this page changed the URL but nothing re-read it.
-  // This is what used to be the second, page-local sidebar's model click
-  // handler (removed - it duplicated GlobalSidebar once that existed too).
-  //
-  // CONFIRMED LIVE: this used to also force setSelectedOnlyFansModel(
-  // modelFromUrl), which forces Focus Mode (the VNC view) - meaning the
-  // sidebar's own model link ALWAYS bypassed Native Chat Mode's fan list,
-  // even after real synced data made that reachable. Landing on the
-  // generic OnlyFans nav item (no model in the URL) correctly showed the
-  // native fan list; clicking the specific model name right below it in
-  // the same sidebar showed a completely different mode for no reason a
-  // chatter could tell. Only set selectedModel here now - Native Chat
-  // Mode is the default for both entry points; Focus Mode/VNC stays
-  // reachable via its own explicit toggle where the fan list still lets
-  // you open it (selectedOnlyFansModel is set from there instead).
   useEffect(() => {
     if (modelFromUrl) {
       setSelectedModel(modelFromUrl);
-      setSelectedFanId(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelFromUrl]);
-
-  useEffect(() => {
-    if (!selectedModel) {
-      setFans([]);
-      setSelectedFanId(null);
-      return;
-    }
-
-    const loadFansForModel = async () => {
-      setIsLoadingFans(true);
-      try {
-        const fanList = await fetchActiveFans(selectedModel);
-        setFans(fanList);
-        setSelectedFanId(null);
-      } finally {
-        setIsLoadingFans(false);
-      }
-    };
-
-    loadFansForModel();
-
-    fetchModelNotes(selectedModel).then(setModelNotes);
-  }, [selectedModel]);
-
-  useEffect(() => {
-    if (!selectedFanId) {
-      setMessages([]);
-      setFanMetadata(null);
-      return;
-    }
-
-    const loadFanData = async () => {
-      setIsLoadingMessages(true);
-      try {
-        const msgs = await fetchChatMessages(selectedFanId);
-        setMessages(msgs);
-
-        if (selectedModel) {
-          const metadata = await fetchFanMetadata(selectedModel, selectedFanId);
-          setFanMetadata(metadata);
-        }
-
-        await markMessagesAsRead(selectedFanId);
-      } finally {
-        setIsLoadingMessages(false);
-      }
-    };
-
-    loadFanData();
-  }, [selectedFanId, selectedModel]);
-
-  useEffect(() => {
-    if (selectedScript) {
-      setCurrentMessage(selectedScript.script_content);
-    }
-  }, [selectedScript]);
-
-  const handleSendMessage = async () => {
-    if (!selectedFanId || !currentMessage.trim()) return;
-
-    setIsSending(true);
-    try {
-      const result = await sendMessage(
-        chatterId,
-        selectedFanId,
-        currentMessage,
-        selectedScript?.attached_media_id
-      );
-
-      if (result.success) {
-        setCurrentMessage("");
-        setSelectedScript(null);
-
-        const msgs = await fetchChatMessages(selectedFanId);
-        setMessages(msgs);
-      }
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const handleUpdateNotes = async (notes: string) => {
-    if (!selectedFanId || !selectedModel) return;
-
-    setIsSavingNotes(true);
-    try {
-      await updateFanNotes(selectedModel, selectedFanId, notes);
-      setFanMetadata((prev) => (prev ? { ...prev, notes } : null));
-    } finally {
-      setIsSavingNotes(false);
-    }
-  };
-
-  const handleSelectFan = (fanId: string) => {
-    setSelectedFanId(fanId);
-  };
-
-  const handleUpdateModelNotes = async (notes: string) => {
-    if (!selectedModel) return;
-    setModelNotes(notes);
-    setIsSavingModelNotes(true);
-    try {
-      await updateModelNotes(selectedModel, notes);
-    } finally {
-      setIsSavingModelNotes(false);
-    }
-  };
 
   return (
     // Not h-screen (100vh) - this renders inside <main>'s pt-32 (the top
@@ -229,16 +70,9 @@ export default function CRMInboxClient({
     // what's actually left in the viewport, forcing the whole page to
     // scroll just to reach the bottom of the OnlyFans view.
     <div className="flex h-[calc(100vh-8rem)] bg-[#0A0A0A] text-[#E2C48A] overflow-hidden">
-      {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* MAIN CONTENT AREA - Flex Layout */}
         <div className="flex-1 flex overflow-hidden">
           {!selectedModel ? (
-            // NO MODEL SELECTED - Show placeholder + shift reminder. Native
-            // Chat Mode's fan list now shows as soon as a model IS selected
-            // (real synced data exists to show it), so this shift widget
-            // moved here from its old standalone "default landing" state -
-            // that state no longer exists once a model is picked.
             <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black p-8">
               <div className="text-center mb-8">
                 <h1 className="text-4xl font-black mb-3 uppercase tracking-wider">
@@ -254,102 +88,20 @@ export default function CRMInboxClient({
                 isAdmin={userRole === "admin"}
               />
             </div>
-          ) : selectedOnlyFansModel && !selectedFanId ? (
-            // ONLYFANS FOCUS MODE - no native fan chat selected yet. Sales
-            // Cockpit only makes sense once you're actually in a chat, so it
-            // stays hidden here; the fan list stays hidden too until Native
-            // Chat Mode actually has synced data to show (it's real estate
-            // OnlyFans can use instead in the meantime) - OnlyFans gets the
-            // full width.
+          ) : (
             <div className="flex-1 min-w-0 overflow-hidden bg-black">
               <OnlyFansViewer
-                modelId={selectedOnlyFansModel}
-                modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}
+                modelId={selectedModel}
+                modelName={connectedModels.find((m) => m.id === selectedModel)?.name || "OnlyFans"}
                 isEmbedded={true}
                 isModal={false}
-                onClose={() => setSelectedOnlyFansModel(null)}
+                onClose={() => setSelectedModel(null)}
                 emojis={emojis}
                 onEmojisChange={setEmojis}
                 chatterId={chatterId}
                 userRole={userRole}
               />
             </div>
-          ) : (
-            // NATIVE CHAT MODE - a fan conversation is selected, so the CRM's
-            // own inbox (with the emoji bar and script library) is the focus.
-            // OnlyFans, if open, stays as a reference column alongside it.
-            <>
-              {/* Column 1: Chat List */}
-              <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-r border-[#C9A86A]/20 transition-all duration-200 flex flex-col`}>
-                {/* The only remaining way to open Focus Mode/VNC now that
-                    the sidebar's model link no longer forces it - kept
-                    reachable on purpose (initial connect troubleshooting,
-                    or anything Native Chat Mode doesn't cover yet), just
-                    opt-in instead of the default. */}
-                {selectedModel && !selectedOnlyFansModel && (
-                  <button
-                    onClick={() => setSelectedOnlyFansModel(selectedModel)}
-                    className="m-2 px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider text-slate-400 border border-[#9C7A3D]/20 hover:text-[#C9A86A] hover:border-[#C9A86A]/40 transition"
-                  >
-                    📺 Live-Ansicht (VNC) öffnen
-                  </button>
-                )}
-                <ChatListColumn
-                  fans={fans}
-                  selectedFanId={selectedFanId}
-                  onSelectFan={handleSelectFan}
-                  isLoading={isLoadingFans}
-                />
-              </div>
-
-              {/* Column 2: Chat Thread */}
-              <div className={`${selectedOnlyFansModel ? 'w-2/5' : 'w-1/2'} transition-all duration-200`}>
-                <ChatThreadColumn
-                  messages={messages}
-                  currentMessage={currentMessage}
-                  onMessageChange={setCurrentMessage}
-                  onSendMessage={handleSendMessage}
-                  emojis={emojis}
-                  onEmojisChange={setEmojis}
-                  chatterId={chatterId}
-                  selectedEmoji={selectedScript ? "✓" : undefined}
-                  isLoading={isLoadingMessages}
-                  isSending={isSending}
-                />
-              </div>
-
-              {/* Column 3: Sales Cockpit */}
-              <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-l border-[#C9A86A]/20 transition-all duration-200`}>
-                <SalesCockpitColumn
-                  fanMetadata={fanMetadata}
-                  scripts={scripts}
-                  selectedScript={selectedScript}
-                  onSelectScript={setSelectedScript}
-                  onNotesChange={handleUpdateNotes}
-                  isSavingNotes={isSavingNotes}
-                  modelNotes={modelNotes}
-                  onModelNotesChange={handleUpdateModelNotes}
-                  isSavingModelNotes={isSavingModelNotes}
-                />
-              </div>
-
-              {/* Column 4: OnlyFans (only when selected) */}
-              {selectedOnlyFansModel && (
-                <div className="w-1/5 border-l border-[#C9A86A]/20 overflow-hidden bg-black transition-all duration-200">
-                  <OnlyFansViewer
-                    modelId={selectedOnlyFansModel}
-                    modelName={connectedModels.find((m) => m.id === selectedOnlyFansModel)?.name || "OnlyFans"}
-                    isEmbedded={true}
-                    isModal={false}
-                    onClose={() => setSelectedOnlyFansModel(null)}
-                    emojis={emojis}
-                    onEmojisChange={setEmojis}
-                    chatterId={chatterId}
-                    userRole={userRole}
-                  />
-                </div>
-              )}
-            </>
           )}
         </div>
       </main>
