@@ -36,6 +36,32 @@ export interface BatchFile {
 // of the cap (rather than hugging it) leaves room for multipart overhead.
 const CHUNK_SIZE = 3.5 * 1024 * 1024;
 
+// fetch() has no reliable cross-browser way to observe upload progress
+// (its ReadableStream body support covers downloads, not uploads) -
+// XMLHttpRequest's upload.onprogress is the only thing that gives real,
+// incremental bytes-sent numbers, which is what actually lets the queue
+// show a genuine percentage instead of jumping straight from 0 to 100.
+function postFileChunkXHR(formData: FormData, onUploadProgress?: (loaded: number, total: number) => void): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/crm/upload-to-vault-fan");
+    if (onUploadProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onUploadProgress(e.loaded, e.total);
+      };
+    }
+    xhr.onload = () => {
+      try {
+        resolve(JSON.parse(xhr.responseText));
+      } catch {
+        reject(new Error("Ungültige Server-Antwort"));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Netzwerkfehler"));
+    xhr.send(formData);
+  });
+}
+
 /**
  * Uploads one file, transparently splitting it into sub-cap chunks (with
  * their own shared uploadId) when it's too big for a single request - the
@@ -44,8 +70,9 @@ const CHUNK_SIZE = 3.5 * 1024 * 1024;
  * staged/success response. Throws on any non-final chunk that doesn't
  * confirm chunk_staged (network error or a real server error), which
  * aborts this file the same way a single failed request always did.
+ * onProgress reports 0-100 across the WHOLE file, not per-chunk.
  */
-async function postFile(file: File, fields: Record<string, string>): Promise<any> {
+async function postFile(file: File, fields: Record<string, string>, onProgress?: (percent: number) => void): Promise<any> {
   const buildFormData = (blob: Blob) => {
     const formData = new FormData();
     formData.append("file", blob, file.name);
@@ -54,21 +81,20 @@ async function postFile(file: File, fields: Record<string, string>): Promise<any
   };
 
   if (file.size <= CHUNK_SIZE) {
-    const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: buildFormData(file) });
-    return res.json();
+    return postFileChunkXHR(buildFormData(file), (loaded, total) => onProgress?.(Math.round((loaded / total) * 100)));
   }
 
   const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
   let data: any = null;
   for (let i = 0; i < totalChunks; i++) {
-    const chunk = file.slice(i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, file.size));
+    const start = i * CHUNK_SIZE;
+    const chunk = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
     const formData = buildFormData(chunk);
     formData.append("chunkIndex", String(i));
     formData.append("totalChunks", String(totalChunks));
     formData.append("uploadId", uploadId);
-    const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: formData });
-    data = await res.json();
+    data = await postFileChunkXHR(formData, (loaded) => onProgress?.(Math.round(((start + loaded) / file.size) * 100)));
     if (i < totalChunks - 1 && data.status !== "chunk_staged") {
       throw new Error(data.message || data.error || "Chunk-Upload fehlgeschlagen");
     }
@@ -92,7 +118,8 @@ async function postFile(file: File, fields: Record<string, string>): Promise<any
 async function sendOneBatch(
   batch: BatchFile[],
   target: UploadTarget,
-  onItemUpdate: (id: string, status: UploadItemStatus, error?: string) => void
+  onItemUpdate: (id: string, status: UploadItemStatus, error?: string) => void,
+  onItemProgress?: (id: string, percent: number) => void
 ): Promise<boolean> {
   const batchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   // Files that the VPS actually confirmed it received a path for - the
@@ -125,7 +152,7 @@ async function sendOneBatch(
       if (target.vaultFanLabel) fields.vaultFanLabel = target.vaultFanLabel;
       if (target.chatterName) fields.chatterName = target.chatterName;
 
-      const data = await postFile(item.file, fields);
+      const data = await postFile(item.file, fields, (percent) => onItemProgress?.(item.id, percent));
 
       if (!isLast) {
         if (data.status === "staged") {
@@ -173,12 +200,13 @@ async function sendOneBatch(
 export async function sendFilesInBatches(
   files: BatchFile[],
   target: UploadTarget,
-  onItemUpdate: (id: string, status: UploadItemStatus, error?: string) => void
+  onItemUpdate: (id: string, status: UploadItemStatus, error?: string) => void,
+  onItemProgress?: (id: string, percent: number) => void
 ): Promise<boolean> {
   let allOk = true;
   for (let start = 0; start < files.length; start += BATCH_SIZE) {
     const batch = files.slice(start, start + BATCH_SIZE);
-    const ok = await sendOneBatch(batch, target, onItemUpdate);
+    const ok = await sendOneBatch(batch, target, onItemUpdate, onItemProgress);
     if (!ok) allOk = false;
   }
   return allOk;

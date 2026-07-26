@@ -31,6 +31,7 @@ type QueueItem = {
   file: File;
   status: UploadItemStatus;
   error?: string;
+  progress?: number;
 };
 
 /**
@@ -152,6 +153,9 @@ export default function UploadVaultClient({
       { modelId: activeModelId, vaultFanId, vaultFanLabel, price: vaultFanPrice, chatterName },
       (id, status, error) => {
         setQueue((q) => q.map((x) => (x.id === id ? { ...x, status, error } : x)));
+      },
+      (id, percent) => {
+        setQueue((q) => q.map((x) => (x.id === id ? { ...x, progress: percent } : x)));
       }
     );
     setIsSending(false);
@@ -329,6 +333,7 @@ export default function UploadVaultClient({
                   file={item.file}
                   status={item.status}
                   error={item.error}
+                  progress={item.progress}
                   onRemove={() => removeItem(item.id)}
                 />
               ))}

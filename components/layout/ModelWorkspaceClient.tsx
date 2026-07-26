@@ -27,6 +27,7 @@ type QueueItem = {
   file: File;
   status: UploadItemStatus;
   error?: string;
+  progress?: number;
 };
 
 /**
@@ -176,6 +177,9 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
       { modelId: model.id, vaultFanId: vaultFanId || undefined, vaultFanLabel: vaultFanLabel || undefined, price: vaultFanPrice },
       (id, status, error) => {
         setOfQueue((q) => q.map((x) => (x.id === id ? { ...x, status, error } : x)));
+      },
+      (id, percent) => {
+        setOfQueue((q) => q.map((x) => (x.id === id ? { ...x, progress: percent } : x)));
       }
     );
     setIsSendingOf(false);
@@ -363,6 +367,7 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
                         file={item.file}
                         status={item.status}
                         error={item.error}
+                        progress={item.progress}
                         onRemove={() => removeOfItem(item.id)}
                         compact
                       />

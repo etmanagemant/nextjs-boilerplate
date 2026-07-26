@@ -11,6 +11,11 @@ const STATUS_STYLE: Record<UploadItemStatus, { label: string; className: string 
   error: { label: "Fehler", className: "bg-red-500/15 text-red-300 border-red-500/30" },
 };
 
+// Circular upload-progress ring - radius/circumference for the stroke-
+// dashoffset math below, sized to sit centered over the thumbnail square.
+const RING_RADIUS = 20;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
 /**
  * A real image/video thumbnail instead of a generic emoji icon - both
  * prettier and more trustworthy (a model can actually see what she's
@@ -22,12 +27,16 @@ export default function UploadQueueItem({
   file,
   status,
   error,
+  progress,
   onRemove,
   compact = false,
 }: {
   file: File;
   status: UploadItemStatus;
   error?: string;
+  // 0-100, only meaningful while status is "uploading" - real bytes-sent
+  // progress from the batching helper's XHR upload handler, not a guess.
+  progress?: number;
   onRemove?: () => void;
   compact?: boolean;
 }) {
@@ -47,7 +56,7 @@ export default function UploadQueueItem({
 
   return (
     <div className="flex items-center gap-3 bg-black/40 p-2.5 rounded-xl border border-[#9C7A3D]/10">
-      <div className={`${size} flex-shrink-0 rounded-lg overflow-hidden bg-black/60 border border-[#9C7A3D]/20 flex items-center justify-center`}>
+      <div className={`relative ${size} flex-shrink-0 rounded-lg overflow-hidden bg-black/60 border border-[#9C7A3D]/20 flex items-center justify-center`}>
         {isAudio ? (
           <span className="text-xl">🎙️</span>
         ) : (
@@ -57,6 +66,26 @@ export default function UploadQueueItem({
           ) : (
             <img src={previewUrl} alt="" className="w-full h-full object-cover" />
           ))
+        )}
+        {status === "uploading" && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+            <svg viewBox="0 0 48 48" className="w-full h-full -rotate-90 p-1">
+              <circle cx="24" cy="24" r={RING_RADIUS} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="4" />
+              <circle
+                cx="24"
+                cy="24"
+                r={RING_RADIUS}
+                fill="none"
+                stroke="#C9A86A"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray={RING_CIRCUMFERENCE}
+                strokeDashoffset={RING_CIRCUMFERENCE - (RING_CIRCUMFERENCE * (progress ?? 0)) / 100}
+                className="transition-[stroke-dashoffset] duration-200"
+              />
+            </svg>
+            <span className="absolute text-[9px] font-bold text-white">{progress ?? 0}%</span>
+          </div>
         )}
       </div>
       <div className="flex-1 min-w-0">
