@@ -1,4 +1,5 @@
 import "./globals.css";
+import { headers } from "next/headers";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
 import GlobalSidebar from "@/components/layout/GlobalSidebar";
@@ -16,6 +17,13 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const { supabase, user } = await getCurrentUser();
+
+  // "/live/<modelId>" is the standalone, chrome-free single-model view
+  // meant to be popped into its own browser tab/window for a second
+  // monitor - it renders only OnlyFansViewer itself, none of the normal
+  // sidebar/top bar/model-tabs-bar, so it needs the full viewport.
+  const pathname = (await headers()).get("x-pathname") || "";
+  const isSoloView = pathname.startsWith("/live/");
 
   let role = "chatter";
   // A brand-new self-registered user (see app/login/page.tsx) gets no role
@@ -55,12 +63,19 @@ export default async function RootLayout({
       <body className="min-h-screen bg-[#050505] text-[#E2C48A] antialiased tracking-wide">
         {/* Gold accent line at the very top edge of the page - used to sit
             as the header's bottom border, moved here per the sidebar-first
-            layout redesign. */}
-        <div className="fixed top-0 left-0 right-0 h-[2px] z-[60] bg-gradient-to-r from-transparent via-[#C9A86A] to-transparent" />
+            layout redesign. Skipped on the solo view - that tab should show
+            nothing but the live view itself. */}
+        {!isSoloView && (
+          <div className="fixed top-0 left-0 right-0 h-[2px] z-[60] bg-gradient-to-r from-transparent via-[#C9A86A] to-transparent" />
+        )}
 
         {user && pending && <WaitingForRole userId={user.id} />}
 
-        {user && !pending && (
+        {user && !pending && isSoloView && (
+          <main className="min-h-screen">{children}</main>
+        )}
+
+        {user && !pending && !isSoloView && (
           <>
             <GlobalTopBar />
             <GlobalSidebar role={role} grantedFeatures={grantedFeatures} />

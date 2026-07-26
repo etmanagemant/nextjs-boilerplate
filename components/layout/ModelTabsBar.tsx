@@ -47,10 +47,13 @@ export default function ModelTabsBar({ models, activeModelId }: ModelTabsBarProp
   }, [contextMenu]);
 
   const openInNewTab = (modelId: string) => {
-    // Same URL the tab's own <Link> already points at - /crm-inbox?model=X
-    // renders the identical live VNC view with all overlay widgets
-    // standalone, so no separate route or component is needed for this.
-    window.open(`/crm-inbox?model=${modelId}`, "_blank", "noopener,noreferrer");
+    // /live/<modelId> is a separate, chrome-free route (see app/layout.tsx)
+    // showing only the live view + overlay widgets - meant to be dragged
+    // onto its own monitor. It targets the SAME underlying VPS slot/VNC
+    // session this model already uses elsewhere (assignSlot keys off
+    // modelId, and x11vnc runs with -shared) - opening it here never spins
+    // up a second slot or browser for the same model.
+    window.open(`/live/${modelId}`, "_blank", "noopener,noreferrer");
     setContextMenu(null);
   };
 
