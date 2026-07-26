@@ -1530,6 +1530,38 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
+// Periodic live-session health check - catches a session going invalid
+// WHILE this process keeps running, which autoReconnectAllModels can't
+// catch (that only ever runs once, at boot). CONFIRMED LIVE: a session
+// stayed in modelSessions for 8+ hours with this process never
+// restarting, yet getLoginState later reported isLoggedIn:false -
+// OnlyFans had invalidated it server-side sometime in between, with
+// nothing here ever noticing. Without this, Supabase's is_active stays
+// stuck true and Connection Hub keeps claiming "verbunden" for a model
+// that's actually dead until a chatter happens to notice a broken chat.
+// getLoginState only reads the page's own current cookies/URL (no
+// request to OnlyFans itself), so checking every few minutes adds no
+// extra load on OnlyFans - this is purely local state inspection.
+setInterval(async () => {
+  for (const [modelId, session] of Object.entries(modelSessions)) {
+    try {
+      const state = await getLoginState(session.page);
+      if (state.checkFailed || state.isLoggedIn) continue;
+      console.warn(`[HEALTH-CHECK] ${modelId}: session went invalid mid-run, closing and marking disconnected`);
+      await closeSession(modelId, 'session invalidated mid-run', true);
+      if (APP_URL && CRON_SECRET) {
+        await fetch(`${APP_URL}/api/vps/mark-session-invalid?secret=${CRON_SECRET}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modelId }),
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn(`[HEALTH-CHECK] Error checking ${modelId}:`, e.message);
+    }
+  }
+}, 3 * 60 * 1000);
+
 // Periodic background sync - Vercel Hobby plan only allows daily cron, so
 // this VPS (already running 24/7) drives it instead. Just pings the Next.js
 // endpoint, which enumerates active models and calls back into this VPS's
