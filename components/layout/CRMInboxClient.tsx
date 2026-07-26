@@ -96,10 +96,21 @@ export default function CRMInboxClient({
   // while already on this page changed the URL but nothing re-read it.
   // This is what used to be the second, page-local sidebar's model click
   // handler (removed - it duplicated GlobalSidebar once that existed too).
+  //
+  // CONFIRMED LIVE: this used to also force setSelectedOnlyFansModel(
+  // modelFromUrl), which forces Focus Mode (the VNC view) - meaning the
+  // sidebar's own model link ALWAYS bypassed Native Chat Mode's fan list,
+  // even after real synced data made that reachable. Landing on the
+  // generic OnlyFans nav item (no model in the URL) correctly showed the
+  // native fan list; clicking the specific model name right below it in
+  // the same sidebar showed a completely different mode for no reason a
+  // chatter could tell. Only set selectedModel here now - Native Chat
+  // Mode is the default for both entry points; Focus Mode/VNC stays
+  // reachable via its own explicit toggle where the fan list still lets
+  // you open it (selectedOnlyFansModel is set from there instead).
   useEffect(() => {
     if (modelFromUrl) {
       setSelectedModel(modelFromUrl);
-      setSelectedOnlyFansModel(modelFromUrl);
       setSelectedFanId(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,7 +280,20 @@ export default function CRMInboxClient({
             // OnlyFans, if open, stays as a reference column alongside it.
             <>
               {/* Column 1: Chat List */}
-              <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-r border-[#C9A86A]/20 transition-all duration-200`}>
+              <div className={`${selectedOnlyFansModel ? 'w-1/5' : 'w-1/4'} border-r border-[#C9A86A]/20 transition-all duration-200 flex flex-col`}>
+                {/* The only remaining way to open Focus Mode/VNC now that
+                    the sidebar's model link no longer forces it - kept
+                    reachable on purpose (initial connect troubleshooting,
+                    or anything Native Chat Mode doesn't cover yet), just
+                    opt-in instead of the default. */}
+                {selectedModel && !selectedOnlyFansModel && (
+                  <button
+                    onClick={() => setSelectedOnlyFansModel(selectedModel)}
+                    className="m-2 px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider text-slate-400 border border-[#9C7A3D]/20 hover:text-[#C9A86A] hover:border-[#C9A86A]/40 transition"
+                  >
+                    📺 Live-Ansicht (VNC) öffnen
+                  </button>
+                )}
                 <ChatListColumn
                   fans={fans}
                   selectedFanId={selectedFanId}
