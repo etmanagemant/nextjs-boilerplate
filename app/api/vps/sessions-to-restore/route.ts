@@ -19,19 +19,20 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = createSupabaseAdminClient();
-    const { data, error } = await supabase
-      .from("crm_model_sessions")
-      .select("model_id, auth_cookies")
-      .eq("is_active", true)
-      .not("auth_cookies", "is", null);
+    // Deliberately not filtering on auth_cookies here (was `.not("auth_cookies",
+    // "is", null)`) - the VPS's own on-disk Chrome profile is now the primary
+    // restore path (survives a `systemctl restart`, unlike a fresh Supabase-
+    // cookie injection which turned out to trigger extra OnlyFans verification
+    // hops), and auth_cookies is only a fallback for the rare case that disk
+    // didn't survive (an actual VM reboot). Every is_active model is worth an
+    // attempt regardless of whether that fallback happens to be populated.
+    const { data, error } = await supabase.from("crm_model_sessions").select("model_id, auth_cookies").eq("is_active", true);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const sessions = (data || [])
-      .filter((row) => row.auth_cookies && Object.keys(row.auth_cookies).length > 0)
-      .map((row) => ({ modelId: row.model_id, cookies: row.auth_cookies }));
+    const sessions = (data || []).map((row) => ({ modelId: row.model_id, cookies: row.auth_cookies || null }));
 
     return NextResponse.json({ status: "success", sessions });
   } catch (error: any) {

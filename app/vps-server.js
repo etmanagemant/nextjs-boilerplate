@@ -1304,10 +1304,30 @@ async function getOrCreateSession(modelId, restoreCookies) {
   }
 
   await enforceSessionCap(modelId);
-  // Fresh login handshake - never inherit whatever's left on disk from a
-  // previous run. When restoreCookies is set, the valid state we actually
-  // want comes back explicitly via page.setCookie below, not from disk.
-  await wipeProfileDir(modelId);
+  // Fresh login handshake (restoreCookies unset, the manual /connect flow) -
+  // never inherit whatever's left on disk from a previous run.
+  //
+  // For an auto-reconnect attempt (restoreCookies set), PRESERVE the
+  // on-disk profile instead - a `systemctl restart` never touches /tmp, so
+  // Chrome's own cookie jar there already holds exactly what this model
+  // was last authenticated with, with full fidelity (real domain/path/
+  // sameSite/secure/expiry). CONFIRMED LIVE: reconstructing cookies from
+  // Supabase's lossy flat {name: value} map instead (domain/path guessed
+  // as '.onlyfans.com'/'/', every other attribute dropped entirely) landed
+  // on an OnlyFans verification redirect even with cookies captured mere
+  // seconds earlier from a genuinely working login - an untouched native
+  // profile never triggered that. Only fall back to the Supabase map if
+  // the profile dir doesn't even exist (a real VM reboot, not just a
+  // service restart, actually does clear /tmp).
+  const hasDiskProfile = restoreCookies
+    ? await fs
+        .access(profileDir(modelId))
+        .then(() => true)
+        .catch(() => false)
+    : false;
+  if (!hasDiskProfile) {
+    await wipeProfileDir(modelId);
+  }
 
   const browser = await launchBrowser(modelId, ':1');
   // App mode (see the --app comment in launchBrowser) opens its own window
@@ -1338,7 +1358,10 @@ async function getOrCreateSession(modelId, restoreCookies) {
   await reserveOverlaySpace(page);
   await applyNavRestrictions(page, 'admin');
 
-  if (restoreCookies) {
+  // Fallback path only: no on-disk profile survived (real VM reboot), so
+  // there's nothing native to fall back on - inject from Supabase's stored
+  // map as a best-effort second choice, same as before.
+  if (restoreCookies && !hasDiskProfile) {
     const cookiePairs = Object.entries(restoreCookies)
       .filter(([name]) => name !== 'local_storage')
       .map(([name, value]) => ({ name, value: String(value), domain: '.onlyfans.com', path: '/' }));
@@ -1358,17 +1381,28 @@ async function getOrCreateSession(modelId, restoreCookies) {
   try {
     // The direct /login route has been unreliable ("page not available") -
     // the root page shows the same login form to logged-out visitors anyway.
-    // Restored sessions go straight to the chat inbox instead, since if the
-    // cookies are valid there's no login page to land on at all.
-    await page.goto(restoreCookies ? 'https://www.onlyfans.com/my/chats' : 'https://www.onlyfans.com', {
-      waitUntil: 'domcontentloaded',
-      timeout: restoreCookies ? 20000 : 15000,
-    });
+    //
+    // CONFIRMED LIVE: a cold browser + injected cookies navigating STRAIGHT
+    // to a deep authenticated link (/my/chats) got bounced through a
+    // "?return_to=" redirect even with genuinely valid, just-minted
+    // cookies (verified by hand seconds earlier) - most likely an extra
+    // verification hop OnlyFans/Cloudflare adds for a brand-new page
+    // hitting a deep link directly, which a normal browser visiting the
+    // root domain first and navigating via its own in-app router never
+    // triggers. Landing on the root first (exactly like a real login
+    // always has, and like the non-restore path already did) avoids that
+    // hop; /my/chats is then a second, "warm" navigation instead of the
+    // very first request this page ever makes.
+    await page.goto('https://www.onlyfans.com', { waitUntil: 'domcontentloaded', timeout: restoreCookies ? 20000 : 15000 });
+    if (restoreCookies) {
+      await new Promise((r) => setTimeout(r, 1500));
+      await page.goto('https://www.onlyfans.com/my/chats', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    }
   } catch (navErr) {
     console.warn(`[SESSION] Initial navigation warning for ${modelId}: ${navErr.message}`);
   }
 
-  if (restoreCookies && restoreCookies.local_storage) {
+  if (restoreCookies && !hasDiskProfile && restoreCookies.local_storage) {
     try {
       await page.evaluate((json) => {
         const data = JSON.parse(json);
@@ -1539,7 +1573,11 @@ async function autoReconnectAllModels() {
   // enforceSessionCap already exist to avoid elsewhere.
   for (const { modelId, cookies } of sessions) {
     try {
-      const session = await withModelLock(modelId, () => getOrCreateSession(modelId, cookies));
+      // Pass a truthy sentinel even when Supabase had no cookies stored
+      // (null) - restoreCookies also flags "this is an auto-reconnect
+      // attempt, prefer the on-disk profile" throughout getOrCreateSession,
+      // independent of whether the Supabase fallback map is populated.
+      const session = await withModelLock(modelId, () => getOrCreateSession(modelId, cookies || {}));
       const state = await getLoginState(session.page);
       if (state.isLoggedIn) {
         console.log(`[AUTO-RECONNECT] ${modelId}: restored silently`);
