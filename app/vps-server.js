@@ -2148,7 +2148,13 @@ app.post('/insert-script-step', async (req, res) => {
   // state is revealed at the end.
   const hideFlow = async () => {
     console.log('[HIDE-FLOW] Starting screenshot...');
-    const snapshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 80 }).catch((e) => {
+    // CONFIRMED LIVE (timing log): this single screenshot was the single
+    // biggest line item in the whole flow (~1.5s on this VPS's 2 vCPUs,
+    // shared with Xvfb and Chrome's own rendering) - JPEG encode time
+    // scales with quality, and this frame is only ever shown as a frozen
+    // "nothing changed" background for a couple seconds, never zoomed
+    // into, so a much lower quality costs nothing visible here.
+    const snapshot = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 40 }).catch((e) => {
       console.log('[HIDE-FLOW] Screenshot FAILED:', e.message);
       return null;
     });
