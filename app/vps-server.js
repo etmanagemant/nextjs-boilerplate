@@ -1756,6 +1756,36 @@ app.get('/status', async (req, res) => {
   }
 });
 
+// Lightweight "did anything change at the top of this model's inbox"
+// signal, used for the chatter-facing model-tab unread badges (a chatter
+// running 2 models in one shift can't watch both VNC feeds at once). Reads
+// the chat list's current top conversation (id + last-message preview)
+// from whatever page the model's session already has open - no navigation,
+// no extra network call, just inspecting already-rendered DOM. This is the
+// same "never make a real fetch, only read what's already there" rule the
+// old sync-loop violated and which killed sessions - reading the DOM this
+// way carries none of that risk.
+app.get('/inbox-fingerprint', async (req, res) => {
+  try {
+    const { modelId } = req.query;
+    if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+
+    const session = modelSessions[modelId];
+    if (!session) return res.json({ status: 'no_session' });
+
+    const fingerprint = await session.page.evaluate(() => {
+      var item = document.querySelector('.b-chats__item');
+      if (!item) return null;
+      var preview = item.querySelector('.b-chats__item__last-message__content');
+      return { id: item.id || '', preview: preview ? (preview.textContent || '').trim().slice(0, 80) : '' };
+    });
+    if (!fingerprint) return res.json({ status: 'success', fingerprint: null });
+    res.json({ status: 'success', fingerprint: `${fingerprint.id}|${fingerprint.preview}` });
+  } catch (error) {
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
 // Force-reload a model's live session (e.g. the sidebar's "refresh session"
 // context menu action). Mouse/keyboard/scroll all go over VNC directly now
 // (native protocol-level forwarding, no relay needed) - this is the one

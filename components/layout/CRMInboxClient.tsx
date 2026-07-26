@@ -5,11 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { fetchChatterEmojis } from "@/app/crm-inbox/actions";
 import { OnlyFansViewer } from "@/components/OnlyFansViewer";
 import NextShiftsWidget from "./NextShiftsWidget";
+import ModelTabsBar from "./ModelTabsBar";
 import { isAdminTierRole } from "@/lib/roles";
 
 interface ConnectedModel {
   id: string;
   name: string;
+  avatar_url?: string | null;
 }
 
 interface Shift {
@@ -78,6 +80,7 @@ export default function CRMInboxClient({
     // scroll just to reach the bottom of the OnlyFans view.
     <div className="flex h-[calc(100vh-8rem)] bg-[#0A0A0A] text-[#E2C48A] overflow-hidden">
       <main className="flex-1 flex flex-col overflow-hidden">
+        <ModelTabsBar models={connectedModels} activeModelId={selectedModel} />
         <div className="flex-1 flex overflow-hidden">
           {!selectedModel ? (
             <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black p-8">
