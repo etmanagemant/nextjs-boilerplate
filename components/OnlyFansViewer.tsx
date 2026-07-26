@@ -65,6 +65,16 @@ export function OnlyFansViewer({
   const noSessionPollRef = useRef<NodeJS.Timeout | null>(null);
   const noSessionSyncedRef = useRef(false);
   const unmountedRef = useRef(false);
+  // Bumped on every start() (model switch OR manual retry) so a stale async
+  // callback from an ABANDONED attempt - most notably the old model's own
+  // rfb.disconnect() in the cleanup below, which fires that same rfb's
+  // "disconnect" listener asynchronously - can't setPhase("error") over the
+  // new attempt that's already replacing it. CONFIRMED LIVE as the cause of
+  // "Fehler VNC, dann nochmal versuchen" on every model switch: unmountedRef
+  // alone doesn't catch this, since the NEW effect run resets it to false
+  // (synchronously, before the old rfb's disconnect event ever fires).
+  const generationRef = useRef(0);
+  const isStale = (generation: number) => unmountedRef.current || generationRef.current !== generation;
 
   const [currentFan, setCurrentFan] = useState<{ fanId: string; metadata: any; lastEditedBy: string | null } | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -81,13 +91,14 @@ export function OnlyFansViewer({
   // Inbox before the admin has finished connecting via the Connection Hub,
   // and without a retry this would otherwise show "not connected" forever
   // even once a real session exists moments later.
-  const waitForSession = async (): Promise<void> => {
+  const waitForSession = async (generation: number): Promise<void> => {
     const slotRes = await fetch("/api/crm/chatter-slot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ modelId }),
     });
     const slotData = slotRes.ok ? await slotRes.json() : {};
+    if (isStale(generation)) return;
 
     if (slotData.status !== "success" || !slotData.wsUrl) {
       // The VPS browser can disappear for reasons that have nothing to do
@@ -113,23 +124,24 @@ export function OnlyFansViewer({
         }).catch(() => {});
       }
       setPhase("no-session");
-      if (!unmountedRef.current) {
-        noSessionPollRef.current = setTimeout(() => {
-          waitForSession().catch((err) => {
+      noSessionPollRef.current = setTimeout(() => {
+        waitForSession(generation).catch((err) => {
+          if (!isStale(generation)) {
             setPhase("error");
             setError(err.message || "Unbekannter Fehler beim Verbinden");
-          });
-        }, 4000);
-      }
+          }
+        });
+      }, 4000);
       return;
     }
 
     noSessionSyncedRef.current = false;
-    await connectVnc(slotData.wsUrl, slotData.password);
+    await connectVnc(slotData.wsUrl, slotData.password, generation);
   };
 
-  const connectVnc = async (wsUrl: string, password: string): Promise<void> => {
+  const connectVnc = async (wsUrl: string, password: string, generation: number): Promise<void> => {
     const RFB = await loadRFB();
+    if (isStale(generation)) return;
     if (!vncContainerRef.current) throw new Error("VNC-Verbindung konnte nicht eingerichtet werden");
 
     vncContainerRef.current.innerHTML = "";
@@ -139,11 +151,16 @@ export function OnlyFansViewer({
     rfbRef.current = rfb;
 
     rfb.addEventListener("disconnect", (e: any) => {
+      // Also fires for an INTENTIONAL disconnect (switching away from this
+      // model, or a fresh manual retry) - the generation check is what
+      // tells those apart from a real, unexpected drop.
+      if (isStale(generation)) return;
       console.warn("[VIEWER] VNC disconnected:", e?.detail);
       setPhase("error");
       setError("Verbindung zur Sitzung wurde getrennt");
     });
     rfb.addEventListener("securityfailure", (e: any) => {
+      if (isStale(generation)) return;
       console.warn("[VIEWER] VNC auth failed:", e?.detail);
       setPhase("error");
       setError("VNC-Authentifizierung fehlgeschlagen");
@@ -157,17 +174,25 @@ export function OnlyFansViewer({
       });
     });
 
+    if (isStale(generation)) return;
     setPhase("live");
   };
 
   const start = async () => {
+    const generation = ++generationRef.current;
+    if (noSessionPollRef.current) {
+      clearTimeout(noSessionPollRef.current);
+      noSessionPollRef.current = null;
+    }
     setPhase("connecting");
     setError("");
     try {
-      await waitForSession();
+      await waitForSession(generation);
     } catch (err: any) {
-      setPhase("error");
-      setError(err.message || "Unbekannter Fehler beim Verbinden");
+      if (!isStale(generation)) {
+        setPhase("error");
+        setError(err.message || "Unbekannter Fehler beim Verbinden");
+      }
     }
   };
 
