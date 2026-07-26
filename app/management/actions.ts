@@ -113,6 +113,27 @@ export async function updateMitarbeiterCompensation(formData: FormData) {
   }
 }
 
+// Rechte-Kontrollzentrum: grants (or revokes) one role's access to one
+// feature key on top of whatever that role already gets by default -
+// admin/content-manager are unaffected (always full access via
+// isAdminTierRole(), see lib/roles.ts). RLS on crm_role_permissions
+// already restricts writes to the literal admin role, matching this
+// page's own gate - same pattern as every other action in this file.
+export async function updateRolePermission(formData: FormData) {
+  const role = formData.get("role") as string;
+  const featureKey = formData.get("feature_key") as string;
+  const enabled = formData.get("enabled") === "true";
+
+  if (role && featureKey) {
+    const supabaseServer = await createClient();
+    await supabaseServer.from("crm_role_permissions").upsert(
+      { role, feature_key: featureKey, enabled, updated_at: new Date().toISOString() },
+      { onConflict: "role,feature_key" }
+    );
+    revalidatePath("/management");
+  }
+}
+
 // 🟢 CRASH-PROOF VERBINDUNG: Liefert jetzt eine reine, ungestörte JSON-Antwort an das Formular
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 

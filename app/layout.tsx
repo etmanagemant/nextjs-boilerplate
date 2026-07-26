@@ -1,5 +1,7 @@
 import "./globals.css";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
+import { fetchGrantedFeatureKeys } from "@/lib/getRolePermissions";
+import { isAdminTierRole } from "@/lib/roles";
 import GlobalSidebar from "@/components/layout/GlobalSidebar";
 import GlobalTopBar from "@/components/layout/GlobalTopBar";
 import WaitingForRole from "@/components/layout/WaitingForRole";
@@ -14,7 +16,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user } = await getCurrentUser();
+  const { supabase, user } = await getCurrentUser();
 
   let role = "chatter";
   // A brand-new self-registered user (see app/login/page.tsx) gets no role
@@ -43,6 +45,13 @@ export default async function RootLayout({
     }
   }
 
+  // Only chatter/moderator (non-admin-tier) ever have explicit grants to
+  // look up - admin/content-manager already get everything, no need to
+  // spend a query on it.
+  const grantedFeatures = user && !pending && !isAdminTierRole(role)
+    ? Array.from(await fetchGrantedFeatureKeys(supabase, role))
+    : [];
+
   return (
     <html lang="de" className="dark">
       <body className="min-h-screen bg-[#050505] text-[#E2C48A] antialiased tracking-wide">
@@ -56,7 +65,7 @@ export default async function RootLayout({
         {user && !pending && (
           <>
             <GlobalTopBar />
-            <GlobalSidebar role={role} />
+            <GlobalSidebar role={role} grantedFeatures={grantedFeatures} />
             <main className="pt-32 pl-0 md:pl-56 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
               {children}
             </main>

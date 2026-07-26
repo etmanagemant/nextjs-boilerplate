@@ -8,7 +8,8 @@ import {
   getContentCommunities,
   getContentPlanPosts,
 } from "./actions";
-import { isAdminTierRole } from "@/lib/roles";
+import { hasFeatureAccess } from "@/lib/roles";
+import { fetchGrantedFeatureKeys } from "@/lib/getRolePermissions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,27 +19,29 @@ export default async function ContentPlanPage({
   searchParams: Promise<{ model?: string }>;
 }) {
   try {
-    const { user } = await getCurrentUser();
+    const { supabase, user } = await getCurrentUser();
 
     // ========================================
-    // ADMIN-ONLY CHECK
+    // ACCESS CHECK - admin-tier always, others only if explicitly
+    // granted "content-plan" via the Management page's Rechte-Kontrollzentrum
     // ========================================
     if (!user) {
       redirect("/login");
     }
 
-    let isAdmin = false;
+    let isAllowed = false;
     if (
       user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
       user.email === "etmanagement@gmail.com"
     ) {
-      isAdmin = true;
+      isAllowed = true;
     } else {
       const profile = await getCurrentProfile(user.id);
-      if (profile && isAdminTierRole(profile.role)) isAdmin = true;
+      const granted = await fetchGrantedFeatureKeys(supabase, profile?.role);
+      isAllowed = hasFeatureAccess(profile?.role, "content-plan", granted);
     }
 
-    if (!isAdmin) {
+    if (!isAllowed) {
       redirect("/");
     }
 

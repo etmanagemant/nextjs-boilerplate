@@ -1,9 +1,13 @@
 import { createClient } from "@/utils/supabase/server";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
-import { updateMitarbeiterRolle, updateMitarbeiterName, deleteMitarbeiter, updateMitarbeiterCompensation } from "./actions";
+import { updateMitarbeiterRolle, updateMitarbeiterName, deleteMitarbeiter, updateMitarbeiterCompensation, updateRolePermission } from "./actions";
 import { revalidatePath } from "next/cache";
 import RoleSelect from "@/components/layout/RoleSelect";
+import PermissionCheckbox from "@/components/layout/PermissionCheckbox";
+import { GRANTABLE_FEATURES } from "@/lib/roles";
+
+const GRANTABLE_ROLES = ["chatter", "moderator"] as const;
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +27,21 @@ export default async function ManagementPage() {
   if (!isAdmin) { redirect("/"); }
 
   // 🛡️ ERWEITERTES SELECT: Zieht provision_rate + hourly_rate mit aus der Datenbank heraus!
-  const [{ data: profilListe }, { data: alleSchichten }] = await Promise.all([
+  const [{ data: profilListe }, { data: alleSchichten }, { data: rolePerms }] = await Promise.all([
     supabase.from("profiles").select("user_id, role, email, full_name, provision_rate, hourly_rate"),
     supabase.from("shift_assignments").select("*"),
+    supabase.from("crm_role_permissions").select("role, feature_key, enabled"),
   ]);
 
   const sichereProfile = profilListe || [];
   const sichereSchichten = alleSchichten || [];
+
+  // role -> feature_key -> enabled, for the Rechte-Kontrollzentrum grid below
+  const permMap = new Map<string, Map<string, boolean>>();
+  (rolePerms || []).forEach((p: any) => {
+    if (!permMap.has(p.role)) permMap.set(p.role, new Map());
+    permMap.get(p.role)!.set(p.feature_key, p.enabled);
+  });
 
   let gesamtStundenAllerUser = 0;
   sichereSchichten.forEach((s) => {
@@ -154,6 +166,43 @@ export default async function ManagementPage() {
       {/* Models (Schichtplanung) moved to Connection Hub
           (/management/crm-connect), alongside the model connection status
           it's most relevant next to. */}
+
+      {/* RECHTE-KONTROLLZENTRUM */}
+      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 shadow-lg">
+        <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">Rechte-Kontrollzentrum</h2>
+        <p className="text-[11px] text-slate-500 mb-4">
+          Zusätzliche Seiten-Zugriffe für Chatter/Moderator freischalten - Admin und Content-Managerin haben ohnehin immer alles.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
+                <th className="p-3">Seite</th>
+                {GRANTABLE_ROLES.map((r) => (
+                  <th key={r} className="p-3 text-center capitalize">{r}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {GRANTABLE_FEATURES.map((feature) => (
+                <tr key={feature.key} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
+                  <td className="p-3 text-white">{feature.label}</td>
+                  {GRANTABLE_ROLES.map((r) => (
+                    <td key={r} className="p-3 text-center">
+                      <PermissionCheckbox
+                        role={r}
+                        featureKey={feature.key}
+                        defaultChecked={permMap.get(r)?.get(feature.key) ?? false}
+                        onUpdateAction={updateRolePermission}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   );
 }

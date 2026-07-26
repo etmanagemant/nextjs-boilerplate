@@ -1,6 +1,8 @@
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import ScriptVaultClient from "@/components/layout/ScriptVaultClient";
+import { hasFeatureAccess } from "@/lib/roles";
+import { fetchGrantedFeatureKeys } from "@/lib/getRolePermissions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,13 @@ export default async function ScriptVaultPage() {
   ]);
 
   const userRole = profile?.role || "guest";
+
+  if (user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" && user.email !== "etmanagement@gmail.com") {
+    const granted = await fetchGrantedFeatureKeys(supabase, userRole);
+    if (!hasFeatureAccess(userRole, "script-vault", granted)) {
+      redirect("/");
+    }
+  }
 
   let connectedModels: any[] = [];
   if (crm_models && crm_models.length > 0) {

@@ -2,7 +2,30 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { isAdminTierRole } from "@/lib/roles";
+import { hasFeatureAccess, type GrantableFeatureKey } from "@/lib/roles";
+import { fetchGrantedFeatureKeys } from "@/lib/getRolePermissions";
+
+// Shared by every action below - admin-tier always passes, a chatter/
+// moderator explicitly granted the relevant feature via the Management
+// page's Rechte-Kontrollzentrum also passes, matching that same feature's
+// page-level gate (so a granted role's page buttons actually work instead
+// of throwing Unauthorized the moment they're clicked).
+async function assertFeatureAccess(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  featureKey: GrantableFeatureKey
+) {
+  if (userId === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4") return;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const granted = await fetchGrantedFeatureKeys(supabase, profile?.role);
+  if (!hasFeatureAccess(profile?.role, featureKey, granted)) {
+    throw new Error("Unauthorized: Admin access required");
+  }
+}
 
 // ============================================================================
 // CRM MODEL SESSIONS MANAGEMENT
@@ -33,18 +56,7 @@ export async function updateChatterEmojis(
   }
 
   if (user.id !== chatterId) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (
-      !isAdminTierRole(profile?.role) &&
-      user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"
-    ) {
-      throw new Error("Unauthorized: Admin access required");
-    }
+    await assertFeatureAccess(supabase, user.id, "connection-hub");
   }
 
   const { error } = await supabase.from("crm_chatter_emojis").upsert(
@@ -86,18 +98,7 @@ export async function addScriptToLibrary(scriptData: ScriptLibraryItem) {
     throw new Error("Unauthorized: User not authenticated");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    !isAdminTierRole(profile?.role) &&
-    user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"
-  ) {
-    throw new Error("Unauthorized: Admin access required");
-  }
+  await assertFeatureAccess(supabase, user.id, "script-vault");
 
   const { error } = await supabase.from("crm_script_library").insert({
     title: scriptData.title,
@@ -127,18 +128,7 @@ export async function deleteScriptFromLibrary(scriptId: string) {
     throw new Error("Unauthorized: User not authenticated");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    !isAdminTierRole(profile?.role) &&
-    user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"
-  ) {
-    throw new Error("Unauthorized: Admin access required");
-  }
+  await assertFeatureAccess(supabase, user.id, "script-vault");
 
   const { error } = await supabase
     .from("crm_script_library")
@@ -167,18 +157,7 @@ export async function updateScript(
     throw new Error("Unauthorized: User not authenticated");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    !isAdminTierRole(profile?.role) &&
-    user.id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"
-  ) {
-    throw new Error("Unauthorized: Admin access required");
-  }
+  await assertFeatureAccess(supabase, user.id, "script-vault");
 
   const updateData: Record<string, any> = {};
   if (scriptData.title) updateData.title = scriptData.title;

@@ -3,10 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { isAdminTierRole } from "@/lib/roles";
+import { isAdminTierRole, hasFeatureAccess, type GrantableFeatureKey } from "@/lib/roles";
 
 interface GlobalSidebarProps {
   role: string;
+  // Feature keys an admin explicitly granted this role via the Management
+  // page's Rechte-Kontrollzentrum - only ever populated for non-admin-tier
+  // roles (see app/layout.tsx), empty/ignored for admin/content-manager.
+  grantedFeatures?: string[];
 }
 
 interface NavItem {
@@ -21,16 +25,21 @@ interface NavItem {
 // as two sidebars stacked side by side once this global one existed too.
 const ONLYFANS_SECTION_PATHS = ["/crm-inbox", "/management/crm-connect", "/script-vault", "/upload-vault"];
 
-export default function GlobalSidebar({ role }: GlobalSidebarProps) {
+export default function GlobalSidebar({ role, grantedFeatures = [] }: GlobalSidebarProps) {
   const pathname = usePathname();
   // Content-manager gets the exact same view/rights as admin everywhere
   // EXCEPT the Management page itself (Mitarbeiter- und Rollen-Verwaltung)
   // - the one deliberate carve-out so there's still a single distinguished
   // "Hauptadmin". isAdmin stays the literal check for that one nav item;
-  // isAdminTier is what everything else (Massmessage, Stripchat, Content
-  // Plan, Buchhaltung, the OnlyFans tools section) should gate on instead.
+  // isAdminTier is what everything else (Stripchat's admin-tier variant,
+  // the OnlyFans-tools' default adminOnly gate) still uses. Individual
+  // pages a chatter/moderator can be granted (Massmessage, Content Plan,
+  // Buchhaltung, Connection Hub, Script/Upload Vault) go through canUse()
+  // instead, so an explicit grant shows them even for a non-admin-tier role.
   const isAdmin = role === "admin";
   const isAdminTier = isAdminTierRole(role);
+  const grantedSet = new Set(grantedFeatures);
+  const canUse = (key: GrantableFeatureKey) => hasFeatureAccess(role, key, grantedSet);
   // CONFIRMED LIVE: the fixed 224px sidebar plus its matching 224px content
   // padding (app/layout.tsx) ate almost half the screen on a phone -
   // models do most of their uploading from there. Off-canvas below the md
@@ -134,19 +143,17 @@ export default function GlobalSidebar({ role }: GlobalSidebarProps) {
     items.push({ href: "/management", label: "Management", icon: "⚙️" });
   }
   if (isAdminTier) {
-    items.push(
-      { href: "/massmessage", label: "Massmessage", icon: "📨" },
-      { href: "/stripchat", label: "Stripchat", icon: "🎬" },
-      { href: "/content-plan", label: "Content Plan", icon: "📅" },
-      { href: "/buchhaltung", label: "Buchhaltung", icon: "🧾" }
-    );
+    items.push({ href: "/stripchat", label: "Stripchat", icon: "🎬" });
   }
+  if (canUse("massmessage")) items.push({ href: "/massmessage", label: "Massmessage", icon: "📨" });
+  if (canUse("content-plan")) items.push({ href: "/content-plan", label: "Content Plan", icon: "📅" });
+  if (canUse("buchhaltung")) items.push({ href: "/buchhaltung", label: "Buchhaltung", icon: "🧾" });
 
   const onlyFansTools = [
-    { id: "connection", name: "Connection Hub", icon: "🔗", href: "/management/crm-connect", adminOnly: true },
-    { id: "scripts", name: "Script Vault", icon: "📜", href: "/script-vault", adminOnly: true },
-    { id: "upload", name: "Upload Vault", icon: "📤", href: "/upload-vault", adminOnly: true },
-  ].filter((t) => !t.adminOnly || isAdminTier);
+    { id: "connection", name: "Connection Hub", icon: "🔗", href: "/management/crm-connect", key: "connection-hub" as GrantableFeatureKey },
+    { id: "scripts", name: "Script Vault", icon: "📜", href: "/script-vault", key: "script-vault" as GrantableFeatureKey },
+    { id: "upload", name: "Upload Vault", icon: "📤", href: "/upload-vault", key: "upload-vault" as GrantableFeatureKey },
+  ].filter((t) => canUse(t.key));
 
   return (
     <>
