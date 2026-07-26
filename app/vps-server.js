@@ -3269,6 +3269,62 @@ app.post('/debug-eval', async (req, res) => {
   }
 });
 
+// One-off: tests whether OnlyFans' attach-file mechanism actually accepts
+// a given local file - confirms/rules out the theory that its photo/video
+// attach flow silently ignores non-image/video files (e.g. a recorded
+// audio memo), which would explain "Preisfeld/Senden-Button nicht
+// gefunden" without ever really attaching anything. Stops right after
+// attaching - never touches price or Send, so nothing can go out.
+// Diagnostic only.
+app.post('/debug-test-attach', async (req, res) => {
+  const page = resolveDebugPage(req);
+  if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
+  const filePath = req.body && req.body.filePath;
+  if (!filePath) return res.status(400).json({ error: 'Missing filePath' });
+
+  try {
+    const before = await page.evaluate(() => ({
+      mediaBubbles: document.querySelectorAll('.b-chat__message.m-from-me.m-has-media').length,
+      sendBtnDisabled: (function () {
+        var b = document.querySelector('[at-attr="send_btn"]');
+        return b ? b.disabled : null;
+      })(),
+    }));
+
+    const [fileChooser] = await Promise.all([
+      page.waitForFileChooser({ timeout: 8000 }).catch(() => null),
+      page.evaluate(() => {
+        var btn = document.querySelector('#attach_file_photo, .attach_file');
+        if (btn) btn.click();
+      }),
+    ]);
+    if (!fileChooser) return res.json({ status: 'error', error: 'Datei-Dialog nicht ausgelöst' });
+    await fileChooser.accept([filePath]);
+    await new Promise((r) => setTimeout(r, 4000));
+
+    const after = await page.evaluate(() => {
+      var priceBtn = document.querySelector('[at-attr="price_btn"]');
+      var sendBtn = document.querySelector('[at-attr="send_btn"]');
+      var toasts = Array.from(document.querySelectorAll('.b-notify, .notify, [class*="toast" i], [class*="notif" i]'))
+        .map((el) => (el.textContent || '').trim())
+        .filter(Boolean);
+      return {
+        mediaBubbles: document.querySelectorAll('.b-chat__message.m-from-me.m-has-media').length,
+        composeAttachments: document.querySelectorAll(
+          '.b-make-post__file, .b-chat-form__media, [class*="attach" i][class*="item" i], [class*="uploaded" i]'
+        ).length,
+        priceBtnExists: !!priceBtn,
+        sendBtnDisabled: sendBtn ? sendBtn.disabled : null,
+        toasts,
+      };
+    });
+
+    res.json({ status: 'success', before, after });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Real Vault gallery, no VNC/live-browsing at all - a bare fetch() to
 // OnlyFans' own /api2/ endpoints from outside the page gets rejected
 // (confirmed live: "Something went wrong" error), because OnlyFans signs

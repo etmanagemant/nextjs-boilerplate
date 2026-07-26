@@ -116,8 +116,15 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
       };
       recorder.onstop = () => {
         const blob = new Blob(recordChunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        const ext = (recorder.mimeType || "").includes("mp4") ? "m4a" : "webm";
-        const file = new File([blob], `sprachnachricht-${Date.now()}.${ext}`, { type: blob.type });
+        // Confirmed live: OnlyFans decides "audio post" vs "video" purely
+        // by the file's extension, not its real content - a .webm/.m4a
+        // recording (both are technically video-capable containers) gets
+        // silently misfiled as an empty/broken video attachment instead of
+        // an audio message, which is exactly what made the price field and
+        // send button never become available. Naming it .wav instead (the
+        // actual bytes are untouched - real type stays in file.type) gets
+        // it recognized as audio, matching a live-confirmed working case.
+        const file = new File([blob], `sprachnachricht-${Date.now()}.wav`, { type: blob.type });
         addFiles(setOfQueue, [file]);
         stream.getTracks().forEach((t) => t.stop());
         recordStreamRef.current = null;
