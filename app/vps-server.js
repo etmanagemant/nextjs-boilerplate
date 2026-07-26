@@ -2938,6 +2938,7 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
       await new Promise((r) => setTimeout(r, 200));
     }
 
+    const clickedAt = Date.now();
     const clicked = await page.evaluate(() => {
       var btn = document.querySelector('[at-attr="send_btn"]');
       if (!btn || btn.disabled) return false;
@@ -2947,6 +2948,7 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
     if (!clicked) {
       return res.json({ status: 'error', error: 'Senden-Button nicht gefunden oder deaktiviert - nicht gesendet' });
     }
+    console.log(`[UPLOAD-TO-VAULT-FAN] Send clicked for ${filePaths.length} file(s), waiting for confirmation...`);
 
     // CRITICAL per the user's explicit ask: never report success just
     // because Send was clicked without proof the message actually went -
@@ -2980,11 +2982,32 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
       .then(() => true)
       .catch(() => false);
     if (!sendConfirmed) {
+      // Diagnostic snapshot at the exact moment we gave up - this is the
+      // one thing missing last time (this whole path logged nothing at
+      // all), which is why the previous two fixes were guesses instead
+      // of based on real evidence.
+      const domSnapshot = await page
+        .evaluate(() => {
+          var priceInput = document.querySelector('input[autocomplete="price-input"]');
+          var sendBtn = document.querySelector('[at-attr="send_btn"]');
+          var mediaBubbles = document.querySelectorAll('.b-chat__message.m-from-me.m-has-media').length;
+          return {
+            priceInputExists: !!priceInput,
+            priceInputValue: priceInput ? priceInput.value : null,
+            sendBtnDisabled: sendBtn ? sendBtn.disabled : null,
+            mediaBubbleCount: mediaBubbles,
+          };
+        })
+        .catch((e) => ({ evalError: e.message }));
+      console.warn(
+        `[UPLOAD-TO-VAULT-FAN] sendConfirmed timed out after ${Date.now() - clickedAt}ms for ${filePaths.length} file(s). DOM snapshot: ${JSON.stringify(domSnapshot)}`
+      );
       return res.json({
         status: 'error',
         error: 'Senden konnte nicht bestätigt werden, ABER die Nachricht ist evtl. trotzdem rausgegangen - bitte erst in der Live-Ansicht prüfen, bevor erneut gesendet wird (sonst doppelte Abbuchung möglich)',
       });
     }
+    console.log(`[UPLOAD-TO-VAULT-FAN] Send confirmed after ${Date.now() - clickedAt}ms for ${filePaths.length} file(s).`);
 
     // "Gesendet von" attribution - only when a real logged-in CRM user
     // (chatter/admin) drove this send. Per the user's explicit ask, the
