@@ -42,6 +42,14 @@ export async function POST(req: NextRequest) {
     // never by the model workspace's own upload - see the VPS route's own
     // comment for why that's the deciding factor for "gesendet von".
     const chatterName = (formData.get("chatterName") as string | null) || "";
+    // Chunked-upload params (see lib/uploadVaultBatch.ts): large files (
+    // mostly videos) exceed Vercel's fixed 4.5MB request body cap, so they
+    // arrive here as several sub-cap pieces the VPS reassembles by uploadId
+    // before treating the file as staged - a normal small file never sets
+    // these at all.
+    const chunkIndex = (formData.get("chunkIndex") as string | null) || "";
+    const totalChunks = (formData.get("totalChunks") as string | null) || "";
+    const uploadId = (formData.get("uploadId") as string | null) || "";
 
     if (!file || !modelId || (!vaultFanLabel && !vaultFanId)) {
       return NextResponse.json({ error: "Missing file, modelId, or vaultFanLabel/vaultFanId" }, { status: 400 });
@@ -55,6 +63,7 @@ export async function POST(req: NextRequest) {
       ...(price ? { price } : {}),
       ...(batchId ? { batchId, isLastInBatch } : {}),
       ...(chatterName ? { chatterName } : {}),
+      ...(uploadId ? { chunkIndex, totalChunks, uploadId } : {}),
     });
 
     const buffer = Buffer.from(await file.arrayBuffer());

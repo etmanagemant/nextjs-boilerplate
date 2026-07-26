@@ -83,6 +83,11 @@ const modelSessions = {}; // modelId -> { browser, page, lastActivity, createdAt
 // accumulates staged files for one Upload Vault batch (see /upload-to-vault-fan)
 // before the actual OnlyFans automation runs once for the whole batch.
 const pendingUploadBatches = {};
+// uploadId -> temp file path being appended to across chunks - see
+// /upload-to-vault-fan's chunk-reassembly block for why this exists
+// (Vercel's fixed 4.5MB request body cap means large files, mostly videos,
+// arrive as several sub-cap pieces instead of one request).
+const pendingChunkedUploads = {};
 // Was 20 minutes - but only one session can run at a time anyway
 // (MAX_CONCURRENT_SESSIONS below), so there's no extra RAM cost to keeping
 // the one connected model alive longer. Every time this closed a session,
@@ -2760,7 +2765,7 @@ app.post('/chat-search', async (req, res) => {
 // of size 1 collapses to the exact same single-file-per-message behavior
 // as before - there's no separate code path needed for "just one file".
 app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), async (req, res) => {
-  const { modelId, vaultFanLabel, vaultFanId, price, fileName, batchId, isLastInBatch, chatterName } = req.query;
+  const { modelId, vaultFanLabel, vaultFanId, price, fileName, batchId, isLastInBatch, chatterName, chunkIndex, totalChunks, uploadId } = req.query;
   if (!modelId || (!vaultFanLabel && !vaultFanId) || !fileName) {
     return res.status(400).json({ error: 'Missing modelId, vaultFanLabel/vaultFanId, or fileName' });
   }
@@ -2772,9 +2777,34 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
   if (!session) return res.json({ status: 'no_session' });
   const page = session.page;
 
+  // Large files (mostly videos) arrive as several sub-4.5MB chunks instead
+  // of one request - Vercel's Node.js functions hard-cap request bodies at
+  // 4.5MB, not configurable, so anything bigger has to be split client-side
+  // and reassembled here before it's treated like a normal single-request
+  // upload. A file under the cap never sends chunk params at all and skips
+  // straight to the else branch, unchanged from before.
+  let tempPath;
+  if (uploadId && totalChunks && Number(totalChunks) > 1) {
+    tempPath = pendingChunkedUploads[uploadId] || path.join('/tmp', `chunked-${uploadId}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+    if (Number(chunkIndex) === 0) {
+      await fs.writeFile(tempPath, req.body);
+    } else {
+      await fs.appendFile(tempPath, req.body);
+    }
+    pendingChunkedUploads[uploadId] = tempPath;
+    if (Number(chunkIndex) < Number(totalChunks) - 1) {
+      return res.json({ status: 'chunk_staged', chunkIndex: Number(chunkIndex), totalChunks: Number(totalChunks) });
+    }
+    delete pendingChunkedUploads[uploadId];
+    // Last chunk received - tempPath now holds the fully reassembled file
+    // and falls through into the exact same staging/commit logic below as
+    // a normal non-chunked upload.
+  } else {
+    tempPath = path.join('/tmp', `upload-${Date.now()}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+    await fs.writeFile(tempPath, req.body);
+  }
+
   const key = batchId || `single-${Date.now()}-${Math.random()}`;
-  const tempPath = path.join('/tmp', `upload-${Date.now()}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`);
-  await fs.writeFile(tempPath, req.body);
 
   if (!pendingUploadBatches[key]) {
     pendingUploadBatches[key] = { modelId, vaultFanId, vaultFanLabel, price, filePaths: [] };

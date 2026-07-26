@@ -30,6 +30,52 @@ export interface BatchFile {
   file: File;
 }
 
+// Vercel's Node.js functions hard-cap request bodies at 4.5MB and it isn't
+// configurable (confirmed against Vercel's own docs) - a photo usually
+// squeaks under that, a video essentially never does. Staying well clear
+// of the cap (rather than hugging it) leaves room for multipart overhead.
+const CHUNK_SIZE = 3.5 * 1024 * 1024;
+
+/**
+ * Uploads one file, transparently splitting it into sub-cap chunks (with
+ * their own shared uploadId) when it's too big for a single request - the
+ * VPS reassembles them before treating the file as staged, so every chunk
+ * except the last gets back {status:"chunk_staged"} instead of the real
+ * staged/success response. Throws on any non-final chunk that doesn't
+ * confirm chunk_staged (network error or a real server error), which
+ * aborts this file the same way a single failed request always did.
+ */
+async function postFile(file: File, fields: Record<string, string>): Promise<any> {
+  const buildFormData = (blob: Blob) => {
+    const formData = new FormData();
+    formData.append("file", blob, file.name);
+    Object.entries(fields).forEach(([key, value]) => formData.append(key, value));
+    return formData;
+  };
+
+  if (file.size <= CHUNK_SIZE) {
+    const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: buildFormData(file) });
+    return res.json();
+  }
+
+  const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  let data: any = null;
+  for (let i = 0; i < totalChunks; i++) {
+    const chunk = file.slice(i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, file.size));
+    const formData = buildFormData(chunk);
+    formData.append("chunkIndex", String(i));
+    formData.append("totalChunks", String(totalChunks));
+    formData.append("uploadId", uploadId);
+    const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: formData });
+    data = await res.json();
+    if (i < totalChunks - 1 && data.status !== "chunk_staged") {
+      throw new Error(data.message || data.error || "Chunk-Upload fehlgeschlagen");
+    }
+  }
+  return data;
+}
+
 /**
  * Sends one batch (<=BATCH_SIZE files) as a single OnlyFans message.
  * Every file in the batch is staged (uploaded to the VPS, no OnlyFans
@@ -69,18 +115,17 @@ async function sendOneBatch(
     onItemUpdate(item.id, "uploading");
 
     try {
-      const formData = new FormData();
-      formData.append("file", item.file);
-      formData.append("modelId", target.modelId);
-      if (target.vaultFanId) formData.append("vaultFanId", target.vaultFanId);
-      if (target.vaultFanLabel) formData.append("vaultFanLabel", target.vaultFanLabel);
-      formData.append("price", String(target.price));
-      formData.append("batchId", batchId);
-      formData.append("isLastInBatch", isLast ? "true" : "false");
-      if (target.chatterName) formData.append("chatterName", target.chatterName);
+      const fields: Record<string, string> = {
+        modelId: target.modelId,
+        price: String(target.price),
+        batchId,
+        isLastInBatch: isLast ? "true" : "false",
+      };
+      if (target.vaultFanId) fields.vaultFanId = target.vaultFanId;
+      if (target.vaultFanLabel) fields.vaultFanLabel = target.vaultFanLabel;
+      if (target.chatterName) fields.chatterName = target.chatterName;
 
-      const res = await fetch("/api/crm/upload-to-vault-fan", { method: "POST", body: formData });
-      const data = await res.json();
+      const data = await postFile(item.file, fields);
 
       if (!isLast) {
         if (data.status === "staged") {
