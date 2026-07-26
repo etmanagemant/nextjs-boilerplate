@@ -49,7 +49,19 @@ async function sendOneBatch(
   onItemUpdate: (id: string, status: UploadItemStatus, error?: string) => void
 ): Promise<boolean> {
   const batchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  let allStaged = true;
+  // Files that the VPS actually confirmed it received a path for - the
+  // final commit's "success" only ever covers THESE, never the full
+  // original batch. Confirmed live: a single file failing to stage (a
+  // real "Netzwerkfehler" on a phone) still let the last file's commit
+  // go through and send the OTHER files fine (server log showed
+  // status:success, sentCount matching the staged-ok count) - but this
+  // used to be masked by a since-removed "allStaged" flag that marked
+  // the WHOLE batch, including the genuinely-sent files, as failed just
+  // because one earlier file didn't make it. Tracking staged-ok files
+  // individually instead means a partial failure reports honestly (some
+  // green, one red) instead of turning a real success into a false
+  // "Senden konnte nicht bestätigt werden" for everything.
+  const stagedOk: BatchFile[] = [];
 
   for (let i = 0; i < batch.length; i++) {
     const item = batch[i];
@@ -72,31 +84,34 @@ async function sendOneBatch(
 
       if (!isLast) {
         if (data.status === "staged") {
+          stagedOk.push(item);
           onItemUpdate(item.id, "staged");
         } else {
-          allStaged = false;
           onItemUpdate(item.id, "error", data.message || data.error || "Fehler beim Hochladen");
         }
         continue;
       }
 
-      // Last file in the batch: its response reflects the WHOLE batch's
-      // send, not just this one file's upload - only mark every
-      // successfully-staged file in the batch as sent once this confirms.
-      if (data.status === "success" && allStaged) {
-        batch.forEach((b) => onItemUpdate(b.id, "success"));
-        return true;
+      // Last file's response reflects the send of every file the VPS
+      // actually staged (stagedOk + this one) - a file that failed to
+      // stage above was never part of what got sent and keeps its own
+      // "Fehler beim Hochladen", it doesn't drag the rest down with it.
+      if (data.status === "success") {
+        stagedOk.push(item);
+        stagedOk.forEach((b) => onItemUpdate(b.id, "success"));
+        return stagedOk.length === batch.length;
       } else {
         const message = data.message || data.error || "Senden konnte nicht bestätigt werden";
-        batch.forEach((b) => onItemUpdate(b.id, "error", message));
+        stagedOk.forEach((b) => onItemUpdate(b.id, "error", message));
+        onItemUpdate(item.id, "error", message);
         return false;
       }
     } catch (err) {
-      allStaged = false;
-      onItemUpdate(item.id, "error", "Netzwerkfehler");
       if (isLast) {
-        batch.forEach((b) => onItemUpdate(b.id, "error", "Netzwerkfehler"));
-        return false;
+        stagedOk.forEach((b) => onItemUpdate(b.id, "error", "Netzwerkfehler"));
+        onItemUpdate(item.id, "error", "Netzwerkfehler");
+      } else {
+        onItemUpdate(item.id, "error", "Netzwerkfehler");
       }
     }
   }
