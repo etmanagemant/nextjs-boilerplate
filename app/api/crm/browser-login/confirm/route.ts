@@ -44,10 +44,15 @@ export async function POST(req: NextRequest) {
     // confirmed - and marked is_active in Supabase - for a model that was
     // never really logged in, which then got auto-disconnected once the
     // screenshot route's grace period ran out. Requiring the same real
-    // auth cookies getLoginState() on the VPS checks for closes that gap.
-    const hasRealAuth =
-      cookies.some((c: any) => c?.name === "sess" && c?.value) &&
-      cookies.some((c: any) => c?.name === "auth_id" && c?.value);
+    // auth cookie getLoginState() on the VPS checks for closes that gap.
+    //
+    // CONFIRMED LIVE (costly): this used to also require an 'auth_id'
+    // cookie. Pulled the raw cookie jar from a session seconds after a
+    // real manual login (real dashboard visibly loaded) - no 'auth_id'
+    // cookie existed in it. OnlyFans has evidently dropped it from this
+    // flow, meaning this check could never pass anymore - same bug as
+    // getLoginState() on the VPS (see its comment), fixed the same way.
+    const hasRealAuth = cookies.some((c: any) => c?.name === "sess" && c?.value);
     if (!hasRealAuth) {
       return NextResponse.json(
         { status: "error", error: "Login noch nicht abgeschlossen - bitte im Fenster oben fertig einloggen, bevor du verbindest" },

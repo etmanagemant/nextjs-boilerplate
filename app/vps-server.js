@@ -1478,22 +1478,24 @@ async function getLoginState(page) {
     checkFailed = true;
   }
 
-  // OnlyFans sets a 'sess' cookie for anonymous visitors too, so that alone
-  // is not proof of login. 'auth_id' is only set once actually authenticated.
+  // CONFIRMED LIVE (costly mistake): this used to also require an
+  // 'auth_id' cookie, on the assumption OnlyFans only sets it once
+  // actually authenticated. Pulled the RAW cookie jar from a session that
+  // had just been manually logged into seconds earlier (real dashboard
+  // visibly loaded, real localStorage config only a logged-in creator
+  // gets) - there was no 'auth_id' cookie in it at all anymore. OnlyFans
+  // has evidently dropped that cookie from this flow. Every isLoggedIn
+  // check this whole session was silently requiring a cookie that no
+  // longer exists, meaning it could never once return true - the new
+  // periodic health-check built on top of this (see setInterval below)
+  // was closing genuinely-valid sessions over and over as a direct
+  // result. 'sess' + not being on a login/return_to URL is what's left;
+  // 'sess' alone isn't proof for a logged-OUT visitor (OnlyFans sets one
+  // for anonymous browsing too), but a logged-out visitor requesting a
+  // gated page reliably gets redirected to /login or ?return_to=, which
+  // this still catches.
   const sessCookie = cookies.find((c) => c.name === 'sess');
-  const authIdCookie = cookies.find((c) => c.name === 'auth_id');
-  // CONFIRMED LIVE: rejecting an invalid/expired session doesn't always
-  // land on a URL containing "/login" - visiting a gated page (e.g.
-  // /my/chats) while logged out redirects to the bare root domain with a
-  // "?return_to=%2Fmy%2Fchats" query param instead, which this check used
-  // to miss entirely (no "/login" substring), so a session OnlyFans had
-  // already invalidated still read back as isLoggedIn:true as long as the
-  // stale sess/auth_id cookie NAMES were still present with some value -
-  // auth_id's value itself was never actually validated against OnlyFans,
-  // only that the cookie existed. Rejecting the return_to redirect too
-  // closes that gap.
-  const isLoggedIn =
-    !!sessCookie?.value && !!authIdCookie?.value && !pageUrl.includes('/login') && !pageUrl.includes('return_to=');
+  const isLoggedIn = !!sessCookie?.value && !pageUrl.includes('/login') && !pageUrl.includes('return_to=');
 
   return { isLoggedIn, cookieCount: cookies.length, pageUrl, checkFailed };
 }
@@ -1546,8 +1548,24 @@ setInterval(async () => {
   for (const [modelId, session] of Object.entries(modelSessions)) {
     try {
       const state = await getLoginState(session.page);
-      if (state.checkFailed || state.isLoggedIn) continue;
-      console.warn(`[HEALTH-CHECK] ${modelId}: session went invalid mid-run, closing and marking disconnected`);
+      if (state.checkFailed) continue;
+      if (state.isLoggedIn) {
+        session.healthCheckFailures = 0;
+        continue;
+      }
+      // CONFIRMED LIVE (costly): this used to act on the very first bad
+      // read, and a getLoginState bug (see the 'auth_id' comment above)
+      // made every single check come back false-negative - this loop
+      // was closing a genuinely valid, just-logged-into session on its
+      // very first 3-minute tick, repeatedly, for hours. Requiring two
+      // consecutive bad reads (6 minutes apart) before actually acting
+      // is the same "don't trust a single blip" reasoning already used
+      // for dead-session detection elsewhere (see recordPageHealth) -
+      // cheap insurance against the next time this check itself has a
+      // bug, not just this specific one.
+      session.healthCheckFailures = (session.healthCheckFailures || 0) + 1;
+      if (session.healthCheckFailures < 2) continue;
+      console.warn(`[HEALTH-CHECK] ${modelId}: session went invalid mid-run (confirmed on 2nd check), closing and marking disconnected`);
       await closeSession(modelId, 'session invalidated mid-run', true);
       if (APP_URL && CRON_SECRET) {
         await fetch(`${APP_URL}/api/vps/mark-session-invalid?secret=${CRON_SECRET}`, {
