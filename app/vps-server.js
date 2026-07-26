@@ -1809,7 +1809,8 @@ app.post('/sync-live', async (req, res) => {
         const url = r.url();
         if (!url.includes('/api2/')) return;
         try {
-          bodies[url] = JSON.stringify(await r.json()).slice(0, 6000);
+          const json = await r.json();
+          bodies[url] = json;
         } catch (e) {
           /* non-JSON or already consumed - skip */
         }
@@ -1828,7 +1829,16 @@ app.post('/sync-live', async (req, res) => {
       }
       session.page.off('request', onRequest);
       session.page.off('response', onResponse);
-      return res.json({ status: 'success', modelId, discovered: calls, bodies, pageUrl: session.page.url() });
+      // Full, untruncated bodies written to disk instead of the HTTP
+      // response - a couple of these (message lists with media) are large
+      // enough that JSON-stringifying + slicing them inline made earlier
+      // discovery passes lose the exact field names past the cut, needing
+      // yet another live navigation (and each one is a real cost - this
+      // model's session actually got invalidated after enough of these
+      // rapid-fire discovery navigations in a row, most likely OnlyFans'
+      // own anti-automation detection).
+      await fs.writeFile('/tmp/discover-full.json', JSON.stringify(bodies)).catch(() => {});
+      return res.json({ status: 'success', modelId, discovered: calls, bodyKeys: Object.keys(bodies), pageUrl: session.page.url() });
     }
 
     // This used to fall back to a guessed endpoint (/api2/v2/chats?...) that
@@ -1856,6 +1866,128 @@ app.post('/sync-live', async (req, res) => {
     res.json({ status: 'success', modelId, data });
   } catch (error) {
     console.error(`[SYNC-LIVE] Error for ${modelId}:`, error.message);
+    res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// Real chat/message sync for Native Chat Mode (Task #58) - replaces the
+// broken ONLYFANS_CHATS_ENDPOINT-gated version above. Endpoints below
+// were confirmed live via /sync-live's discover mode:
+//   GET /api2/v2/chats?limit=N&offset=0&skip_users=all&order=recent
+//     -> {list: [{withUser:{id}, unreadMessagesCount, lastMessage:{id,
+//         createdAt, text, fromUser:{id}, mediaCount, isFree}, ...}]}
+//   GET /api2/v2/users/list?cl[]=id1&cl[]=id2  -> {"<id>": {name,
+//     username, avatar, avatarThumbs:{c50,c144}}}
+//   GET /api2/v2/chats/{fanId}/messages?limit=N&order=desc&skip_users=all
+//     -> {list: [{id, text, createdAt, fromUser:{id}, price, media:[...]}]}
+// All three are plain GETs made from the already-authenticated page's own
+// fetch() (credentials:include) - a request from outside the page gets
+// rejected, since OnlyFans signs these with headers only its own
+// front-end JS computes (same reason /vault-media reads real responses
+// instead of building requests itself).
+//
+// Deliberately conservative on request volume: only deep-fetches a
+// conversation's message list when knownLastMessageIds (passed by the
+// caller, sourced from Supabase) shows that conversation has moved since
+// last sync. Hammering every conversation's full message history on
+// every periodic sync cycle regardless of whether anything changed is
+// exactly the kind of repeated, unnecessary request volume that risks
+// looking like scraping to OnlyFans/Cloudflare - this exact session saw a
+// genuinely-valid login get invalidated after enough rapid-fire live
+// testing in a row.
+app.post('/sync-chats', async (req, res) => {
+  const { modelId, knownLastMessageIds } = req.body || {};
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+
+  const session = modelSessions[modelId];
+  if (!session) return res.json({ status: 'no_live_session', modelId });
+  session.lastActivity = Date.now();
+  const page = session.page;
+  const known = knownLastMessageIds || {};
+
+  try {
+    const chatsData = await page.evaluate(async () => {
+      const r = await fetch('https://onlyfans.com/api2/v2/chats?limit=50&offset=0&skip_users=all&order=recent', {
+        credentials: 'include',
+      });
+      return r.ok ? await r.json() : null;
+    });
+    if (!chatsData || !Array.isArray(chatsData.list)) {
+      return res.json({ status: 'error', error: 'Chat-Liste konnte nicht geladen werden' });
+    }
+
+    const fanIds = chatsData.list.map((c) => c.withUser && c.withUser.id).filter(Boolean);
+    let userInfo = {};
+    if (fanIds.length) {
+      const qs = fanIds.map((id) => `cl[]=${id}`).join('&');
+      userInfo = await page.evaluate(async (qs) => {
+        const r = await fetch('https://onlyfans.com/api2/v2/users/list?' + qs, { credentials: 'include' });
+        return r.ok ? await r.json() : {};
+      }, qs);
+    }
+
+    const conversations = [];
+    for (const c of chatsData.list) {
+      const fanId = c.withUser && c.withUser.id;
+      if (!fanId) continue;
+      const info = userInfo[fanId] || {};
+      const lastMsg = c.lastMessage || {};
+      const conv = {
+        fanId: String(fanId),
+        name: info.name || null,
+        username: info.username || null,
+        avatarUrl: (info.avatarThumbs && (info.avatarThumbs.c144 || info.avatarThumbs.c50)) || info.avatar || null,
+        unreadCount: c.unreadMessagesCount || 0,
+        lastMessageId: lastMsg.id != null ? String(lastMsg.id) : null,
+        messages: [],
+      };
+
+      const knownId = known[String(fanId)];
+      const hasNew = conv.lastMessageId && conv.lastMessageId !== String(knownId || '');
+      if (hasNew) {
+        try {
+          const msgData = await page.evaluate(async (fid) => {
+            const r = await fetch(`https://onlyfans.com/api2/v2/chats/${fid}/messages?limit=20&order=desc&skip_users=all`, {
+              credentials: 'include',
+            });
+            return r.ok ? await r.json() : null;
+          }, fanId);
+          if (msgData && Array.isArray(msgData.list)) {
+            conv.messages = msgData.list.map((m) => ({
+              id: m.id != null ? String(m.id) : null,
+              text: m.text || '',
+              createdAt: m.createdAt || null,
+              price: m.price || 0,
+              // A 1:1 conversation only ever has two possible senders -
+              // the fan or the model - so "not the fan" reliably means
+              // "the model sent this", no need for a separate /users/me
+              // lookup just to compare against.
+              isFromModel: !!(m.fromUser && String(m.fromUser.id) !== String(fanId)),
+              media: Array.isArray(m.media)
+                ? m.media
+                    .map((mm) => ({
+                      type: mm.type,
+                      url: mm.files && mm.files.full && mm.files.full.url,
+                      thumbUrl: mm.files && mm.files.thumb && mm.files.thumb.url,
+                    }))
+                    .filter((mm) => mm.url)
+                : [],
+            }));
+          }
+          // Small pacing gap between conversation-level requests, same
+          // spirit as the request volume comment above.
+          await new Promise((r) => setTimeout(r, 300));
+        } catch (e) {
+          console.warn(`[SYNC-CHATS] Message fetch failed for fan ${fanId} on ${modelId}:`, e.message);
+        }
+      }
+
+      conversations.push(conv);
+    }
+
+    res.json({ status: 'success', modelId, conversations });
+  } catch (error) {
+    console.error(`[SYNC-CHATS] Error for ${modelId}:`, error.message);
     res.status(200).json({ status: 'error', error: error.message });
   }
 });

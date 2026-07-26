@@ -23,7 +23,7 @@ export async function fetchActiveFans(modelId: string) {
   try {
     const { data: metadata, error: metaError } = await supabase
       .from("crm_fan_metadata")
-      .select("fan_id, username, lifetime_value, vip_tier, last_interaction")
+      .select("fan_id, username, avatar_url, lifetime_value, vip_tier, last_interaction")
       .eq("model_id", modelId)
       .order("last_interaction", { ascending: false });
 
@@ -49,7 +49,7 @@ export async function fetchActiveFans(modelId: string) {
     return metadata.map((meta) => ({
       id: meta.fan_id,
       username: meta.username || `Fan-${meta.fan_id.slice(0, 8)}`,
-      avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${meta.fan_id}`,
+      avatar_url: meta.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${meta.fan_id}`,
       total_revenue: meta.lifetime_value || 0,
       is_vip: meta.vip_tier ? meta.vip_tier !== "standard" : false,
       last_message_at: meta.last_interaction || new Date().toISOString(),
@@ -267,7 +267,10 @@ export async function sendMessage(
     // This happens in the background - don't wait for it
     (async () => {
       try {
-        const apiResponse = await fetch("/api/crm/send-message-to-onlyfans", {
+        // A relative fetch() from server-side code (this file is "use
+        // server") has no browser location to resolve against - needs the
+        // app's own absolute origin explicitly.
+        const apiResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/crm/send-message-to-onlyfans`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

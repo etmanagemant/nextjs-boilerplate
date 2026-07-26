@@ -6,16 +6,14 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Sync OnlyFans chats for a specific model.
+ * Sync OnlyFans chats for a specific model - the real data feed behind
+ * Native Chat Mode (Task #58), reading OnlyFans' own internal API
+ * (discovered live: /api2/v2/chats, /api2/v2/users/list, /api2/v2/chats/
+ * {fanId}/messages) via the VPS's /sync-chats route instead of the old
+ * broken ONLYFANS_CHATS_ENDPOINT-gated version, which depended on an env
+ * var that was never actually set.
  * POST /api/crm/sync-onlyfans-chats
  * Body: { modelId: string, sessionId: string }
- *
- * Reuses the model's already-authenticated live session on the VPS (if one
- * is currently open) instead of cloning cookies into a fresh browser - a
- * cookie-only clone got rejected by OnlyFans even with valid cookies, while
- * the live session is proven authenticated. Opportunistic: if nobody has
- * this model connected right now, there's nothing to sync from and this
- * just no-ops instead of erroring.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -43,14 +41,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Session not found or not active" }, { status: 404 });
     }
 
-    const vpsResponse = await vpsFetch("/sync-live", {
+    // The VPS only needs to deep-fetch a conversation's messages when it's
+    // actually moved since last time - tell it what we already have so it
+    // can skip the rest (see the request-volume comment on /sync-chats).
+    const { data: existingMeta } = await supabase
+      .from("crm_fan_metadata")
+      .select("fan_id")
+      .eq("model_id", modelId);
+    const knownFanIds = (existingMeta || []).map((r) => r.fan_id);
+    const knownLastMessageIds: Record<string, string> = {};
+    if (knownFanIds.length) {
+      const { data: lastMsgs } = await supabase
+        .from("crm_fan_messages")
+        .select("fan_id, external_message_id")
+        .in("fan_id", knownFanIds)
+        .eq("model_id", modelId)
+        .not("external_message_id", "is", null)
+        .order("created_at", { ascending: false });
+      for (const row of lastMsgs || []) {
+        if (!knownLastMessageIds[row.fan_id]) knownLastMessageIds[row.fan_id] = row.external_message_id;
+      }
+    }
+
+    const vpsResponse = await vpsFetch("/sync-chats", {
       method: "POST",
-      body: JSON.stringify({ modelId }),
+      body: JSON.stringify({ modelId, knownLastMessageIds }),
     });
 
     if (!vpsResponse.ok) {
       const errorText = await vpsResponse.text();
-      return NextResponse.json({ error: "VPS sync-live failed: " + errorText.slice(0, 200) }, { status: 502 });
+      return NextResponse.json({ error: "VPS sync-chats failed: " + errorText.slice(0, 200) }, { status: 502 });
     }
 
     const vpsResult = await vpsResponse.json();
@@ -66,84 +86,56 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (vpsResult.status === "not_configured") {
-      // The real OnlyFans chats endpoint hasn't been confirmed yet (see
-      // ONLYFANS_CHATS_ENDPOINT on the VPS) - this is expected until a
-      // discover pass finds it, not an error worth alarming about every
-      // 90 seconds.
-      return NextResponse.json({
-        status: "success",
-        message: "Chats endpoint not confirmed yet - skipped",
-        fansCount: 0,
-        messagesCount: 0,
-        skipped: true,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     if (vpsResult.status !== "success") {
-      return NextResponse.json({ error: vpsResult.error || "VPS sync-live failed" }, { status: 502 });
+      return NextResponse.json({ error: vpsResult.error || "VPS sync-chats failed" }, { status: 502 });
     }
 
-    const payload = vpsResult.data?.json;
-    const inboxList = payload?.list || payload?.data?.list || [];
-
-    if (!Array.isArray(inboxList) || inboxList.length === 0) {
-      console.warn("[SYNC] Unexpected or empty response shape:", JSON.stringify(vpsResult.data).slice(0, 500));
-    }
-
+    const conversations: any[] = vpsResult.conversations || [];
     let fanCount = 0;
     let messageCount = 0;
 
-    for (const conversation of inboxList) {
-      const userId = conversation.user?.id ?? conversation.withUser?.id;
-      const username = conversation.user?.username ?? conversation.withUser?.username;
-      if (!userId) continue;
-
+    for (const conv of conversations) {
+      if (!conv.fanId) continue;
       fanCount++;
 
-      await supabase.from("crm_fan_metadata").upsert(
-        {
-          fan_id: userId.toString(),
-          model_id: modelId,
-          username: username || `User-${userId}`,
-          vip_tier: "standard",
-          last_interaction: new Date().toISOString(),
-        },
-        { onConflict: "model_id,fan_id" }
-      );
+      const metaUpdate: Record<string, any> = {
+        fan_id: conv.fanId,
+        model_id: modelId,
+        last_interaction: new Date().toISOString(),
+      };
+      if (conv.name || conv.username) metaUpdate.username = conv.name || conv.username;
+      if (conv.avatarUrl) metaUpdate.avatar_url = conv.avatarUrl;
 
-      const messages = conversation.messages || conversation.lastMessage ? [conversation.lastMessage].filter(Boolean) : [];
-      for (const msg of messages) {
+      await supabase.from("crm_fan_metadata").upsert(metaUpdate, { onConflict: "model_id,fan_id" });
+
+      for (const msg of conv.messages || []) {
+        if (!msg.id) continue;
+
         const { data: existing } = await supabase
           .from("crm_fan_messages")
           .select("id")
-          .eq("fan_id", userId.toString())
-          .eq("external_message_id", msg.id?.toString())
+          .eq("external_message_id", msg.id)
           .maybeSingle();
-
         if (existing) continue;
 
-        const isFromFan = msg.fromUser?.id === userId;
         const { error: insertError } = await supabase.from("crm_fan_messages").insert({
-          fan_id: userId.toString(),
+          fan_id: conv.fanId,
+          model_id: modelId,
           chatter_id: null,
-          external_message_id: msg.id?.toString(),
+          external_message_id: msg.id,
           message_text: msg.text || "",
-          sender: isFromFan ? "fan" : "chatter",
-          is_read: msg.isRead !== false,
-          created_at: new Date(msg.createdAt).toISOString(),
-          attached_media_id: null,
+          sender: msg.isFromModel ? "chatter" : "fan",
+          is_read: msg.isFromModel ? true : false,
+          price: msg.price || null,
+          media_refs: msg.media && msg.media.length ? msg.media : null,
+          created_at: msg.createdAt ? new Date(msg.createdAt).toISOString() : new Date().toISOString(),
         });
 
         if (!insertError) messageCount++;
       }
     }
 
-    await supabase
-      .from("crm_model_sessions")
-      .update({ last_synced_at: new Date().toISOString() })
-      .eq("id", sessionId);
+    await supabase.from("crm_model_sessions").update({ last_synced_at: new Date().toISOString() }).eq("id", sessionId);
 
     return NextResponse.json({
       status: "success",

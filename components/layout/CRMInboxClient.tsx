@@ -223,18 +223,18 @@ export default function CRMInboxClient({
         {/* MAIN CONTENT AREA - Flex Layout */}
         <div className="flex-1 flex overflow-hidden">
           {!selectedModel ? (
-            // NO MODEL SELECTED - Show placeholder
-            <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black">
+            // NO MODEL SELECTED - Show placeholder + shift reminder. Native
+            // Chat Mode's fan list now shows as soon as a model IS selected
+            // (real synced data exists to show it), so this shift widget
+            // moved here from its old standalone "default landing" state -
+            // that state no longer exists once a model is picked.
+            <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black p-8">
               <div className="text-center mb-8">
                 <h1 className="text-4xl font-black mb-3 uppercase tracking-wider">
                   <span>💬</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">CRM Live Inbox</span>
                 </h1>
                 <p className="text-slate-400">Wähle ein Model aus der Sidebar aus</p>
               </div>
-            </div>
-          ) : !selectedFanId && !selectedOnlyFansModel ? (
-            // DEFAULT LANDING - Show NextShiftsWidget with reminder + instructions
-            <div className="w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0A0A0A] to-black p-8">
               <NextShiftsWidget
                 allShifts={allShifts}
                 userEmail={userEmail}
