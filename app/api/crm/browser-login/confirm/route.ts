@@ -25,6 +25,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "error", error: "Missing modelId" }, { status: 400 });
     }
 
+    // CONFIRMED LIVE (costly, twice in a row): this used to re-derive auth
+    // itself from a raw cookie dump - first requiring an 'auth_id' cookie
+    // OnlyFans has evidently stopped setting (could never pass), then
+    // (once that was dropped) just "a 'sess' cookie exists", which is
+    // ALSO true for a stone-cold page that's never seen credentials yet
+    // (OnlyFans sets one for anonymous browsing too) - the confirm button
+    // lit up green before any login had happened at all. getLoginState()
+    // on the VPS now also checks the live rendered DOM for a password
+    // input, which a cookie dump alone can never see - calling the VPS's
+    // own /status here instead of re-deriving "logged in" a third time
+    // means there's exactly one definition of it, not three that can
+    // drift out of sync with each other.
+    const statusResponse = await vpsFetch(`/status?modelId=${encodeURIComponent(modelId)}`);
+    if (!statusResponse.ok) {
+      const text = await statusResponse.text();
+      throw new Error(`VPS error ${statusResponse.status}: ${text}`);
+    }
+    const statusResult = await statusResponse.json();
+    if (!statusResult.hasSession || !statusResult.isLoggedIn) {
+      return NextResponse.json(
+        { status: "error", error: "Login noch nicht abgeschlossen - bitte im Fenster oben fertig einloggen, bevor du verbindest" },
+        { status: 400 }
+      );
+    }
+
     const cookiesResponse = await vpsFetch(`/cookies?modelId=${encodeURIComponent(modelId)}`);
     if (!cookiesResponse.ok) {
       const text = await cookiesResponse.text();
@@ -34,30 +59,6 @@ export async function POST(req: NextRequest) {
     const { cookies, localStorageData } = await cookiesResponse.json();
     if (!Array.isArray(cookies) || cookies.length === 0) {
       return NextResponse.json({ status: "error", error: "No cookies found - login not detected yet" }, { status: 400 });
-    }
-
-    // "Some cookies exist" is true on every single page load (consent/
-    // analytics cookies), logged in or not - it was never actual proof of a
-    // real OnlyFans login. If the frontend's own login-detection ever read
-    // a false positive (e.g. a brief moment mid-redirect/verification
-    // before OnlyFans fully committed the session), this let a connect get
-    // confirmed - and marked is_active in Supabase - for a model that was
-    // never really logged in, which then got auto-disconnected once the
-    // screenshot route's grace period ran out. Requiring the same real
-    // auth cookie getLoginState() on the VPS checks for closes that gap.
-    //
-    // CONFIRMED LIVE (costly): this used to also require an 'auth_id'
-    // cookie. Pulled the raw cookie jar from a session seconds after a
-    // real manual login (real dashboard visibly loaded) - no 'auth_id'
-    // cookie existed in it. OnlyFans has evidently dropped it from this
-    // flow, meaning this check could never pass anymore - same bug as
-    // getLoginState() on the VPS (see its comment), fixed the same way.
-    const hasRealAuth = cookies.some((c: any) => c?.name === "sess" && c?.value);
-    if (!hasRealAuth) {
-      return NextResponse.json(
-        { status: "error", error: "Login noch nicht abgeschlossen - bitte im Fenster oben fertig einloggen, bevor du verbindest" },
-        { status: 400 }
-      );
     }
 
     // Store as a flat { name: value } map - the same shape send-message-to-onlyfans

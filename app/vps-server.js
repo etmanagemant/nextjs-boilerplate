@@ -1486,16 +1486,32 @@ async function getLoginState(page) {
   // gets) - there was no 'auth_id' cookie in it at all anymore. OnlyFans
   // has evidently dropped that cookie from this flow. Every isLoggedIn
   // check this whole session was silently requiring a cookie that no
-  // longer exists, meaning it could never once return true - the new
-  // periodic health-check built on top of this (see setInterval below)
-  // was closing genuinely-valid sessions over and over as a direct
-  // result. 'sess' + not being on a login/return_to URL is what's left;
-  // 'sess' alone isn't proof for a logged-OUT visitor (OnlyFans sets one
-  // for anonymous browsing too), but a logged-out visitor requesting a
-  // gated page reliably gets redirected to /login or ?return_to=, which
-  // this still catches.
+  // longer exists, meaning it could never once return true.
   const sessCookie = cookies.find((c) => c.name === 'sess');
-  const isLoggedIn = !!sessCookie?.value && !pageUrl.includes('/login') && !pageUrl.includes('return_to=');
+
+  // CONFIRMED LIVE (immediately after the fix above): dropping to just
+  // 'sess' + URL was too weak in the OTHER direction - a stone-cold fresh
+  // page load on the bare root domain (the manual /connect flow's very
+  // first navigation, before any credentials are even typed) already has
+  // a 'sess' cookie and isn't on a /login or return_to= URL either, so
+  // this read back isLoggedIn:true for a blank, untouched login form -
+  // the "Creator verbinden" button lit up green before any login had
+  // happened at all. Cookies/URL alone can't reliably tell "guest
+  // browsing the homepage" apart from "authenticated" on this specific
+  // page, since OnlyFans serves both at the same root URL. Checking the
+  // actual rendered DOM for a live password input closes that gap - a
+  // real authenticated dashboard never has one, regardless of what
+  // cookies happen to be sitting in the jar at that moment.
+  let hasPasswordField = false;
+  try {
+    hasPasswordField = await page.evaluate(() => !!document.querySelector('input[type="password"]'));
+  } catch (e) {
+    // Page mid-navigation or closed - treat as inconclusive, not as
+    // proof either way; the cookie/URL checks below still apply.
+  }
+
+  const isLoggedIn =
+    !!sessCookie?.value && !pageUrl.includes('/login') && !pageUrl.includes('return_to=') && !hasPasswordField;
 
   return { isLoggedIn, cookieCount: cookies.length, pageUrl, checkFailed };
 }
