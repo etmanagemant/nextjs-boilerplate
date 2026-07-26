@@ -2220,8 +2220,33 @@ app.post('/insert-script-step', async (req, res) => {
       return true;
     });
     if (!focused) return res.json({ status: 'no_input', message: 'Kein offenes Nachrichtenfeld gefunden' });
-    await page.keyboard.type(messageText);
-    lap('message typed');
+    // CONFIRMED LIVE (timing log): real keyboard.type() dispatches a
+    // separate keydown/keypress/keyup/input event cycle per character -
+    // fine for short text, adds up for longer scripts. execCommand runs
+    // the browser's own native text-insertion pipeline in one call, which
+    // fires the same kind of input event a real paste would (what rich
+    // contenteditable editors like OnlyFans' are actually built to
+    // observe), so it's usually a legitimate shortcut, not a hack. Verified
+    // against the field's own resulting text before trusting it, though -
+    // falls back to the always-correct simulated typing if it didn't take,
+    // so a paid message never goes out wrong or blank for the sake of speed.
+    const fastTyped = await page.evaluate((text) => {
+      var el = document.querySelector('.js-text-editor[contenteditable="true"]');
+      if (!el || !el.isContentEditable) return false;
+      document.execCommand('insertText', false, text);
+      return (el.textContent || '').trim() === text.trim();
+    }, messageText);
+    if (!fastTyped) {
+      await page.evaluate(() => {
+        var el = document.querySelector('.js-text-editor[contenteditable="true"], textarea[placeholder*="message" i]');
+        if (!el) return;
+        el.focus();
+        if (el.isContentEditable) el.textContent = '';
+        else el.value = '';
+      });
+      await page.keyboard.type(messageText);
+    }
+    lap(`message typed (${fastTyped ? 'fast' : 'fallback'})`);
 
     // Same hard-gate pattern as /upload-to-vault-fan's price step: confirmed
     // live once already (there) that blindly typing a price without
