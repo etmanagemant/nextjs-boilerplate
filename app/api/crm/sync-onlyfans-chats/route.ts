@@ -18,7 +18,17 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { modelId, sessionId } = body;
+    const { modelId, sessionId, secret } = body;
+
+    // Internal-only route: called by /api/cron/sync-chats on the same
+    // ~90s loop the VPS itself drives, never directly from a browser -
+    // gated on the same CRON_SECRET rather than a user session, since
+    // there isn't one in that server-to-server call. This writes via the
+    // admin (service-role) Supabase client below, bypassing RLS, so it
+    // must not be reachable without this check.
+    if (!secret || secret !== process.env.CRON_SECRET) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     if (!modelId || !sessionId) {
       return NextResponse.json({ error: "Missing modelId or sessionId" }, { status: 400 });

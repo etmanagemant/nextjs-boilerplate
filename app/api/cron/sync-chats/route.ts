@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
           body: JSON.stringify({
             modelId: session.model_id,
             sessionId: session.id,
+            secret: process.env.CRON_SECRET,
           }),
         });
 

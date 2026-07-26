@@ -56,6 +56,21 @@ app.use((req, res, next) => {
   next();
 });
 
+// The /debug-* routes (debug-eval, debug-goto, debug-click, debug-type,
+// debug-fetch, debug-screenshot, debug-network-*, debug-send-test,
+// debug-dom) were built for live diagnosis during development - together
+// they allow arbitrary JS execution, arbitrary navigation, and arbitrary
+// credentialed fetches inside a real, logged-in OnlyFans session. That's a
+// much bigger blast radius than "control the browser" if the shared
+// secret above ever leaks or (per its own fail-open comment) isn't set at
+// all. Off by default in any environment that hasn't explicitly turned
+// them on for an active debugging session.
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/debug-')) return next();
+  if (process.env.DEBUG_ROUTES_ENABLED === 'true') return next();
+  return res.status(404).json({ error: 'Not found' });
+});
+
 // ============================================================================
 // PERSISTENT PER-MODEL SESSIONS
 // One long-lived headful browser per connected model, reused for both the
