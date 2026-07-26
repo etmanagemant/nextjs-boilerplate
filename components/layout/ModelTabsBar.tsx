@@ -30,6 +30,29 @@ const SEEN_KEY_PREFIX = "crm-inbox-seen:";
 export default function ModelTabsBar({ models, activeModelId }: ModelTabsBarProps) {
   const [unread, setUnread] = useState<Record<string, boolean>>({});
   const pollingRef = useRef(false);
+  const [contextMenu, setContextMenu] = useState<{ modelId: string; x: number; y: number } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside closes the right-click menu, same pattern used elsewhere
+  // in this codebase for dismissable popovers.
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [contextMenu]);
+
+  const openInNewTab = (modelId: string) => {
+    // Same URL the tab's own <Link> already points at - /crm-inbox?model=X
+    // renders the identical live VNC view with all overlay widgets
+    // standalone, so no separate route or component is needed for this.
+    window.open(`/crm-inbox?model=${modelId}`, "_blank", "noopener,noreferrer");
+    setContextMenu(null);
+  };
 
   useEffect(() => {
     if (models.length === 0) return;
@@ -92,6 +115,10 @@ export default function ModelTabsBar({ models, activeModelId }: ModelTabsBarProp
           <Link
             key={m.id}
             href={`/crm-inbox?model=${m.id}`}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ modelId: m.id, x: e.clientX, y: e.clientY });
+            }}
             className={`relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition flex-shrink-0 border ${
               isActive
                 ? "bg-[#C9A86A]/20 text-[#C9A86A] border-[#C9A86A]/50"
@@ -115,6 +142,20 @@ export default function ModelTabsBar({ models, activeModelId }: ModelTabsBarProp
           </Link>
         );
       })}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed bg-[#1A1A1A] border border-[#C9A86A]/30 rounded-lg shadow-2xl z-50 py-1"
+          style={{ left: `${Math.max(8, contextMenu.x - 140)}px`, top: `${contextMenu.y}px`, minWidth: "220px" }}
+        >
+          <button
+            onClick={() => openInNewTab(contextMenu.modelId)}
+            className="w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-300 hover:bg-[#C9A86A]/20 hover:text-[#E2C48A] transition"
+          >
+            ↗ In neuem Tab öffnen
+          </button>
+        </div>
+      )}
     </div>
   );
 }
