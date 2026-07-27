@@ -94,17 +94,25 @@ export default function GlobalTopBar({ userId }: { userId?: string }) {
         </div>
       )}
 
-      <div className="h-full flex items-center gap-4 pl-4 pr-4 relative">
+      {/* CONFIRMED LIVE this broke every model-tab click: this wrapper
+          spans the header's full width (flex container, no max-width), so
+          even though the logo sits left and the actions sit right via
+          ml-auto, the EMPTY middle of this div still sat on top of (later
+          in DOM than) the model-tabs div above and silently ate every
+          click over that whole area. pointer-events-none here + auto on
+          the actual logo/actions re-opens the tabs underneath, same
+          pattern already used for the shift timer. */}
+      <div className="h-full flex items-center gap-4 pl-4 pr-4 relative pointer-events-none">
         <Image
           src="/images/logo.png"
           alt="ET Management"
           width={633}
           height={611}
           priority
-          className="h-28 w-auto flex-shrink-0"
+          className="h-28 w-auto flex-shrink-0 pointer-events-auto"
         />
 
-        <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+        <div className="flex items-center gap-2 flex-shrink-0 ml-auto pointer-events-auto">
           <div className="relative" ref={notifRef}>
             <button
               onClick={() => setNotifOpen((v) => !v)}
