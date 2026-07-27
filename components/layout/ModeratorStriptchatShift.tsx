@@ -99,6 +99,7 @@ export default function ModeratorStriptchatShift({
         .from("shift_assignments")
         .select("*")
         .eq("chatter_id", currentUserId)
+        .eq("platform", "stripchat")
         .is("ended_at", null);
 
       // Berechne totalPrivateShowCount für Prämien-Anzeige
@@ -106,7 +107,8 @@ export default function ModeratorStriptchatShift({
       const { data: allAssignments } = await supabase
         .from("shift_assignments")
         .select("privateshow_count")
-        .eq("chatter_id", currentUserId);
+        .eq("chatter_id", currentUserId)
+        .eq("platform", "stripchat");
       
       if (allAssignments) {
         totalCount = allAssignments.reduce((sum, a) => sum + (a.privateshow_count || 0), 0);
@@ -207,6 +209,7 @@ export default function ModeratorStriptchatShift({
           chatter_id: currentUserId,
           started_at: new Date().toISOString(),
           notes: notes,
+          platform: "stripchat",
         },
       ]).select();
 

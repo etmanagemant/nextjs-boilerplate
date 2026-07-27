@@ -110,7 +110,7 @@ export default function ChatterPage() {
   const refresh = useCallback(async () => {
     if (!currentUserId) return;
     const [assignmentsRes, shiftsRes] = await Promise.all([
-      supabase.from("shift_assignments").select("id, shift_id, chatter_id, model_id, started_at, ended_at").eq("chatter_id", currentUserId).order("id", { ascending: false }).limit(50),
+      supabase.from("shift_assignments").select("id, shift_id, chatter_id, model_id, started_at, ended_at").eq("chatter_id", currentUserId).eq("platform", "onlyfans").order("id", { ascending: false }).limit(50),
       supabase.from("shifts").select("*")
     ]);
     if (assignmentsRes.error) { setErr(assignmentsRes.error.message); return; }
@@ -174,7 +174,7 @@ export default function ChatterPage() {
     if (!currentUserId) { setErr("Benutzerdaten laden noch."); return; }
     setErr(null);
     const { error } = await supabase.from("shift_assignments").insert([
-      { chatter_id: currentUserId, model_id: null, started_at: new Date().toISOString(), ended_at: null }
+      { chatter_id: currentUserId, model_id: null, started_at: new Date().toISOString(), ended_at: null, platform: "onlyfans" }
     ]);
     if (error) { setErr(error.message); return; }
     await refresh();
