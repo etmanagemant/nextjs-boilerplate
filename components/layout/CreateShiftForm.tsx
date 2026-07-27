@@ -82,7 +82,28 @@ export default function CreateShiftForm({ sichereProfile, sichereModels }: Creat
       }
 
       setStatusMsg({ type: "success", text: "✓ Schicht(en) erfolgreich im Kalender angelegt!" });
-      
+
+      // Personal bell notification for whichever chatter this was assigned
+      // to - chatterId here is the <select>'s value, which is
+      // full_name||email (a string, not a real user_id, matching how
+      // app/chatter/page.tsx already matches shifts back to a user) -
+      // resolve it against sichereProfile to get the real user_id to
+      // address the notification to. Best-effort, one per submission
+      // regardless of how many model-rows this created (still just ONE
+      // scheduling action from the chatter's point of view).
+      const zugewiesenesProfil = sichereProfile.find((p) => (p.full_name || p.email) === chatterId);
+      if (zugewiesenesProfil?.user_id) {
+        fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: "📅 Dir wurden neue Schichten zugeteilt - jetzt ansehen",
+            recipientUserId: zugewiesenesProfil.user_id,
+            type: "shift_assigned",
+          }),
+        }).catch(() => {});
+      }
+
       // 🟢 FIXED: Setzt das Formular über die native HTML-Methode absolut crash-proof zurück!
       formElement.reset();
       setSelectedModels([]);

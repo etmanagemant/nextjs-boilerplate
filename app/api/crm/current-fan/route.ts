@@ -87,6 +87,7 @@ export async function GET(req: NextRequest) {
         last_subscription_at: null,
         last_paid_at: null,
         created_at: null,
+        first_seen_new_at: null,
       },
     });
   } catch (error: any) {

@@ -839,6 +839,242 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
 })();
 `;
 
+// %%MODEL_ID%%, %%API_BASE%% substituted per slot before injection, same
+// convention as SENT_BY_OVERLAY_SCRIPT_TEMPLATE above. Confirmed live via
+// debug-eval: each .b-chats__item's own "id" attribute IS the numeric fan
+// id (matches the /chats/chat/<id> URL pattern used elsewhere), the avatar
+// lives in a child ".b-available-users__round-img" (50x50, position:
+// absolute already, so it doubles as a containing block for our badge
+// without needing to touch its own positioning), and OnlyFans' own "new
+// fan" flag is ".b-chats__user__badge.m-new" (text "NEUE").
+const FAN_SPEND_OVERLAY_SCRIPT_TEMPLATE = `
+(function() {
+  var MODEL_ID = "%%MODEL_ID%%";
+  var API_BASE = "%%API_BASE%%";
+  var RING_CLASS = 'etm-spend-ring';
+  var BADGE_CLASS = 'etm-spend-badge';
+  var displayCache = {};
+
+  function ensureStyles() {
+    if (document.getElementById('__etm_spend_ring_style__')) return;
+    var style = document.createElement('style');
+    style.id = '__etm_spend_ring_style__';
+    style.textContent =
+      '.' + RING_CLASS + '{box-shadow:0 0 0 2px rgba(10,10,10,0.9),0 0 6px 1px rgba(229,193,88,0.75);border-radius:50%;}' +
+      '.' + BADGE_CLASS + '{position:absolute;bottom:-3px;left:50%;transform:translateX(-50%);' +
+      'background:linear-gradient(180deg,#E5C158,#9C7A3D);color:#0A0A0A;font-weight:800;font-size:9px;' +
+      'line-height:1;padding:1px 4px;border-radius:8px;white-space:nowrap;box-shadow:0 0 4px rgba(0,0,0,0.6);z-index:2;}';
+    document.head.appendChild(style);
+  }
+
+  function collectItems() {
+    return Array.prototype.slice.call(document.querySelectorAll('.b-chats__item'));
+  }
+
+  function labelFor(value) {
+    if (value === 'NEW') return 'NEW';
+    if (value === '0' || !value) return '0';
+    return '$' + value;
+  }
+
+  function applyBadge(item, value) {
+    var wrap = item.querySelector('.b-available-users__round-img');
+    if (!wrap) return;
+    if (!wrap.classList.contains(RING_CLASS)) wrap.classList.add(RING_CLASS);
+    var badge = wrap.querySelector('.' + BADGE_CLASS);
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = BADGE_CLASS;
+      wrap.appendChild(badge);
+    }
+    var text = labelFor(value);
+    if (badge.textContent !== text) badge.textContent = text;
+  }
+
+  function renderFromCache() {
+    collectItems().forEach(function(item) {
+      if (item.id && Object.prototype.hasOwnProperty.call(displayCache, item.id)) {
+        applyBadge(item, displayCache[item.id]);
+      }
+    });
+  }
+
+  function refresh() {
+    var items = collectItems();
+    var fanIds = [];
+    var newFanIds = [];
+    items.forEach(function(item) {
+      if (!item.id) return;
+      fanIds.push(item.id);
+      if (item.querySelector('.b-chats__user__badge.m-new')) newFanIds.push(item.id);
+    });
+    if (!fanIds.length || !API_BASE) return;
+    fetch(API_BASE + '/api/crm/fan-spend-overlay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelId: MODEL_ID, fanIds: fanIds, newFanIds: newFanIds }),
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data || data.status !== 'success') return;
+        displayCache = data.display || {};
+        renderFromCache();
+      })
+      .catch(function() {});
+  }
+
+  function start() {
+    ensureStyles();
+    refresh();
+    setInterval(refresh, 20000);
+    // Vue re-renders chat-list rows on its own (new scroll position, a
+    // fresh message, muting/unmuting) - a fresh DOM node loses our injected
+    // badge, so re-apply from the cache on every mutation instead of only
+    // waiting for the next 20s refresh cycle.
+    new MutationObserver(renderFromCache).observe(document.documentElement, { childList: true, subtree: true });
+  }
+  if (document.body) start();
+  else document.addEventListener('DOMContentLoaded', start);
+})();
+`;
+
+async function applyFanSpendOverlay(page, modelId) {
+  try {
+    const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+    const script = FAN_SPEND_OVERLAY_SCRIPT_TEMPLATE
+      .replace('%%MODEL_ID%%', String(modelId || '').replace(/"/g, '\\"'))
+      .replace('%%API_BASE%%', apiBase.replace(/"/g, '\\"'));
+    await page.evaluateOnNewDocument(script);
+  } catch (e) {
+    console.warn('[FAN-SPEND-OVERLAY] Could not register:', e.message);
+  }
+}
+
+// %%MODEL_ID%%, %%API_BASE%% substituted per slot before injection, same
+// convention as the other overlay templates.
+//
+// UNVERIFIED - shipped as a best-effort guess per explicit user go-ahead,
+// NOT confirmed live: this test account had no real purchase yet to check
+// the actual "just unlocked" DOM signal against. isLocked() below checks a
+// few plausible selectors defensively rather than betting on exactly one,
+// but if this never actually fires after a real purchase, THIS is the
+// function to re-derive live (via debug-eval on a chat with a genuinely
+// just-purchased PPV) rather than assuming /api/crm/ppv-purchased itself
+// is broken.
+//
+// Also a structural limitation, not a bug: this only sees whatever
+// conversation is CURRENTLY open in this slot (same constraint as
+// /api/crm/current-fan) - a purchase in a conversation nobody currently
+// has open won't be caught until/unless that chat is opened again while
+// still showing the transition.
+const PPV_PURCHASE_DETECTOR_SCRIPT_TEMPLATE = `
+(function() {
+  var MODEL_ID = "%%MODEL_ID%%";
+  var API_BASE = "%%API_BASE%%";
+
+  function getFanId() {
+    var m = location.pathname.match(/\\/chats\\/chat\\/(\\d+)/);
+    return m ? m[1] : null;
+  }
+
+  function getBubbleMediaKey(el) {
+    var img = el.querySelector('.post_media img, .b-chat__message__media img');
+    if (!img || !img.src) return '';
+    return img.src.split('?')[0];
+  }
+
+  function getBubbleText(el) {
+    var holder = el.querySelector('.b-chat__message__text-holder');
+    return holder ? holder.textContent.trim() : '';
+  }
+
+  function isLocked(el) {
+    return !!(
+      el.querySelector('[class*="locked" i]') ||
+      el.querySelector('[class*="paid-post" i]') ||
+      el.querySelector('[at-attr="price_btn"]') ||
+      el.querySelector('[at-attr="unlock_btn"]')
+    );
+  }
+
+  // Also unconfirmed (same caveat as isLocked) - grabs a "$12" / "12,00 €"
+  // style price if the locked overlay shows one, so a detected purchase
+  // can add to the fan's tracked spend instead of just notifying with no
+  // amount. Missing/unparsed price just means the notification fires
+  // without updating spend - never blocks the notification itself.
+  function getBubblePrice(el) {
+    var m = (el.textContent || '').match(/\\$\\s?(\\d+(?:[.,]\\d{1,2})?)|(\\d+(?:[.,]\\d{1,2})?)\\s?€/);
+    if (!m) return null;
+    var raw = m[1] || m[2];
+    return raw ? parseFloat(raw.replace(',', '.')) : null;
+  }
+
+  function scan() {
+    var mine = document.querySelectorAll('.b-chat__message.m-from-me.m-has-media');
+    for (var i = 0; i < mine.length; i++) {
+      var el = mine[i];
+      var locked = isLocked(el);
+      if (el.dataset.etmWasLocked === undefined) {
+        // First time seeing this bubble this session - just record its
+        // current state, don't fire for something that may have already
+        // been unlocked long before this overlay started watching.
+        el.dataset.etmWasLocked = locked ? '1' : '0';
+        if (locked) {
+          var initialPrice = getBubblePrice(el);
+          if (initialPrice) el.dataset.etmPrice = String(initialPrice);
+        }
+        continue;
+      }
+      if (locked) {
+        var p = getBubblePrice(el);
+        if (p) el.dataset.etmPrice = String(p);
+      }
+      if (el.dataset.etmWasLocked === '1' && !locked && !el.dataset.etmPpvNotified) {
+        el.dataset.etmPpvNotified = '1';
+        el.dataset.etmWasLocked = '0';
+        var fanId = getFanId();
+        if (!fanId || !API_BASE) continue;
+        var mediaKey = getBubbleMediaKey(el);
+        var text = mediaKey ? '' : getBubbleText(el);
+        if (!mediaKey && !text) continue;
+        var price = el.dataset.etmPrice ? parseFloat(el.dataset.etmPrice) : null;
+        fetch(API_BASE + '/api/crm/ppv-purchased', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            mediaKey
+              ? { modelId: MODEL_ID, fanId: fanId, mediaKey: mediaKey, price: price }
+              : { modelId: MODEL_ID, fanId: fanId, messageText: text, price: price }
+          ),
+        }).catch(function() {});
+      } else if (locked) {
+        el.dataset.etmWasLocked = '1';
+      }
+    }
+  }
+
+  function start() {
+    scan();
+    setInterval(scan, 5000);
+    new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+  }
+  if (document.body) start();
+  else document.addEventListener('DOMContentLoaded', start);
+})();
+`;
+
+async function applyPpvPurchaseDetector(page, modelId) {
+  try {
+    const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+    const script = PPV_PURCHASE_DETECTOR_SCRIPT_TEMPLATE
+      .replace('%%MODEL_ID%%', String(modelId || '').replace(/"/g, '\\"'))
+      .replace('%%API_BASE%%', apiBase.replace(/"/g, '\\"'));
+    await page.evaluateOnNewDocument(script);
+  } catch (e) {
+    console.warn('[PPV-PURCHASE-DETECTOR] Could not register:', e.message);
+  }
+}
+
 async function applySentByOverlay(page, chatterName, modelId) {
   try {
     const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
@@ -1184,6 +1420,8 @@ async function ensureSlotBrowser(slot, modelId, role, chatterName, userId) {
   await applyNavRestrictions(page, role);
   await applySentByOverlay(page, chatterName, modelId);
   await applyScriptVaultButton(page, userId, role, modelId);
+  await applyFanSpendOverlay(page, modelId);
+  await applyPpvPurchaseDetector(page, modelId);
 
   // The filesystem copy above can still be stale even when the main
   // session is genuinely logged in: Chrome writes its cookie database to
@@ -1405,6 +1643,31 @@ async function getOrCreateSession(modelId, restoreCookies) {
   // --window-size comment in launchBrowser), which also happens to be
   // lighter than Full HD.
   await page.setViewport({ width: 1280, height: 800 });
+
+  // Passively captures the model's own avatar/name the moment OnlyFans'
+  // own app makes this exact call itself (it always does, as part of
+  // loading /my/chats) - confirmed live via a /sync-live discover pass
+  // that this response body already has avatar/avatarThumbs/name. This
+  // sidesteps /profile-info's old active-fetch approach entirely: OnlyFans
+  // requires proprietary signed headers on this endpoint that a plain
+  // page.evaluate(fetch(...)) can never produce (confirmed broken, HTTP
+  // 400 "Something went wrong"), but the REAL app's own request already
+  // carries them correctly - so instead of re-requesting it ourselves,
+  // just listen for the app's own copy going by. capturedMeProfile is a
+  // stable object declared before `session` exists (attached to it right
+  // after construction below) so the listener has somewhere to write to
+  // regardless of whether this response arrives before or after that.
+  const capturedMeProfile = { current: null };
+  page.on('response', async (res) => {
+    if (!res.url().includes('/api2/v2/users/me')) return;
+    try {
+      const json = await res.json();
+      if (json && (json.avatar || json.avatarThumbs)) capturedMeProfile.current = json;
+    } catch (e) {
+      /* non-JSON, already consumed, or navigated away mid-read - skip */
+    }
+  });
+
   // Chrome's --lang flag covers its own UI chrome; sites pick their content
   // language from the Accept-Language header, so both are needed for
   // OnlyFans itself to render in German.
@@ -1495,6 +1758,7 @@ async function getOrCreateSession(modelId, restoreCookies) {
   }
 
   const session = { browser, page, lastActivity: Date.now(), createdAt: new Date(), loggedInSince: null };
+  session.meProfileRef = capturedMeProfile;
   modelSessions[modelId] = session;
   return session;
 }
@@ -1859,21 +2123,20 @@ app.get('/cookies', async (req, res) => {
 });
 
 // Fetch the connected model's own OnlyFans profile info (for the avatar,
-// called right after "Creator verbinden") by reusing the live authenticated
-// session - same page.evaluate(fetch) trick as /sync-live, for the same
-// reason a fresh cookie-cloned session would get rejected.
-//
-// The guessed default ('/api2/v2/users/me') was directly confirmed broken -
-// it returns HTTP 400 ("Something went wrong. [29141B1D]"), the exact same
-// error OnlyFans' real API gives for an unsigned/malformed request (their
-// API requires proprietary signed headers a plain fetch() doesn't have).
-// That meant every single "Creator verbinden" click fired one guaranteed-
-// malformed request against OnlyFans' real API, from inside the freshly
-// authenticated session, using its real cookies, at the single most
-// sensitive moment right after login - exactly the kind of anomaly an
-// anti-fraud system would key on. No longer guessing, same as
-// ONLYFANS_CHATS_ENDPOINT/ONLYFANS_SEND_MESSAGE_ENDPOINT - only runs once a
-// real endpoint is confirmed via a discover pass and set explicitly.
+// called right after "Creator verbinden"). NOT an active fetch() anymore -
+// confirmed live that OnlyFans' real /api2/v2/users/me requires proprietary
+// signed headers a plain page.evaluate(fetch(...)) can never produce (HTTP
+// 400 "Something went wrong" every time), which meant every single "Creator
+// verbinden" click fired one guaranteed-malformed request against OnlyFans'
+// real API using real cookies at the single most sensitive moment right
+// after login. Instead, getOrCreateSession attaches a passive response
+// listener that captures this exact call's body the moment OnlyFans' OWN
+// app makes it (confirmed via a /sync-live discover pass that it always
+// does, as part of loading /my/chats, and that the body already has
+// avatar/avatarThumbs/name) - this route just returns whatever's already
+// been captured. If nothing's captured yet (confirm clicked before that
+// natural first load finished), reload once to trigger it fresh and give
+// the listener a moment to catch it.
 app.get('/profile-info', async (req, res) => {
   const { modelId } = req.query;
   if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
@@ -1882,23 +2145,17 @@ app.get('/profile-info', async (req, res) => {
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
   session.lastActivity = Date.now();
 
-  const endpoint = process.env.ONLYFANS_ME_ENDPOINT;
-  if (!endpoint) {
-    return res.json({ status: 'not_configured', modelId, message: 'ONLYFANS_ME_ENDPOINT not set - run discover:true against a live session first' });
-  }
-
   try {
-    const data = await session.page.evaluate(async (url) => {
-      const res = await fetch(url, { credentials: 'include' });
-      const text = await res.text();
-      try {
-        return { ok: res.ok, status: res.status, json: JSON.parse(text) };
-      } catch (e) {
-        return { ok: res.ok, status: res.status, text: text.slice(0, 500) };
+    if (!session.meProfileRef.current) {
+      await session.page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+      for (let attempt = 0; attempt < 8 && !session.meProfileRef.current; attempt++) {
+        await new Promise((r) => setTimeout(r, 500));
       }
-    }, endpoint);
-
-    res.json({ status: 'success', modelId, data });
+    }
+    if (!session.meProfileRef.current) {
+      return res.json({ status: 'error', modelId, error: 'Profil-Antwort noch nicht eingetroffen' });
+    }
+    res.json({ status: 'success', modelId, data: { json: session.meProfileRef.current } });
   } catch (error) {
     console.error(`[PROFILE-INFO] Error for ${modelId}:`, error.message);
     res.status(200).json({ status: 'error', error: error.message });

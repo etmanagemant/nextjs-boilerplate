@@ -2,6 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import ModelTabsBar from "./ModelTabsBar";
+import { useModelTabsDisplay } from "./ModelTabsContext";
+import ShiftTimerHeader from "./ShiftTimerHeader";
 
 interface Notification {
   id: number;
@@ -18,10 +21,11 @@ interface Notification {
  * uploading a Vault batch" events; empty/invisible for non-admin users
  * since the API itself gates read access to admin/moderator roles.
  */
-export default function GlobalTopBar() {
+export default function GlobalTopBar({ userId }: { userId?: string }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const modelTabs = useModelTabsDisplay();
 
   const loadNotifications = async () => {
     try {
@@ -64,17 +68,40 @@ export default function GlobalTopBar() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-32 bg-[#0A0A0A]/95 backdrop-blur border-b border-[#9C7A3D]/20">
-      <div className="h-full flex items-center justify-between pl-4 pr-4">
+      {/* Absolutely centered regardless of the logo/model-tabs/actions
+          widths on either side - true center of the header, not just
+          "whatever's left over" between them. Only shown while clocked in
+          (see ShiftTimerHeader). On the rare page where the model-tabs bar
+          is ALSO showing (clocked in AND on CRM Inbox), this can visually
+          sit on top of it - accepted tradeoff, not worth extra layout
+          complexity for that combination alone. */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+        <div className="pointer-events-auto">
+          <ShiftTimerHeader userId={userId} />
+        </div>
+      </div>
+
+      <div className="h-full flex items-center gap-4 pl-4 pr-4 relative">
         <Image
           src="/images/logo.png"
           alt="ET Management"
           width={633}
           height={611}
           priority
-          className="h-28 w-auto"
+          className="h-28 w-auto flex-shrink-0"
         />
 
-        <div className="flex items-center gap-2">
+        {/* Model-Tabs (CRM Inbox) - published via ModelTabsContext from
+            CRMInboxClient, so the header can show them without knowing
+            anything about the CRM Inbox page itself. Empty/absent on every
+            other page. */}
+        {modelTabs && modelTabs.models.length > 0 && (
+          <div className="flex-1 min-w-0">
+            <ModelTabsBar models={modelTabs.models} activeModelId={modelTabs.activeModelId} chatterId={modelTabs.chatterId} />
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
           <div className="relative" ref={notifRef}>
             <button
               onClick={() => setNotifOpen((v) => !v)}

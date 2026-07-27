@@ -24,6 +24,12 @@ interface FanMetadataFull {
   last_subscription_at: string | null;
   last_paid_at: string | null;
   created_at: string | null;
+  // Set the first time our system observed OnlyFans' own "NEUE" fan badge
+  // for this fan (see the spend-ring overlay) - used below as a fallback
+  // "Fan seit" estimate when nobody's ever manually set one, since we have
+  // no confirmed live source yet for OnlyFans' own real subscription date
+  // (see task notes - needs a real paying-fan example to verify against).
+  first_seen_new_at: string | null;
 }
 
 interface FanCrmPanelProps {
@@ -234,7 +240,7 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
           <p className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-2">Info</p>
           <div className="flex justify-between text-xs">
             <span className="text-slate-500">Fan seit</span>
-            <span className="text-[#E2C48A]">{formatDate(metadata.created_at)}</span>
+            <span className="text-[#E2C48A]">{formatDate(metadata.created_at || metadata.first_seen_new_at)}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-slate-500">Letztes Abo</span>

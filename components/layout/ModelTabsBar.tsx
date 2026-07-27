@@ -12,6 +12,7 @@ interface TabModel {
 interface ModelTabsBarProps {
   models: TabModel[];
   activeModelId: string | null;
+  chatterId: string;
 }
 
 const POLL_INTERVAL_MS = 25000;
@@ -27,7 +28,7 @@ const SEEN_KEY_PREFIX = "crm-inbox-seen:";
  * compares it against what was last seen (stored in localStorage, purely
  * client-local - this is a best-effort UI nicety, not an audited record).
  */
-export default function ModelTabsBar({ models, activeModelId }: ModelTabsBarProps) {
+export default function ModelTabsBar({ models, activeModelId, chatterId }: ModelTabsBarProps) {
   const [unread, setUnread] = useState<Record<string, boolean>>({});
   const pollingRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<{ modelId: string; x: number; y: number } | null>(null);
@@ -67,7 +68,13 @@ export default function ModelTabsBar({ models, activeModelId }: ModelTabsBarProp
         const data = await res.json();
         if (data.status !== "success" || !data.fingerprint) return;
 
-        const seenKey = `${SEEN_KEY_PREFIX}${modelId}`;
+        // Keyed by chatter AND model - NOT just model. Two chatters sharing
+        // one physical browser (e.g. training a new hire on the same
+        // machine) must never clear each other's unread dot just because
+        // one of them looked at a model the other hasn't yet. Separate
+        // computers were already fine either way (localStorage never
+        // crossed devices), this only matters for the shared-machine case.
+        const seenKey = `${SEEN_KEY_PREFIX}${chatterId}:${modelId}`;
         const lastSeen = localStorage.getItem(seenKey);
 
         if (modelId === activeModelId) {
@@ -106,12 +113,12 @@ export default function ModelTabsBar({ models, activeModelId }: ModelTabsBarProp
       clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [models, activeModelId]);
+  }, [models, activeModelId, chatterId]);
 
   if (models.length === 0) return null;
 
   return (
-    <div className="flex gap-1.5 overflow-x-auto px-3 py-2 bg-[#0A0A0A] border-b border-[#9C7A3D]/20 flex-shrink-0 scrollbar-hide">
+    <div className="flex gap-2 overflow-x-auto px-1 scrollbar-hide">
       {models.map((m) => {
         const isActive = m.id === activeModelId;
         return (
@@ -122,7 +129,7 @@ export default function ModelTabsBar({ models, activeModelId }: ModelTabsBarProp
               e.preventDefault();
               setContextMenu({ modelId: m.id, x: e.clientX, y: e.clientY });
             }}
-            className={`relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition flex-shrink-0 border ${
+            className={`relative flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider whitespace-nowrap transition flex-shrink-0 border ${
               isActive
                 ? "bg-[#C9A86A]/20 text-[#C9A86A] border-[#C9A86A]/50"
                 : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10 border-transparent"
@@ -133,14 +140,14 @@ export default function ModelTabsBar({ models, activeModelId }: ModelTabsBarProp
               <img
                 src={m.avatar_url}
                 alt={m.name}
-                className="w-5 h-5 rounded-full object-cover border border-[#C9A86A]/40 flex-shrink-0"
+                className="w-9 h-9 rounded-full object-cover border-2 border-[#C9A86A]/40 flex-shrink-0"
               />
             ) : (
-              <span className="flex-shrink-0">👤</span>
+              <span className="w-9 h-9 flex items-center justify-center text-lg flex-shrink-0">👤</span>
             )}
-            <span className="truncate max-w-[100px]">{m.name}</span>
+            <span className="truncate max-w-[110px]">{m.name}</span>
             {unread[m.id] && !isActive && (
-              <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" aria-label="Neue Nachricht" />
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0" aria-label="Neue Nachricht" />
             )}
           </Link>
         );

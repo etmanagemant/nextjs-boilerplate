@@ -5,6 +5,7 @@ import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
 import GlobalSidebar from "@/components/layout/GlobalSidebar";
 import GlobalTopBar from "@/components/layout/GlobalTopBar";
 import WaitingForRole from "@/components/layout/WaitingForRole";
+import { ModelTabsProvider } from "@/components/layout/ModelTabsContext";
 
 export const metadata = {
   title: "ET Management",
@@ -76,13 +77,13 @@ export default async function RootLayout({
         )}
 
         {user && !pending && !isSoloView && (
-          <>
-            <GlobalTopBar />
+          <ModelTabsProvider>
+            <GlobalTopBar userId={user.id} />
             <GlobalSidebar role={role} grantedFeatures={grantedFeatures} />
             <main className="pt-32 pl-0 md:pl-56 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
               {children}
             </main>
-          </>
+          </ModelTabsProvider>
         )}
 
         {!user && (
