@@ -36,9 +36,13 @@ export async function disconnectModelSession(
   const { error } = await supabase.from("crm_model_sessions").update(update).eq("model_id", modelId);
 
   try {
+    // wipeProfile mirrors wipeCookies - CONFIRMED LIVE the VPS route used
+    // to always wipe its on-disk Chrome profile regardless of this flag,
+    // which meant the "just unreachable right now" case (wipeCookies=false)
+    // still destroyed the one restore path that actually works reliably.
     await vpsFetch("/disconnect", {
       method: "POST",
-      body: JSON.stringify({ modelId }),
+      body: JSON.stringify({ modelId, wipeProfile: wipeCookies }),
     });
   } catch (vpsErr) {
     // Not fatal - DB state already reflects "disconnected"

@@ -88,14 +88,17 @@ const pendingUploadBatches = {};
 // (Vercel's fixed 4.5MB request body cap means large files, mostly videos,
 // arrive as several sub-cap pieces instead of one request).
 const pendingChunkedUploads = {};
-// Was 20 minutes - but only one session can run at a time anyway
-// (MAX_CONCURRENT_SESSIONS below), so there's no extra RAM cost to keeping
-// the one connected model alive longer. Every time this closed a session,
-// the next view had to fall back to cloning cookies into a fresh browser,
-// which OnlyFans reliably rejects (redirects to a real login page) even
-// with valid cookies - so a short idle timeout was directly causing
-// "reconnected, but still see a login page" reports.
-const IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000; // close a session after 6h of no requests
+// Was 20 minutes, then 6 hours - both still far short of the explicit
+// requirement that a connected model stays connected for days to months,
+// only ever disconnecting on purpose via Connection Hub. CONFIRMED LIVE
+// (2026-07-27) that 6h was still too short even setting aside the
+// separate lastActivity-never-refreshed bug fixed above in assignSlot:
+// both test models went idle and dropped during a single working day.
+// 90 days as a generous outer safety net (genuinely-abandoned sessions
+// still eventually free their RAM) rather than disabling this sweep
+// outright - actual usage refreshes lastActivity long before this would
+// ever fire for a model anyone is still working.
+const IDLE_TIMEOUT_MS = 90 * 24 * 60 * 60 * 1000; // close a session after 90 days of no requests
 
 // Your Vultr box (ETMANAGEMENT, 80.240.30.188) has 1GB RAM - a single headful
 // Chromium session already uses 300-500MB, so default to ONE at a time.
@@ -1561,6 +1564,17 @@ async function assignSlot(userId, modelId, role, chatterName) {
     err.code = 'NO_MODEL_SESSION';
     throw err;
   }
+  // CONFIRMED LIVE (2026-07-27) as the actual cause of both connected
+  // models silently going idle and getting disconnected: every chatter
+  // interaction goes through THIS function (assignSlot requires the main
+  // session to already exist, so reaching here already proves it's in
+  // active use), yet nothing here ever refreshed the main session's own
+  // lastActivity - only admin-facing routes tied directly to
+  // modelSessions[modelId] did (e.g. /profile-info, /status). A model
+  // being actively worked all day via chatter slots, with nobody
+  // separately opening Connection Hub, still silently idle-timed-out and
+  // closed after IDLE_TIMEOUT_MS - exactly backwards from "in active use".
+  modelSessions[modelId].lastActivity = Date.now();
 
   const key = `${userId}:${modelId}`;
   let slot = CHATTER_SLOTS.find((s) => s.assignedTo === key);
@@ -2166,10 +2180,23 @@ app.get('/profile-info', async (req, res) => {
 // so cookies from this login never survive into the next connect.
 app.post('/disconnect', async (req, res) => {
   try {
-    const { modelId } = req.body || {};
+    const { modelId, wipeProfile } = req.body || {};
     if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
 
-    await closeSession(modelId, 'disconnect requested', true);
+    // CONFIRMED LIVE (2026-07-27) as a real bug, not just the separate idle-
+    // timeout one: this used to hardcode wipeProfile true regardless of
+    // caller intent, so lib/crmSession.ts's disconnectModelSession(...,
+    // wipeCookies=false) - specifically meant to preserve everything for a
+    // merely-unreachable-right-now session (see its own doc comment) - still
+    // wiped the on-disk Chrome profile every time. That profile is the
+    // PRIMARY restore path (survives a systemctl restart; the Supabase
+    // cookie fallback often gets rejected by OnlyFans per the comments in
+    // getOrCreateSession), so this silently downgraded every "temporarily
+    // unreachable" case to "only the unreliable fallback is left" - directly
+    // undermining the "stays connected for days/months" requirement.
+    // Defaults true so the manual Connection-Hub disconnect button (which
+    // never sends this param) keeps its existing wipe-everything behavior.
+    await closeSession(modelId, 'disconnect requested', wipeProfile !== false);
     res.json({ status: 'success', modelId });
   } catch (error) {
     console.error('[DISCONNECT] Error:', error.message);
