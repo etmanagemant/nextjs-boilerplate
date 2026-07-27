@@ -81,6 +81,19 @@ export default function GlobalTopBar({ userId }: { userId?: string }) {
         </div>
       </div>
 
+      {/* Model-Tabs (CRM Inbox) - anchored to start exactly where the
+          sidebar ends / the page content begins (md:left-56 matches
+          GlobalSidebar's own w-56), not tucked in right after the logo -
+          so they read as tabs FOR that content area, the same way a
+          browser's own tabs sit directly above the page they control.
+          Bottom-aligned to the header's own bottom edge so the active tab
+          can visually merge into the content below it (see ModelTabsBar). */}
+      {modelTabs && modelTabs.models.length > 0 && (
+        <div className="absolute left-4 md:left-56 right-48 bottom-0 flex items-end">
+          <ModelTabsBar models={modelTabs.models} activeModelId={modelTabs.activeModelId} chatterId={modelTabs.chatterId} />
+        </div>
+      )}
+
       <div className="h-full flex items-center gap-4 pl-4 pr-4 relative">
         <Image
           src="/images/logo.png"
@@ -90,16 +103,6 @@ export default function GlobalTopBar({ userId }: { userId?: string }) {
           priority
           className="h-28 w-auto flex-shrink-0"
         />
-
-        {/* Model-Tabs (CRM Inbox) - published via ModelTabsContext from
-            CRMInboxClient, so the header can show them without knowing
-            anything about the CRM Inbox page itself. Empty/absent on every
-            other page. */}
-        {modelTabs && modelTabs.models.length > 0 && (
-          <div className="flex-1 min-w-0">
-            <ModelTabsBar models={modelTabs.models} activeModelId={modelTabs.activeModelId} chatterId={modelTabs.chatterId} />
-          </div>
-        )}
 
         <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
           <div className="relative" ref={notifRef}>

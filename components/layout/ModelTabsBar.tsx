@@ -118,7 +118,7 @@ export default function ModelTabsBar({ models, activeModelId, chatterId }: Model
   if (models.length === 0) return null;
 
   return (
-    <div className="flex gap-2 overflow-x-auto px-1 scrollbar-hide">
+    <div className="flex items-end gap-1 overflow-x-auto scrollbar-hide">
       {models.map((m) => {
         const isActive = m.id === activeModelId;
         return (
@@ -129,10 +129,17 @@ export default function ModelTabsBar({ models, activeModelId, chatterId }: Model
               e.preventDefault();
               setContextMenu({ modelId: m.id, x: e.clientX, y: e.clientY });
             }}
-            className={`relative flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider whitespace-nowrap transition flex-shrink-0 border ${
+            // Real tab shape: rounded top corners only, no bottom border -
+            // the active tab's background matches the content area right
+            // below it (bg-black) and dips 1px past the header's own
+            // bottom border to visually paint over it, so it reads as
+            // "attached to" the content it controls, exactly like a
+            // browser tab. Inactive tabs sit a touch shorter/recessed
+            // (mt-1.5) and stay transparent until hovered.
+            className={`relative flex items-center gap-2 pl-1.5 pr-3 pt-1.5 rounded-t-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition flex-shrink-0 border border-b-0 ${
               isActive
-                ? "bg-[#C9A86A]/20 text-[#C9A86A] border-[#C9A86A]/50"
-                : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10 border-transparent"
+                ? "bg-black border-[#C9A86A]/50 text-[#C9A86A] pb-[7px] -mb-px z-10"
+                : "bg-transparent border-transparent text-slate-400 hover:text-[#E2C48A] hover:bg-black/40 pb-1.5 mt-1.5"
             }`}
           >
             {m.avatar_url ? (
