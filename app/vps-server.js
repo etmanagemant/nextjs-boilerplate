@@ -873,7 +873,7 @@ const FAN_SPEND_OVERLAY_SCRIPT_TEMPLATE = `
 
   function labelFor(value) {
     if (value === 'NEW') return 'NEW';
-    if (value === '0' || !value) return '0';
+    if (value === '0' || !value) return '$0';
     return '$' + value;
   }
 
