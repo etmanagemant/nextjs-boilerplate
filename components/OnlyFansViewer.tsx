@@ -64,6 +64,9 @@ export function OnlyFansViewer({
   const rfbRef = useRef<any>(null);
   const noSessionPollRef = useRef<NodeJS.Timeout | null>(null);
   const noSessionSyncedRef = useRef(false);
+  // How many consecutive "no_session" ticks (one every 4s) we've seen in a
+  // row - see the disconnect call below for why this exists.
+  const noSessionStreakRef = useRef(0);
   const unmountedRef = useRef(false);
   // Bumped on every start() (model switch OR manual retry) so a stale async
   // callback from an ABANDONED attempt - most notably the old model's own
@@ -106,16 +109,21 @@ export function OnlyFansViewer({
       // crash, the idle timeout) - Supabase's is_active flag has no way to
       // learn that on its own, so without this the Connection Hub keeps
       // showing "verbunden" for a model that's actually completely dead.
-      // Only fire once per no-session streak, not on every retry tick.
-      // keepCookies: true - CONFIRMED LIVE this raced the VPS's own
-      // autoReconnectAllModels() right after a restart: it silently
-      // restores the model from these exact stored cookies, but this
-      // check can still see "no session" for the first moment or two
-      // while the chatter's own slot browser is still spinning up, and
-      // wiping the cookies here would mean auto-reconnect only ever
-      // works once. is_active still flips to false either way, so
-      // Connection Hub still shows the honest "not connected" state.
-      if (!noSessionSyncedRef.current) {
+      // CONFIRMED LIVE (2026-07-29): firing this on the very FIRST no_session
+      // tick actively kills a session that's simply still being restored -
+      // autoReconnectAllModels() on the VPS restores models one at a time
+      // after a restart, so a model queued behind others can easily still
+      // read "no_session" here for several seconds even though it's about
+      // to come up fine on its own. Opening CRM Inbox during that window
+      // used to disconnect models for real (this calls the VPS's actual
+      // /disconnect, not just a UI flag) - a race that got WORSE the more
+      // models an admin clicked through right after a restart, since each
+      // one raced its own still-in-progress restore. Requiring several
+      // consecutive misses before treating it as genuinely gone gives a
+      // slow-but-fine restore real room, while a truly dead session (crash,
+      // idle timeout) still gets caught a few seconds later, same as before.
+      noSessionStreakRef.current += 1;
+      if (noSessionStreakRef.current >= 4 && !noSessionSyncedRef.current) {
         noSessionSyncedRef.current = true;
         fetch("/api/crm/browser-login/disconnect", {
           method: "POST",
@@ -136,6 +144,7 @@ export function OnlyFansViewer({
     }
 
     noSessionSyncedRef.current = false;
+    noSessionStreakRef.current = 0;
     await connectVnc(slotData.wsUrl, slotData.password, generation);
   };
 
@@ -184,6 +193,7 @@ export function OnlyFansViewer({
       clearTimeout(noSessionPollRef.current);
       noSessionPollRef.current = null;
     }
+    noSessionStreakRef.current = 0;
     setPhase("connecting");
     setError("");
     try {
