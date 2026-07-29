@@ -11,6 +11,7 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 const fs = require('fs/promises');
+const fsSync = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -90,11 +91,6 @@ const modelSessions = {}; // modelId -> { browser, page, lastActivity, createdAt
 // accumulates staged files for one Upload Vault batch (see /upload-to-vault-fan)
 // before the actual OnlyFans automation runs once for the whole batch.
 const pendingUploadBatches = {};
-// uploadId -> temp file path being appended to across chunks - see
-// /upload-to-vault-fan's chunk-reassembly block for why this exists
-// (Vercel's fixed 4.5MB request body cap means large files, mostly videos,
-// arrive as several sub-cap pieces instead of one request).
-const pendingChunkedUploads = {};
 // Was 20 minutes, then 6 hours - both still far short of the explicit
 // requirement that a connected model stays connected for days to months,
 // only ever disconnecting on purpose via Connection Hub. CONFIRMED LIVE
@@ -1880,6 +1876,26 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
+// Files are only ever meant to sit on this VPS briefly - staged right
+// before being attached and sent, never kept around. A batch that's
+// staged some files but never gets its "last file" request (chatter
+// closed the tab mid-upload, lost connection, etc.) previously left those
+// temp files on disk forever, with no upper bound on how much /tmp could
+// fill up over time - especially now that uploads go straight here with
+// no size cap (see /public-upload-to-vault-fan). This sweep removes
+// anything still pending an hour after it was first staged.
+const ABANDONED_BATCH_MS = 60 * 60 * 1000;
+setInterval(async () => {
+  const now = Date.now();
+  for (const [key, batch] of Object.entries(pendingUploadBatches)) {
+    if (now - batch.createdAt > ABANDONED_BATCH_MS) {
+      console.warn(`[UPLOAD-CLEANUP] Removing abandoned batch ${key} (${batch.filePaths.length} file(s))`);
+      await Promise.all(batch.filePaths.map((p) => fs.unlink(p).catch(() => {})));
+      delete pendingUploadBatches[key];
+    }
+  }
+}, 15 * 60 * 1000);
+
 // Periodic live-session health check - catches a session going invalid
 // WHILE this process keeps running, which autoReconnectAllModels can't
 // catch (that only ever runs once, at boot). CONFIRMED LIVE: a session
@@ -3131,49 +3147,49 @@ function verifyUploadToken(req, res, next) {
 }
 
 async function handleUploadToVaultFan(req, res) {
-  const { modelId, vaultFanLabel, vaultFanId, price, fileName, batchId, isLastInBatch, chatterName, chunkIndex, totalChunks, uploadId } = req.query;
+  const { modelId, vaultFanLabel, vaultFanId, price, fileName, batchId, isLastInBatch, chatterName } = req.query;
   if (!modelId || (!vaultFanLabel && !vaultFanId) || !fileName) {
     return res.status(400).json({ error: 'Missing modelId, vaultFanLabel/vaultFanId, or fileName' });
-  }
-  if (!req.body || !req.body.length) {
-    return res.status(400).json({ error: 'Missing file body' });
   }
 
   const session = modelSessions[modelId];
   if (!session) return res.json({ status: 'no_session' });
   const page = session.page;
 
-  // Large files (mostly videos) arrive as several sub-4.5MB chunks instead
-  // of one request - Vercel's Node.js functions hard-cap request bodies at
-  // 4.5MB, not configurable, so anything bigger has to be split client-side
-  // and reassembled here before it's treated like a normal single-request
-  // upload. A file under the cap never sends chunk params at all and skips
-  // straight to the else branch, unchanged from before.
-  let tempPath;
-  if (uploadId && totalChunks && Number(totalChunks) > 1) {
-    tempPath = pendingChunkedUploads[uploadId] || path.join('/tmp', `chunked-${uploadId}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`);
-    if (Number(chunkIndex) === 0) {
-      await fs.writeFile(tempPath, req.body);
-    } else {
-      await fs.appendFile(tempPath, req.body);
-    }
-    pendingChunkedUploads[uploadId] = tempPath;
-    if (Number(chunkIndex) < Number(totalChunks) - 1) {
-      return res.json({ status: 'chunk_staged', chunkIndex: Number(chunkIndex), totalChunks: Number(totalChunks) });
-    }
-    delete pendingChunkedUploads[uploadId];
-    // Last chunk received - tempPath now holds the fully reassembled file
-    // and falls through into the exact same staging/commit logic below as
-    // a normal non-chunked upload.
-  } else {
-    tempPath = path.join('/tmp', `upload-${Date.now()}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`);
-    await fs.writeFile(tempPath, req.body);
+  // Streams the request body straight to disk instead of buffering the
+  // whole thing in memory first (this route used to run behind
+  // express.raw(), which does exactly that, capped at 300mb). This VPS
+  // only has 1GB RAM, already sharing space with a running Chrome session
+  // per connected model - buffering a multi-hundred-MB/GB video on top of
+  // that risked exhausting it. Streaming means file size is bounded by
+  // disk space, not RAM, and there's no longer a hardcoded upload ceiling
+  // (or any need for the old client-side chunking this used to require -
+  // that only ever existed because of Vercel's 4.5MB request cap, which
+  // doesn't apply here at all now that uploads go straight to this VPS).
+  const tempPath = path.join('/tmp', `upload-${Date.now()}-${String(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+  try {
+    await new Promise((resolve, reject) => {
+      const writeStream = fsSync.createWriteStream(tempPath);
+      req.on('error', reject);
+      writeStream.on('error', reject);
+      writeStream.on('finish', resolve);
+      req.pipe(writeStream);
+    });
+  } catch (e) {
+    await fs.unlink(tempPath).catch(() => {});
+    return res.status(400).json({ error: 'Datei-Upload fehlgeschlagen: ' + e.message });
+  }
+
+  const stat = await fs.stat(tempPath).catch(() => null);
+  if (!stat || stat.size === 0) {
+    await fs.unlink(tempPath).catch(() => {});
+    return res.status(400).json({ error: 'Missing file body' });
   }
 
   const key = batchId || `single-${Date.now()}-${Math.random()}`;
 
   if (!pendingUploadBatches[key]) {
-    pendingUploadBatches[key] = { modelId, vaultFanId, vaultFanLabel, price, filePaths: [] };
+    pendingUploadBatches[key] = { modelId, vaultFanId, vaultFanLabel, price, filePaths: [], createdAt: Date.now() };
   }
   pendingUploadBatches[key].filePaths.push(tempPath);
 
@@ -3451,7 +3467,7 @@ async function handleUploadToVaultFan(req, res) {
 // Server-to-server variant (Next.js forwarding a file it already received
 // from the client) - kept for now as a fallback/for any caller still using
 // it, gated by the global shared-secret middleware like everything else.
-app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), handleUploadToVaultFan);
+app.post('/upload-to-vault-fan', handleUploadToVaultFan);
 
 // Direct browser-to-VPS variant - the client (Upload Vault / model
 // workspace, see lib/uploadVaultBatch.ts) uploads straight here instead of
@@ -3460,7 +3476,7 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), h
 // bandwidth allowance for no benefit. Exempted from the global X-VPS-Secret
 // middleware above (that secret must never reach a browser) - verifyUploadToken
 // checks a short-lived, model-scoped signed token instead.
-app.post('/public-upload-to-vault-fan', verifyUploadToken, express.raw({ limit: '300mb', type: '*/*' }), handleUploadToVaultFan);
+app.post('/public-upload-to-vault-fan', verifyUploadToken, handleUploadToVaultFan);
 
 // One-off diagnostic screenshot of a model's or slot's current page -
 // useful for verifying layout/CSS changes without needing a live VNC
