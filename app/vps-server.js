@@ -3663,6 +3663,11 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
   const { modelId } = req.query;
   const session = modelSessions[modelId];
   const sink = session?.displaySlot?.audioSink;
+  // Temporary diagnostic (2026-07-30): confirms whether the browser ever
+  // actually reaches this route at all vs. the click/token fetch never
+  // firing client-side - remove once the "no audio at all" report is
+  // root-caused.
+  console.log(`[AUDIO-STREAM] Hit for ${modelId}, sink=${sink || 'NONE'}, hasSession=${!!session}`);
   if (!sink) return res.status(404).end();
 
   res.setHeader('Content-Type', 'audio/mpeg');
@@ -3698,11 +3703,24 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
     ],
     {
       env: { ...process.env, PULSE_SERVER: '/run/pulse/native', PULSE_LATENCY_MSEC: '20' },
-      stdio: ['ignore', 'pipe', 'ignore'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     }
   );
   ff.stdout.pipe(res);
+  // Temporary diagnostic (2026-07-30): stderr used to be silently
+  // discarded, so a real ffmpeg failure (pulse permission/connection
+  // issue, etc.) would look identical to "everything's fine" from here -
+  // remove once root-caused.
+  let bytesOut = 0;
+  ff.stdout.on('data', (chunk) => {
+    bytesOut += chunk.length;
+  });
+  let stderrTail = '';
+  ff.stderr.on('data', (chunk) => {
+    stderrTail = (stderrTail + chunk.toString()).slice(-2000);
+  });
   const cleanup = () => {
+    console.log(`[AUDIO-STREAM] Closed for ${modelId} after ${bytesOut} bytes. Last stderr: ${stderrTail.slice(-500)}`);
     try {
       ff.kill('SIGTERM');
     } catch (e) {
@@ -3711,7 +3729,8 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
   };
   req.on('close', cleanup);
   res.on('close', cleanup);
-  ff.on('error', (e) => console.warn(`[AUDIO-STREAM] ffmpeg error for ${modelId}:`, e.message));
+  ff.on('error', (e) => console.warn(`[AUDIO-STREAM] ffmpeg spawn error for ${modelId}:`, e.message));
+  ff.on('exit', (code, signal) => console.log(`[AUDIO-STREAM] ffmpeg exited for ${modelId}: code=${code} signal=${signal}`));
 });
 
 async function handleUploadToVaultFan(req, res) {
