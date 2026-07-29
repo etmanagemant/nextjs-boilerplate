@@ -2013,6 +2013,118 @@ async function autoReconnectAllModels() {
   }
 }
 
+// Periodic authoritative sync of OnlyFans' own per-fan lifetime-spend total
+// into crm_fan_metadata.lifetime_value - see /api/vps/sync-fan-spend for the
+// full rationale. Briefly navigates the model's own live page away from
+// whatever it's currently showing (visible to any chatter watching via VNC
+// at that moment, same page the fan-spend-overlay/PPV-detector scripts run
+// on) to OnlyFans' own subscriber-activity list and back, so this runs on a
+// deliberately long interval and sequentially across models - both to avoid
+// interrupting a chatter's live view often, and to avoid looking like
+// automated bulk-navigation to OnlyFans itself (CONFIRMED LIVE this session:
+// rapid manual page-jumping during a debug session preceded a genuine
+// session invalidation - not proven causally, but reason enough for caution
+// here). Selector is best-effort (see comments inline) - only verified via
+// server-log output afterward, not live-tested further per explicit
+// instruction to stop poking a real connected model's account.
+const FAN_SPEND_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000;
+
+async function syncFanLifetimeSpend(modelId, page) {
+  const originalUrl = page.url();
+  const returnUrl = originalUrl.includes('/my/chats') ? originalUrl : 'https://onlyfans.com/my/chats';
+
+  await page.goto('https://onlyfans.com/my/collections/user-lists/subscribers/activity', {
+    waitUntil: 'domcontentloaded',
+    timeout: 20000,
+  });
+  // The fan list is rendered client-side (infinite scroll) - not present
+  // in the raw HTML immediately after domcontentloaded.
+  await new Promise((r) => setTimeout(r, 2000));
+
+  const fans = await page.evaluate(() => {
+    var results = [];
+    var seen = {};
+    // "Gesamt" (German) / "Total" (English, in case the account language
+    // ever changes) marks each fan row's lifetime-spend figure - matched by
+    // text rather than a class name, same "OnlyFans' own classes are
+    // unstable" trade-off already used elsewhere in this file (see
+    // NAV_SCRIPT_TEMPLATE, isLocked()).
+    var candidates = document.querySelectorAll('body *');
+    for (var i = 0; i < candidates.length; i++) {
+      var el = candidates[i];
+      if (el.children && el.children.length > 2) continue;
+      var txt = (el.textContent || '').trim();
+      if (txt !== 'Gesamt' && txt !== 'Total') continue;
+
+      var amount = null;
+      var container = el.parentElement;
+      for (var depth = 0; depth < 4 && container && amount === null; depth++) {
+        var m = (container.textContent || '').match(/(?:Gesamt|Total)\s*\$?\s*([\d.,]+)/);
+        if (m && m[1]) amount = parseFloat(m[1].replace(/,/g, ''));
+        container = container.parentElement;
+      }
+      if (amount === null) continue;
+
+      // Walk up to the row and find that fan's own profile/chat link -
+      // OnlyFans' auto-generated handles are literally "u<numericId>" (the
+      // same numeric id used in /my/chats/chat/<id>/ elsewhere in this
+      // codebase); a custom vanity handle won't match this and that row is
+      // skipped rather than guessed at - logged below so real coverage can
+      // be checked from server logs, not live-guessed further.
+      var row = el;
+      var fanId = null;
+      for (var up = 0; up < 12 && row && fanId === null; up++) {
+        var link = row.querySelector && row.querySelector('a[href^="/u"]');
+        if (link) {
+          var href = link.getAttribute('href') || '';
+          var idMatch = href.match(/^\/u(\d+)$/);
+          if (idMatch) fanId = idMatch[1];
+        }
+        row = row.parentElement;
+      }
+      if (fanId && !seen[fanId]) {
+        seen[fanId] = true;
+        results.push({ fanId: fanId, lifetimeValue: amount });
+      }
+    }
+    return results;
+  });
+
+  await page.goto(returnUrl, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+
+  if (!fans.length) {
+    console.warn(`[FAN-SPEND-SYNC] ${modelId}: found 0 fan rows - selector likely needs re-deriving`);
+    return;
+  }
+
+  if (!APP_URL || !CRON_SECRET) {
+    console.warn('[FAN-SPEND-SYNC] Skipped posting - NEXT_PUBLIC_APP_URL or CRON_SECRET not set');
+    return;
+  }
+  try {
+    const res = await fetch(`${APP_URL}/api/vps/sync-fan-spend?secret=${CRON_SECRET}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelId, fans }),
+    });
+    const data = await res.json().catch(() => ({}));
+    console.log(`[FAN-SPEND-SYNC] ${modelId}: scraped ${fans.length} fan(s) with a resolvable id, synced ${data.updated ?? '?'}`);
+  } catch (e) {
+    console.warn(`[FAN-SPEND-SYNC] ${modelId}: failed to post`, e.message);
+  }
+}
+
+setInterval(async () => {
+  // Sequential, not parallel - same 1-vCPU/1GB reasoning as autoReconnectAllModels.
+  for (const [modelId, session] of Object.entries(modelSessions)) {
+    try {
+      await syncFanLifetimeSpend(modelId, session.page);
+    } catch (e) {
+      console.warn(`[FAN-SPEND-SYNC] ${modelId}: error`, e.message);
+    }
+  }
+}, FAN_SPEND_SYNC_INTERVAL_MS);
+
 // ============================================================================
 // ROUTES
 // ============================================================================
