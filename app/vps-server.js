@@ -1008,7 +1008,15 @@ const FAN_SPEND_OVERLAY_SCRIPT_TEMPLATE = `
     var style = document.createElement('style');
     style.id = '__etm_spend_ring_style__';
     style.textContent =
-      '.' + RING_CLASS + '{box-shadow:0 0 0 2px rgba(10,10,10,0.9),0 0 6px 1px rgba(229,193,88,0.75);border-radius:50%;}' +
+      // CONFIRMED LIVE (2026-07-29, via screenshot): the old blurred glow
+      // (partial opacity, soft blur) was essentially invisible against
+      // the dark UI. A solid, fully-opaque ring with a small dark gap
+      // from the picture itself (Instagram-story-ring style) reads
+      // clearly regardless of what colors are in the photo underneath.
+      // CONFIRMED LIVE (via debug-eval): computed box-shadow was "none"
+      // despite the class being correctly applied - OnlyFans' own CSS for
+      // this element wins on specificity/load order without !important.
+      '.' + RING_CLASS + '{box-shadow:0 0 0 2px #0A0A0A,0 0 0 4px #E5C158 !important;border-radius:50% !important;}' +
       '.' + BADGE_CLASS + '{position:absolute;bottom:-3px;left:50%;transform:translateX(-50%);' +
       'background:linear-gradient(180deg,#E5C158,#9C7A3D);color:#0A0A0A;font-weight:800;font-size:9px;' +
       'line-height:1;padding:1px 4px;border-radius:8px;white-space:nowrap;box-shadow:0 0 4px rgba(0,0,0,0.6);z-index:2;}';
