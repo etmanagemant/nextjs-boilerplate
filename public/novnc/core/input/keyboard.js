@@ -14,6 +14,13 @@ import * as browser from "../util/browser.js";
 // Keyboard event handler
 //
 
+// Modifier keys we force-release after a pause in typing if they're still
+// marked down - see _scheduleStuckModifierCheck for why. A genuine long
+// modifier-hold (e.g. someone actually holding Shift) just re-presses on
+// the very next real key event, so this is safe even for that case.
+const MODIFIER_CODES = ['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight',
+                        'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight'];
+
 export default class Keyboard {
     constructor(target) {
         this._target = target || null;
@@ -21,6 +28,20 @@ export default class Keyboard {
         this._keyDownList = {};         // List of depressed keys
                                         // (even if they are happy)
         this._altGrArmed = false;       // Windows AltGr detection
+
+        // Windows' fake Ctrl+Alt AltGr emulation (see _handleAltGrTimeout
+        // below) is a timing heuristic that can lose the race under any
+        // scheduling jitter - when it does, we forward a real, spurious
+        // Ctrl keydown that has no natural release paired with it if the
+        // matching keyup ever gets dropped (also a known Windows issue for
+        // Shift, handled separately in _handleKeyUp). Confirmed report:
+        // €/$ sometimes produce nothing at all and leave Groß-/
+        // Kleinschreibung wrong on the characters typed right after - the
+        // signature of a modifier stuck "held" on the remote side. Rather
+        // than trying to perfectly fix an inherently racy upstream
+        // heuristic, self-heal by releasing any modifier still marked down
+        // after a short pause in typing, instead of only on window blur.
+        this._stuckModifierTimer = null;
 
         // keep these here so we can refer to them later
         this._eventHandlers = {
@@ -84,6 +105,8 @@ export default class Keyboard {
     }
 
     _handleKeyDown(e) {
+        this._scheduleStuckModifierCheck();
+
         const code = this._getKeyCode(e);
         let keysym = KeyboardUtil.getKeysym(e);
 
@@ -203,6 +226,8 @@ export default class Keyboard {
     }
 
     _handleKeyUp(e) {
+        this._scheduleStuckModifierCheck();
+
         stopEvent(e);
 
         const code = this._getKeyCode(e);
@@ -246,6 +271,21 @@ export default class Keyboard {
         this._sendKeyEvent(KeyTable.XK_Control_L, "ControlLeft", true);
     }
 
+    _scheduleStuckModifierCheck() {
+        clearTimeout(this._stuckModifierTimer);
+        this._stuckModifierTimer = setTimeout(
+            this._releaseStuckModifiers.bind(this), 1000);
+    }
+
+    _releaseStuckModifiers() {
+        for (const code of MODIFIER_CODES) {
+            if (code in this._keyDownList) {
+                Log.Debug("Releasing stuck modifier: " + code);
+                this._sendKeyEvent(this._keyDownList[code], code, false);
+            }
+        }
+    }
+
     _allKeysUp() {
         Log.Debug(">> Keyboard.allKeysUp");
         for (let code in this._keyDownList) {
@@ -274,6 +314,8 @@ export default class Keyboard {
         this._target.removeEventListener('keydown', this._eventHandlers.keydown);
         this._target.removeEventListener('keyup', this._eventHandlers.keyup);
         window.removeEventListener('blur', this._eventHandlers.blur);
+
+        clearTimeout(this._stuckModifierTimer);
 
         // Release (key up) all keys that are in a down state
         this._allKeysUp();
