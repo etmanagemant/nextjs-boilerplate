@@ -75,19 +75,35 @@ export function OnlyFansViewer({
   // the VPS's ffmpeg capture AT ALL until the exact moment a real click
   // happens, so what starts playing is always genuinely live.
   const audioUnlockedRef = useRef(false);
+  // TEMPORARY (2026-07-30): visible on-screen trace instead of relying on
+  // server logs that kept missing the actual test window - shows exactly
+  // which step audio gets stuck on, in real time, on screen. Remove once
+  // "kein Ton" is finally root-caused.
+  const [audioDebug, setAudioDebug] = useState<string[]>([]);
+  const logAudioDebug = (msg: string) => setAudioDebug((prev) => [...prev.slice(-6), `${new Date().toLocaleTimeString("de-DE")} ${msg}`]);
   const unlockAudio = () => {
+    logAudioDebug(`Klick erkannt (isMain=${isMainRef.current}, schonEntsperrt=${audioUnlockedRef.current})`);
     if (audioUnlockedRef.current || !isMainRef.current) return;
     audioUnlockedRef.current = true;
+    logAudioDebug("Fordere Audio-Token an...");
     fetch("/api/crm/audio-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ modelId }),
     })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.audioUrl) setAudioUrl(data.audioUrl);
+      .then((r) => {
+        logAudioDebug(`Token-Antwort: HTTP ${r.status}`);
+        return r.ok ? r.json() : null;
       })
-      .catch(() => {});
+      .then((data) => {
+        if (data?.audioUrl) {
+          logAudioDebug("Token OK, starte Audio-Element");
+          setAudioUrl(data.audioUrl);
+        } else {
+          logAudioDebug(`Kein audioUrl in Antwort: ${JSON.stringify(data)}`);
+        }
+      })
+      .catch((err) => logAudioDebug(`Fetch-Fehler: ${err.message}`));
   };
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
@@ -181,6 +197,7 @@ export function OnlyFansViewer({
     // for why the actual token/stream only starts on a real click, not
     // eagerly here.
     isMainRef.current = !!slotData.isMain;
+    logAudioDebug(`Sitzung verbunden, isMain=${slotData.isMain}, slotId=${slotData.slotId ?? "-"}`);
     setAudioUrl(null);
     await connectVnc(slotData.wsUrl, slotData.password, generation);
   };
@@ -468,9 +485,31 @@ export function OnlyFansViewer({
           // to that gesture, so explicitly (re)try once this exact
           // element actually exists.
           onCanPlay={() => {
-            if (audioUnlockedRef.current) audioRef.current?.play().catch(() => {});
+            logAudioDebug("Audio-Element: canplay");
+            if (audioUnlockedRef.current) {
+              audioRef.current
+                ?.play()
+                .then(() => logAudioDebug("play() erfolgreich gestartet"))
+                .catch((err) => logAudioDebug(`play() Fehler: ${err.message}`));
+            }
           }}
+          onPlaying={() => logAudioDebug("Audio spielt jetzt wirklich (playing event)")}
+          onError={(e) => {
+            const err = (e.target as HTMLAudioElement).error;
+            logAudioDebug(`Audio-Element Fehler: code=${err?.code} ${err?.message || ""}`);
+          }}
+          onStalled={() => logAudioDebug("Audio: stalled (keine Daten)")}
         />
+      )}
+
+      {/* TEMPORARY (2026-07-30): visible trace, remove once "kein Ton"
+          is root-caused - see unlockAudio/logAudioDebug. */}
+      {phase === "live" && audioDebug.length > 0 && (
+        <div className="absolute top-2 left-2 z-50 bg-black/90 border border-yellow-400 text-yellow-300 text-[10px] font-mono p-2 rounded max-w-xs pointer-events-none">
+          {audioDebug.map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+        </div>
       )}
 
       {phase === "live" && (
