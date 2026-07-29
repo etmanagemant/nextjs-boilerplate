@@ -45,6 +45,7 @@ export default function BrowserLoginStreamComponent({
   // not waiting for a manual click - closes that gap; the button stays as
   // an explicit fallback/reassurance, not the only path to actually saving.
   const autoConfirmedRef = useRef(false);
+  const loginStreakRef = useRef(0);
 
   // The login display's X11 keymap can end up mismatched with whatever
   // physical keyboard layout the admin's OS/browser is using (e.g. AltGr
@@ -85,9 +86,20 @@ export default function BrowserLoginStreamComponent({
       const data = await res.json();
       const loggedIn = !!data.isLoggedIn;
       setIsLoggedIn(loggedIn);
-      // Auto-save the moment a valid login shows up - see autoConfirmedRef
-      // above for why this can't wait for a manual click anymore.
-      if (loggedIn && !autoConfirmedRef.current) {
+      // CONFIRMED LIVE (2026-07-29): a single loggedIn:true tick isn't
+      // reliable enough to auto-save on - if the login page itself
+      // reloads mid-typing (OnlyFans' own redirect/challenge, unrelated
+      // to anything typed), there's a brief moment where the password
+      // field hasn't rendered back in yet, which the VPS-side heuristic
+      // can misread as "logged in" for exactly one poll. Requiring 2
+      // consecutive true reads (4s apart) filters that transient blip
+      // without meaningfully delaying a genuine login.
+      if (loggedIn) {
+        loginStreakRef.current += 1;
+      } else {
+        loginStreakRef.current = 0;
+      }
+      if (loginStreakRef.current >= 2 && !autoConfirmedRef.current) {
         autoConfirmedRef.current = true;
         handleConfirm();
       }

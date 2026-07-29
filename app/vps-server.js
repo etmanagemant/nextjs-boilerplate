@@ -2051,6 +2051,7 @@ async function autoReconnectAllModels() {
       const session = await withModelLock(modelId, () => getOrCreateSession(modelId, cookies || {}));
       const state = await getLoginState(session.page);
       if (state.isLoggedIn) {
+        session.loggedInSince = session.loggedInSince || Date.now();
         console.log(`[AUTO-RECONNECT] ${modelId}: restored silently`);
       } else {
         console.warn(`[AUTO-RECONNECT] ${modelId}: stored cookies no longer valid, closing and marking disconnected`);
@@ -2171,6 +2172,14 @@ async function syncFanLifetimeSpend(modelId, page) {
 setInterval(async () => {
   // Sequential, not parallel - same 2-vCPU/2GB reasoning as autoReconnectAllModels.
   for (const [modelId, session] of Object.entries(modelSessions)) {
+    // CONFIRMED LIVE (2026-07-29): this used to run against every session
+    // unconditionally, including one an admin was mid-fresh-login on -
+    // this loop's own page.goto() could fire right while someone was
+    // typing OnlyFans credentials, reloading the login form out from
+    // under them (losing what they'd typed) for no reason connected to
+    // anything they did. Only ever touch a session already confirmed
+    // logged in at least once.
+    if (!session.loggedInSince) continue;
     try {
       await syncFanLifetimeSpend(modelId, session.page);
     } catch (e) {
@@ -2234,6 +2243,12 @@ app.get('/status', async (req, res) => {
       await closeSession(modelId, 'page crashed independently of browser');
       return res.json({ hasSession: false, isLoggedIn: false });
     }
+    // Tracks whether THIS session has ever been confirmed logged in, so
+    // background routines that navigate session.page (FAN-SPEND-SYNC etc.)
+    // can skip a session that's still mid fresh-login and never interrupt
+    // someone actively typing credentials - see that loop below.
+    if (state.isLoggedIn) session.loggedInSince = session.loggedInSince || Date.now();
+    else session.loggedInSince = null;
     res.json({ hasSession: true, ...state });
   } catch (error) {
     console.error('[STATUS] Error:', error.message);
