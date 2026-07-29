@@ -33,6 +33,18 @@ export default function BrowserLoginStreamComponent({
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<any>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
+  // CONFIRMED LIVE: crm_model_sessions.is_active only ever got set back to
+  // true by the admin explicitly clicking "Creator verbinden" below - if a
+  // session was already fine (still logged in from before, nothing to
+  // actually confirm) and whoever reconnected just saw it working and
+  // closed this modal, is_active stayed stuck false forever, even though
+  // the real OnlyFans session was perfectly healthy. That silently broke
+  // auto-reconnect on every subsequent restart (sessions-to-restore only
+  // ever looks at is_active), making the SAME model need "reconnecting"
+  // over and over. Auto-saving the instant a valid login is detected -
+  // not waiting for a manual click - closes that gap; the button stays as
+  // an explicit fallback/reassurance, not the only path to actually saving.
+  const autoConfirmedRef = useRef(false);
 
   // The login display's X11 keymap can end up mismatched with whatever
   // physical keyboard layout the admin's OS/browser is using (e.g. AltGr
@@ -71,7 +83,14 @@ export default function BrowserLoginStreamComponent({
       const res = await fetch(`/api/crm/browser-login/status?modelId=${encodeURIComponent(modelId)}`);
       if (!res.ok) return;
       const data = await res.json();
-      setIsLoggedIn(!!data.isLoggedIn);
+      const loggedIn = !!data.isLoggedIn;
+      setIsLoggedIn(loggedIn);
+      // Auto-save the moment a valid login shows up - see autoConfirmedRef
+      // above for why this can't wait for a manual click anymore.
+      if (loggedIn && !autoConfirmedRef.current) {
+        autoConfirmedRef.current = true;
+        handleConfirm();
+      }
     } catch (err) {
       console.error("[LOGIN-VIEW] state check error:", err);
     }
@@ -168,6 +187,10 @@ export default function BrowserLoginStreamComponent({
     } catch (err: any) {
       setPhase("live");
       setError(err.message || "Speichern fehlgeschlagen");
+      // Let the next poll tick auto-retry instead of staying stuck - this
+      // was only ever a transient network/API hiccup, not a real login
+      // problem (isLoggedIn was already confirmed true to get here).
+      autoConfirmedRef.current = false;
     }
   };
 
