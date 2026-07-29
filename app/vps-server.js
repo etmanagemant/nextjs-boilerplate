@@ -1574,11 +1574,22 @@ async function ensureModelDisplayInfra(slot) {
     spawn('/usr/bin/setxkbmap', ['de'], { env: { ...process.env, DISPLAY: slot.display }, stdio: 'ignore' });
 
     if (!slot.x11vncProc || slot.x11vncProc.exitCode !== null) {
+      // CONFIRMED LIVE (2026-07-30): reported as a doubled/ghosted image
+      // behind an actively playing video - event-driven XDAMAGE capture
+      // (no -noxdamage) can miss or merge damage regions during fast,
+      // full-frame video motion, leaving stale pixels in areas that
+      // should have redrawn but didn't get flagged. -noxdamage forces
+      // full-frame polling instead, which is reliable for motion at the
+      // cost of more CPU - same flag already used on the main login
+      // display for the same reason. NOT applied to CHATTER_SLOTS - those
+      // already had -noxdamage removed on purpose to fix a different,
+      // already-confirmed bug (a persistent vertical line) and haven't
+      // shown this symptom.
       slot.x11vncProc = spawn('/usr/bin/x11vnc', [
         '-display', slot.display,
         '-rfbport', String(slot.vncPort),
         '-rfbauth', '/root/.vnc/login_passwd',
-        '-forever', '-shared', '-localhost', '-quiet', '-xkb', '-add_keysyms', '-nap',
+        '-forever', '-shared', '-noxdamage', '-localhost', '-quiet', '-xkb', '-add_keysyms', '-nap',
       ], { stdio: 'ignore' });
       slot.x11vncProc.on('exit', (code) => console.warn(`[MODEL-DISPLAY ${slot.id}] x11vnc exited (${code})`));
       await new Promise((r) => setTimeout(r, 300));
