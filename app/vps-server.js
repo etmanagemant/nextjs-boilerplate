@@ -3670,7 +3670,15 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
   console.log(`[AUDIO-STREAM] Hit for ${modelId}, sink=${sink || 'NONE'}, hasSession=${!!session}`);
   if (!sink) return res.status(404).end();
 
-  res.setHeader('Content-Type', 'audio/mpeg');
+  // CONFIRMED LIVE (2026-07-30): even after the pulse-side fix (TTFB
+  // ~2.1s measured), actual playback still started ~9s after the token
+  // request - the remaining delay is the BROWSER's own conservative
+  // read-ahead buffering before it trusts an unbounded, duration-less
+  // MP3 stream enough to start playing. WebM/Opus (small clusters, see
+  // -cluster_time_limit below) is built for exactly this - low-latency,
+  // indefinite-length streaming - and Chrome's own media pipeline treats
+  // it far less conservatively than plain progressive MP3.
+  res.setHeader('Content-Type', 'audio/webm');
   res.setHeader('Cache-Control', 'no-cache, no-store');
 
   const ff = spawn(
@@ -3699,7 +3707,14 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
       // without blowing out louder parts, instead of a flat multiplier
       // that would either still be too quiet or clip on louder content.
       '-af', 'dynaudnorm=f=200:g=15',
-      '-ac', '2', '-ar', '44100', '-f', 'mp3', '-b:a', '64k', '-reservoir', '0', '-flush_packets', '1', 'pipe:1',
+      // Opus wants 48kHz natively. -cluster_time_limit/-cluster_size_limit
+      // force ffmpeg's webm muxer to flush a small cluster (~200ms) as
+      // soon as it has one instead of accumulating the much larger
+      // default before writing anything out - a second, container-level
+      // buffering delay independent of both pulse and the browser.
+      '-ac', '2', '-ar', '48000', '-c:a', 'libopus', '-b:a', '64k',
+      '-f', 'webm', '-cluster_time_limit', '200', '-cluster_size_limit', '512k',
+      '-flush_packets', '1', 'pipe:1',
     ],
     {
       env: { ...process.env, PULSE_SERVER: '/run/pulse/native', PULSE_LATENCY_MSEC: '20' },
