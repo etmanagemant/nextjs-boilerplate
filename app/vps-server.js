@@ -220,13 +220,28 @@ const DARK_MODE_SCRIPT = `
       textNode.parentNode.replaceChild(frag, textNode);
     });
   }
+  window.__etmEmojiDebug = { scans: 0, errors: [] };
   function scan() {
-    wrapEmojiIn(document.body);
+    window.__etmEmojiDebug.scans++;
+    try {
+      wrapEmojiIn(document.body);
+    } catch (e) {
+      window.__etmEmojiDebug.errors.push(e.message);
+    }
   }
   if (document.body) scan();
-  new MutationObserver(function() {
-    scan();
-  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  else document.addEventListener('DOMContentLoaded', scan);
+  // CONFIRMED LIVE (2026-07-29): a MutationObserver on document.documentElement
+  // works on this page in general (tested directly), but this specific one -
+  // set up this early, via evaluateOnNewDocument - never once fired for
+  // OnlyFans' own real chat content loading in, root cause not fully
+  // pinned down under time pressure. Belt-and-suspenders instead of
+  // chasing it further: keep the observer (catches most cases fast, no
+  // real cost), but a 1s poll guarantees this keeps working regardless of
+  // why the observer alone doesn't - scanning the chat DOM every second is
+  // cheap enough not to matter.
+  new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  setInterval(scan, 1000);
 })();
 `;
 
