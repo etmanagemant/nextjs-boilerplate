@@ -3681,9 +3681,18 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
   res.setHeader('Content-Type', 'audio/webm');
   res.setHeader('Cache-Control', 'no-cache, no-store');
 
+  // CONFIRMED LIVE (2026-07-30): a second video played right after the
+  // first came out even more delayed (40s+) instead of starting fresh -
+  // the classic signature of the encoder falling BEHIND real-time under
+  // CPU contention (Chrome actively decoding/rendering video + VNC frame
+  // capture + the dark-mode CSS filter, all at once) rather than a fixed
+  // startup cost - once behind, it can never catch back up on its own.
+  // `nice -n -15` (root-only, we are root) tells the OS scheduler to
+  // favor this process over everything else on the box whenever they
+  // compete for CPU, so it keeps up in real time even when Chrome is busy.
   const ff = spawn(
-    'ffmpeg',
-    [
+    'nice',
+    ['-n', '-15', 'ffmpeg', ...[
       // CONFIRMED LIVE (2026-07-29, measured directly): reported as audio
       // arriving 10-20s after the video that produced it had already
       // finished, growing worse the longer playback ran - real pipeline
@@ -3715,7 +3724,7 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
       '-ac', '2', '-ar', '48000', '-c:a', 'libopus', '-b:a', '64k',
       '-f', 'webm', '-cluster_time_limit', '200', '-cluster_size_limit', '512k',
       '-flush_packets', '1', 'pipe:1',
-    ],
+    ]],
     {
       env: { ...process.env, PULSE_SERVER: '/run/pulse/native', PULSE_LATENCY_MSEC: '20' },
       stdio: ['ignore', 'pipe', 'pipe'],
