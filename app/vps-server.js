@@ -1324,7 +1324,7 @@ async function ensureSlotInfra(slot) {
         '-display', slot.display,
         '-rfbport', String(slot.vncPort),
         '-rfbauth', '/root/.vnc/login_passwd',
-        '-forever', '-shared', '-localhost', '-quiet', '-xkb', '-add_keysyms',
+        '-forever', '-shared', '-localhost', '-quiet', '-xkb', '-add_keysyms', '-nap',
       ], { stdio: 'ignore' });
       slot.x11vncProc.on('exit', (code) => console.warn(`[SLOT ${slot.id}] x11vnc exited (${code})`));
       await new Promise((r) => setTimeout(r, 300));
@@ -3396,7 +3396,17 @@ async function handleUploadToVaultFan(req, res) {
     // all of them in one native dialog interaction, exactly like a human
     // ctrl-clicking multiple files - this is the whole batching mechanism
     // on the browser side, the rest is just staging paths beforehand.
-    await fileChooser.accept(filePaths);
+    // CONFIRMED LIVE (2026-07-29): unlike every other wait in this route,
+    // this one had no timeout - a large video under memory pressure left a
+    // request hanging forever with zero log output and zero response ever
+    // sent to the client, indistinguishable from a dead server from the
+    // outside. Everything else here fails loud within seconds; this must too.
+    await Promise.race([
+      fileChooser.accept(filePaths),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('accept_timeout')), 45000)),
+    ]).catch(() => {
+      throw Object.assign(new Error('Datei-Anhängen hat zu lange gedauert (Timeout)'), { isAcceptTimeout: true });
+    });
     // UNVERIFIED (needs one live confirmation): a fixed 3s wait was fine
     // for one small file, but a batch of up to 20 (possibly large videos)
     // can genuinely take longer for OnlyFans to finish uploading/
