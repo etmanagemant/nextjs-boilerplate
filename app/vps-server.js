@@ -235,22 +235,44 @@ const DARK_MODE_SCRIPT = `
 })();
 `;
 
-// Drives window.__etmScanEmoji (see DARK_MODE_SCRIPT) from the server side
-// instead of an in-page timer - CONFIRMED LIVE that neither a
-// MutationObserver nor a setInterval set up from inside an
-// evaluateOnNewDocument script kept firing past the first call, for
-// reasons not fully pinned down; a server-driven page.evaluate() call is
-// the one mechanism proven reliable throughout that debugging. Covers
-// every active model session AND chatter slot - the emoji issue isn't
-// specific to either.
-setInterval(() => {
+// Drives every window.__etm*Rescan function (DARK_MODE_SCRIPT,
+// SENT_BY_OVERLAY, SCRIPT_VAULT_BUTTON, FAN_SPEND_OVERLAY,
+// PPV_PURCHASE_DETECTOR) from the SERVER side instead of an in-page
+// timer/observer - CONFIRMED LIVE (2026-07-29, via /debug-eval) that
+// neither a MutationObserver nor a setInterval set up from inside an
+// evaluateOnNewDocument script kept firing past their first call, for
+// reasons not fully pinned down under time pressure; a server-driven
+// page.evaluate() call is the one mechanism proven reliable throughout
+// that whole debugging session. Every function is optional-chained
+// (`window.X && window.X()`) since not every page has every one of these
+// injected. Covers every active model session AND chatter slot.
+//
+// Two tiers, matching each feature's original (never-actually-firing)
+// interval rather than hammering everything at the fastest rate: cheap
+// DOM-only rescans stay fast, anything that does a real network fetch
+// runs at roughly its original, slower cadence.
+function evalOnAllPages(code) {
   for (const session of Object.values(modelSessions)) {
-    if (session.page) session.page.evaluate('window.__etmScanEmoji && window.__etmScanEmoji()').catch(() => {});
+    if (session.page) session.page.evaluate(code).catch(() => {});
   }
   for (const slot of CHATTER_SLOTS) {
-    if (slot.page) slot.page.evaluate('window.__etmScanEmoji && window.__etmScanEmoji()').catch(() => {});
+    if (slot.page) slot.page.evaluate(code).catch(() => {});
   }
+}
+setInterval(() => {
+  evalOnAllPages(
+    'window.__etmScanEmoji && window.__etmScanEmoji();' +
+      'window.__etmScriptVaultButtonRescan && window.__etmScriptVaultButtonRescan();' +
+      'window.__etmFanSpendRescan && window.__etmFanSpendRescan();' +
+      'window.__etmPpvRescan && window.__etmPpvRescan();'
+  );
 }, 1500);
+setInterval(() => {
+  evalOnAllPages('window.__etmSentByRescan && window.__etmSentByRescan();');
+}, 4000);
+setInterval(() => {
+  evalOnAllPages('window.__etmFanSpendRefresh && window.__etmFanSpendRefresh();');
+}, 20000);
 
 async function enableDarkMode(page) {
   try {
@@ -756,11 +778,20 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
     attachSendListeners();
     scanForLocalSends();
     fetchLog();
-    setInterval(fetchLog, 4000);
-    new MutationObserver(scanForLocalSends).observe(document.documentElement, { childList: true, subtree: true });
   }
   if (document.body) start();
   else document.addEventListener('DOMContentLoaded', start);
+  // CONFIRMED LIVE (2026-07-29, via /debug-eval): neither a setInterval
+  // nor a MutationObserver set up from inside evaluateOnNewDocument kept
+  // firing past their first call on this page - same root cause as the
+  // emoji-color fix elsewhere in this file. Without this, only messages
+  // already on-screen at page load ever got logged/labeled; anything sent
+  // during the session itself silently never did. Server-driven instead
+  // (see the periodic page.evaluate() call next to FAN-SPEND-SYNC).
+  window.__etmSentByRescan = function() {
+    scanForLocalSends();
+    fetchLog();
+  };
 })();
 `;
 
@@ -945,10 +976,14 @@ const SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE = `
 
   function start() {
     scan();
-    new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
   }
   if (document.body) start();
   else document.addEventListener('DOMContentLoaded', start);
+  // See SENT_BY_OVERLAY_SCRIPT_TEMPLATE's identical note - the in-page
+  // MutationObserver this used to rely on never fired again after page
+  // load, so the button only ever appeared on whatever chat happened to
+  // already be open. Server-driven instead.
+  window.__etmScriptVaultButtonRescan = scan;
 })();
 `;
 
@@ -986,7 +1021,10 @@ const FAN_SPEND_OVERLAY_SCRIPT_TEMPLATE = `
 
   function labelFor(value) {
     if (value === 'NEW') return 'NEW';
-    if (value === '0' || !value) return '$0';
+    // Per the user's explicit ask (Task #86): a fan with no spend yet
+    // shows plain "0", not "$0" - the $ implies a real (if zero) amount
+    // was looked up, "0" alone reads more like "nothing here yet".
+    if (value === '0' || !value) return '0';
     return '$' + value;
   }
 
@@ -1039,25 +1077,31 @@ const FAN_SPEND_OVERLAY_SCRIPT_TEMPLATE = `
   function start() {
     ensureStyles();
     refresh();
-    setInterval(refresh, 20000);
-    // Vue re-renders chat-list rows on its own (new scroll position, a
-    // fresh message, muting/unmuting) - a fresh DOM node loses our injected
-    // badge, so re-apply from the cache on every mutation instead of only
-    // waiting for the next 20s refresh cycle.
-    new MutationObserver(renderFromCache).observe(document.documentElement, { childList: true, subtree: true });
   }
   if (document.body) start();
   else document.addEventListener('DOMContentLoaded', start);
+  // CONFIRMED LIVE (2026-07-29, via /debug-eval): the setInterval and
+  // MutationObserver this used to lean on never fired again after the
+  // first call - very likely THE cause of the reported "goldener Rahmen
+  // erscheint nicht + $0 statt 0" (a refresh() that ran before the chat
+  // list had even finished loading got 0/stale data, then nothing ever
+  // refreshed it again, and Vue's own re-renders kept wiping the badge
+  // with nothing left to re-apply it). Server-driven instead: a cheap,
+  // frequent DOM-only reapply plus a heavier periodic real refetch, same
+  // split as the original design intended.
+  window.__etmFanSpendRescan = renderFromCache;
+  window.__etmFanSpendRefresh = refresh;
 })();
 `;
 
-async function applyFanSpendOverlay(page, modelId) {
+async function applyFanSpendOverlay(page, modelId, applyOnCurrentPage = false) {
   try {
     const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
     const script = FAN_SPEND_OVERLAY_SCRIPT_TEMPLATE
       .replace('%%MODEL_ID%%', String(modelId || '').replace(/"/g, '\\"'))
       .replace('%%API_BASE%%', apiBase.replace(/"/g, '\\"'));
     await page.evaluateOnNewDocument(script);
+    if (applyOnCurrentPage) await page.evaluate(script).catch(() => {});
   } catch (e) {
     console.warn('[FAN-SPEND-OVERLAY] Could not register:', e.message);
   }
@@ -1168,21 +1212,23 @@ const PPV_PURCHASE_DETECTOR_SCRIPT_TEMPLATE = `
 
   function start() {
     scan();
-    setInterval(scan, 5000);
-    new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
   }
   if (document.body) start();
   else document.addEventListener('DOMContentLoaded', start);
+  // See SENT_BY_OVERLAY_SCRIPT_TEMPLATE's identical note - server-driven
+  // instead of an in-page timer/observer that never fired again.
+  window.__etmPpvRescan = scan;
 })();
 `;
 
-async function applyPpvPurchaseDetector(page, modelId) {
+async function applyPpvPurchaseDetector(page, modelId, applyOnCurrentPage = false) {
   try {
     const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
     const script = PPV_PURCHASE_DETECTOR_SCRIPT_TEMPLATE
       .replace('%%MODEL_ID%%', String(modelId || '').replace(/"/g, '\\"'))
       .replace('%%API_BASE%%', apiBase.replace(/"/g, '\\"'));
     await page.evaluateOnNewDocument(script);
+    if (applyOnCurrentPage) await page.evaluate(script).catch(() => {});
   } catch (e) {
     console.warn('[PPV-PURCHASE-DETECTOR] Could not register:', e.message);
   }
@@ -1877,6 +1923,11 @@ async function assignSlot(userId, modelId, role, chatterName) {
     if (isNewClaimant) {
       await applySentByOverlay(session.page, chatterName, modelId, true);
       await applyScriptVaultButton(session.page, userId, role, modelId, true);
+      // Only makes sense on the chat-list view, but harmless (no-op,
+      // finds nothing) anywhere else - same reasoning as chatter slots
+      // already applying all four of these unconditionally.
+      await applyFanSpendOverlay(session.page, modelId, true);
+      await applyPpvPurchaseDetector(session.page, modelId, true);
     }
     return { wsPath: session.displaySlot.wsPath, isMain: true };
   }
