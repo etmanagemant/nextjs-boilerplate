@@ -1587,7 +1587,15 @@ async function assignSlot(userId, modelId, role, chatterName) {
       err.code = 'NO_MODEL_SESSION';
       throw err;
     }
-    await getOrCreateSession(modelId, true);
+    // CONFIRMED LIVE (2026-07-29): calling getOrCreateSession here directly
+    // (not through withModelLock keyed by plain modelId, same key /connect
+    // and auto-reconnect use) let this race a REAL, in-progress Connection
+    // Hub login for the same model - two Chrome launches against the same
+    // --user-data-dir at once, which is exactly the corruption
+    // withModelLock exists to prevent elsewhere in this file. Caused
+    // ENOENT errors in ensureSlotBrowser's profile copy and a freshly
+    // reconnected model getting disconnected again within seconds.
+    await withModelLock(modelId, () => getOrCreateSession(modelId, true));
   }
   // CONFIRMED LIVE (2026-07-27) as the actual cause of both connected
   // models silently going idle and getting disconnected: every chatter
