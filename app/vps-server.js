@@ -498,7 +498,15 @@ async function applyNavRestrictions(page, role) {
 // a closure over a variable).
 const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
 (function() {
-  var CHATTER_NAME = "%%CHATTER_NAME%%";
+  // Main-session viewers can change (see assignSlot's mainViewer claim),
+  // which re-runs this script on an ALREADY-loaded page to update who
+  // gets credited - without this guard, the event listeners below would
+  // stack up (one extra "gesendet von" log per past viewer) instead of
+  // just picking up the new name. window.__etmChatterName is what
+  // actually gets read at send-time, not the closured constant below.
+  window.__etmChatterName = "%%CHATTER_NAME%%";
+  if (window.__etmSentByInstalled) return;
+  window.__etmSentByInstalled = true;
   var MODEL_ID = "%%MODEL_ID%%";
   var API_BASE = "%%API_BASE%%";
   var LABEL_CLASS = 'etm-sent-by-label';
@@ -576,8 +584,8 @@ const SENT_BY_OVERLAY_SCRIPT_TEMPLATE = `
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(
         text
-          ? { modelId: MODEL_ID, fanId: fanId, chatterName: CHATTER_NAME, messageText: text }
-          : { modelId: MODEL_ID, fanId: fanId, chatterName: CHATTER_NAME, mediaKey: mediaKey }
+          ? { modelId: MODEL_ID, fanId: fanId, chatterName: window.__etmChatterName, messageText: text }
+          : { modelId: MODEL_ID, fanId: fanId, chatterName: window.__etmChatterName, mediaKey: mediaKey }
       ),
     }).catch(function() {});
   }
@@ -1109,7 +1117,13 @@ async function applyPpvPurchaseDetector(page, modelId) {
   }
 }
 
-async function applySentByOverlay(page, chatterName, modelId) {
+// applyOnCurrentPage: evaluateOnNewDocument only takes effect on the NEXT
+// navigation - fine for a chatter slot (ensureSlotBrowser always does a
+// fresh page.goto right after this), but the main session's page usually
+// stays on the same already-loaded document indefinitely once logged in
+// (see assignSlot's mainViewer claim), so without also running it on the
+// CURRENT page, this silently never appears there at all.
+async function applySentByOverlay(page, chatterName, modelId, applyOnCurrentPage = false) {
   try {
     const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
     const script = SENT_BY_OVERLAY_SCRIPT_TEMPLATE
@@ -1117,6 +1131,7 @@ async function applySentByOverlay(page, chatterName, modelId) {
       .replace('%%MODEL_ID%%', String(modelId || '').replace(/"/g, '\\"'))
       .replace('%%API_BASE%%', apiBase.replace(/"/g, '\\"'));
     await page.evaluateOnNewDocument(script);
+    if (applyOnCurrentPage) await page.evaluate(script).catch(() => {});
   } catch (e) {
     console.warn('[SENT-BY-OVERLAY] Could not register:', e.message);
   }
@@ -1137,7 +1152,7 @@ async function applySentByOverlay(page, chatterName, modelId) {
 // (OnlyFans' compose box is TipTap/ProseMirror) from outside its own
 // internal state management - setting textContent/innerHTML directly
 // would desync the editor's model.
-async function applyScriptVaultButton(page, userId, role, modelId) {
+async function applyScriptVaultButton(page, userId, role, modelId, applyOnCurrentPage = false) {
   try {
     const apiBase = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
     const script = SCRIPT_VAULT_BUTTON_SCRIPT_TEMPLATE
@@ -1146,6 +1161,16 @@ async function applyScriptVaultButton(page, userId, role, modelId) {
       .replace('%%MODEL_ID%%', String(modelId || '').replace(/"/g, '\\"'))
       .replace('%%API_BASE%%', apiBase.replace(/"/g, '\\"'));
     await page.evaluateOnNewDocument(script);
+    if (applyOnCurrentPage) {
+      // The injected script itself skips creating a second button if one
+      // already exists (by a fixed element id) - removing any previous
+      // one first (baked in for a DIFFERENT earlier viewer, if any) so
+      // this always ends up wired to whoever is asking right now.
+      await page
+        .evaluate(() => document.getElementById('__etm_script_vault_btn__')?.remove())
+        .catch(() => {});
+      await page.evaluate(script).catch(() => {});
+    }
   } catch (e) {
     console.warn('[SCRIPT-VAULT-BUTTON] Could not register:', e.message);
   }
@@ -1758,10 +1783,22 @@ async function assignSlot(userId, modelId, role, chatterName) {
   // after MAIN_VIEWER_IDLE_MS of no activity from its holder, same idea
   // as CHATTER_SLOT_IDLE_MS below - whoever asks next just reclaims it.
   const now = Date.now();
+  const isNewClaimant = !session.mainViewer || session.mainViewer.key !== key;
   const mainFree =
     !session.mainViewer || session.mainViewer.key === key || now - session.mainViewer.lastActivity > MAIN_VIEWER_IDLE_MS;
   if (mainFree) {
     session.mainViewer = { key, lastActivity: now };
+    // CONFIRMED LIVE (2026-07-29): ensureSlotBrowser always applies these
+    // to a chatter slot's fresh copy, but getOrCreateSession never did for
+    // the main session itself (no per-viewer identity to bake in at
+    // launch time) - the emoji-send attribution and script-library button
+    // were silently missing entirely whenever someone was using the real
+    // main session instead of a copy. Only re-applying on an actual new
+    // claimant, not every poll from the same still-active viewer.
+    if (isNewClaimant) {
+      await applySentByOverlay(session.page, chatterName, modelId, true);
+      await applyScriptVaultButton(session.page, userId, role, modelId, true);
+    }
     return { wsPath: session.displaySlot.wsPath, isMain: true };
   }
 
