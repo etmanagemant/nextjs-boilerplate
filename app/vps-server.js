@@ -191,10 +191,20 @@ const DARK_MODE_SCRIPT = `
   // directly with no correction at all. Text nodes can't be selectively
   // filtered by CSS, so this wraps each emoji character in its own span
   // (once) so THAT can be targeted the same way media already is.
+  //
+  // CONFIRMED LIVE (2026-07-29, after real debugging via /debug-eval, not
+  // guessing): a MutationObserver AND a setInterval both work fine on this
+  // page in general (tested each standalone), but neither one, set up
+  // from INSIDE this evaluateOnNewDocument script, ever fired again after
+  // the first synchronous call - root cause not pinned down under time
+  // pressure. window.__etmScanEmoji is exposed here so the SERVER SIDE can
+  // drive it instead (see the periodic page.evaluate() call next to
+  // FAN-SPEND-SYNC) - a mechanism already proven reliable throughout this
+  // whole debugging session, unlike anything timer-based inside the page.
   var EMOJI_TEST = /(\\p{Emoji_Presentation}|\\p{Extended_Pictographic})/u;
   var EMOJI_SPLIT = /(\\p{Emoji_Presentation}|\\p{Extended_Pictographic})/gu;
-  function wrapEmojiIn(root) {
-    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  window.__etmScanEmoji = function() {
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
     var targets = [];
     var node;
     while ((node = walker.nextNode())) {
@@ -219,31 +229,28 @@ const DARK_MODE_SCRIPT = `
       });
       textNode.parentNode.replaceChild(frag, textNode);
     });
-  }
-  window.__etmEmojiDebug = { scans: 0, errors: [] };
-  function scan() {
-    window.__etmEmojiDebug.scans++;
-    try {
-      wrapEmojiIn(document.body);
-    } catch (e) {
-      window.__etmEmojiDebug.errors.push(e.message);
-    }
-  }
-  if (document.body) scan();
-  else document.addEventListener('DOMContentLoaded', scan);
-  // CONFIRMED LIVE (2026-07-29): a MutationObserver on document.documentElement
-  // works on this page in general (tested directly), but this specific one -
-  // set up this early, via evaluateOnNewDocument - never once fired for
-  // OnlyFans' own real chat content loading in, root cause not fully
-  // pinned down under time pressure. Belt-and-suspenders instead of
-  // chasing it further: keep the observer (catches most cases fast, no
-  // real cost), but a 1s poll guarantees this keeps working regardless of
-  // why the observer alone doesn't - scanning the chat DOM every second is
-  // cheap enough not to matter.
-  new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  setInterval(scan, 1000);
+  };
+  if (document.body) window.__etmScanEmoji();
+  else document.addEventListener('DOMContentLoaded', window.__etmScanEmoji);
 })();
 `;
+
+// Drives window.__etmScanEmoji (see DARK_MODE_SCRIPT) from the server side
+// instead of an in-page timer - CONFIRMED LIVE that neither a
+// MutationObserver nor a setInterval set up from inside an
+// evaluateOnNewDocument script kept firing past the first call, for
+// reasons not fully pinned down; a server-driven page.evaluate() call is
+// the one mechanism proven reliable throughout that debugging. Covers
+// every active model session AND chatter slot - the emoji issue isn't
+// specific to either.
+setInterval(() => {
+  for (const session of Object.values(modelSessions)) {
+    if (session.page) session.page.evaluate('window.__etmScanEmoji && window.__etmScanEmoji()').catch(() => {});
+  }
+  for (const slot of CHATTER_SLOTS) {
+    if (slot.page) slot.page.evaluate('window.__etmScanEmoji && window.__etmScanEmoji()').catch(() => {});
+  }
+}, 1500);
 
 async function enableDarkMode(page) {
   try {
