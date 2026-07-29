@@ -1652,7 +1652,7 @@ async function getOrCreateSession(modelId, restoreCookies) {
   // newPage() (that would open a second, regular window instead).
   const page = (await browser.pages())[0] || (await browser.newPage());
   // Must match the --window-size Chrome launch arg and xvfb-login.service's
-  // screen size. 1920x1080 briefly overloaded this 1-vCPU/1GB VPS (load
+  // screen size. 1920x1080 briefly overloaded this 2-vCPU/2GB VPS (load
   // average 15+, heavy swapping) since Chrome renders it entirely in
   // software with --disable-gpu - that turned out to mostly be a
   // concurrent-launch race (fixed by withModelLock), not the resolution
@@ -1866,7 +1866,7 @@ function recordPageHealth(session, ok) {
   return session.consecutiveFailures >= DEAD_SESSION_THRESHOLD;
 }
 
-// Idle sweep - free RAM on the $5 VPS from abandoned sessions
+// Idle sweep - free RAM on the 2 vCPU/2GB VPS from abandoned sessions
 setInterval(() => {
   const now = Date.now();
   for (const [modelId, session] of Object.entries(modelSessions)) {
@@ -1986,7 +1986,7 @@ async function autoReconnectAllModels() {
   }
   console.log(`[AUTO-RECONNECT] Attempting to restore ${sessions.length} model session(s)...`);
   // Sequential, not parallel - launching several Chrome instances at once on
-  // this 1-vCPU/1GB VPS is exactly the load spike withModelLock and
+  // this 2-vCPU/2GB VPS is exactly the load spike withModelLock and
   // enforceSessionCap already exist to avoid elsewhere.
   for (const { modelId, cookies } of sessions) {
     try {
@@ -2115,7 +2115,7 @@ async function syncFanLifetimeSpend(modelId, page) {
 }
 
 setInterval(async () => {
-  // Sequential, not parallel - same 1-vCPU/1GB reasoning as autoReconnectAllModels.
+  // Sequential, not parallel - same 2-vCPU/2GB reasoning as autoReconnectAllModels.
   for (const [modelId, session] of Object.entries(modelSessions)) {
     try {
       await syncFanLifetimeSpend(modelId, session.page);
