@@ -43,6 +43,20 @@ function toDurationHours(startedAt: string | null, endedAt: string | null) {
   return Math.max(0, end - start) / (1000 * 60 * 60);
 }
 
+// Task #85: toLocaleString('de-DE') with no options produced inconsistent
+// output (single-digit hour/minute, seconds included) - this app's
+// convention everywhere else is zero-padded 24h without seconds.
+function formatShiftDateTime(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function LiveTimer({ startedAt }: { startedAt: string }) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
@@ -236,8 +250,8 @@ export default function ChatterPage() {
                           <div className="text-xs font-bold font-mono text-[#C9A86A]">{hours.toFixed(2)} h</div>
                         </div>
                         <div className="mt-2 text-xs text-slate-400 font-mono">
-                          <div><span className="text-slate-500">Start:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
-                          <div><span className="text-slate-500">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
+                          <div><span className="text-slate-500">Start:</span> {formatShiftDateTime(r.started_at)}</div>
+                          <div><span className="text-slate-500">Ende:</span> {formatShiftDateTime(r.ended_at)}</div>
                         </div>
                       </div>
                     );
@@ -327,8 +341,8 @@ export default function ChatterPage() {
                         <div className="text-xs font-bold font-mono text-[#C9A86A]">{hours.toFixed(2)} h</div>
                       </div>
                       <div className="mt-2 text-xs text-slate-400 font-mono">
-                        <div><span className="text-slate-500">Start:</span> {r.started_at ? new Date(r.started_at).toLocaleString('de-DE') : "—"}</div>
-                        <div><span className="text-slate-500">Ende:</span> {r.ended_at ? new Date(r.ended_at).toLocaleString('de-DE') : "—"}</div>
+                        <div><span className="text-slate-500">Start:</span> {formatShiftDateTime(r.started_at)}</div>
+                        <div><span className="text-slate-500">Ende:</span> {formatShiftDateTime(r.ended_at)}</div>
                       </div>
                     </div>
                   );

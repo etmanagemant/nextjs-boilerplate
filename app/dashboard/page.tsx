@@ -4,6 +4,25 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "../../lib/supabaseClient";
 
+// Task #85: consistent zero-padded 24h format for the new shift overview,
+// matching this app's convention elsewhere (see app/chatter/page.tsx).
+function formatDashboardDateTime(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function toDurationHours(startedAt: string | null, endedAt: string | null) {
+  if (!startedAt) return 0;
+  const start = new Date(startedAt).getTime();
+  const end = endedAt ? new Date(endedAt).getTime() : Date.now();
+  return Math.max(0, end - start) / (1000 * 60 * 60);
+}
+
 export default function DashboardPage() {
   const supabase = createClient();
   const [loading, setLoading] = useState<boolean>(true);
@@ -21,6 +40,8 @@ export default function DashboardPage() {
   const [unassignedRevenues, setUnassignedRevenues] = useState<any[]>([]);
   const [selectedChatterForTransfer, setSelectedChatterForTransfer] = useState<Record<number, string>>({});
   const [abandonedLeads, setAbandonedLeads] = useState<any[]>([]);
+  // Task #85: admin-only overview of the 10 most recent shifts across everyone
+  const [recentShifts, setRecentShifts] = useState<any[]>([]);
   
   // Moderator-specific stats
   const [moderatorStriptchatStats, setModeratorStriptchatStats] = useState<any>(null);
@@ -53,6 +74,22 @@ export default function DashboardPage() {
       const revenues = revenueRes.data || [];
       const models = modelsRes.data || [];
       const abandoned = abandonedLeadsRes.data || [];
+
+      // Task #85: admin-only "last 10 shifts" - reuses the assignments
+      // already fetched above instead of a second query.
+      if (adminCheck) {
+        const sorted = assignments
+          .filter((a: any) => a.started_at)
+          .slice()
+          .sort((a: any, b: any) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+          .slice(0, 10)
+          .map((a: any) => ({
+            ...a,
+            chatterName: profiles.find((p: any) => p.user_id === (a.chatter_id || a.user_id))?.full_name || "Unbekannt",
+            modelName: models.find((m: any) => m.id === a.model_id)?.name || "—",
+          }));
+        setRecentShifts(sorted);
+      }
 
       // MODERATOR-SPEZIFISCH: Stripchat Stats berechnen
       if (userProfile?.role === "moderator") {
@@ -296,6 +333,39 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* Task #85: admin-only overview of the 10 most recent shifts */}
+      {isAdmin && recentShifts.length > 0 && (
+        <section className="mb-8 bg-[#050505] p-5 rounded-xl border border-[#9C7A3D]/20 shadow-xl">
+          <h2 className="text-xs font-black text-[#C9A86A] uppercase tracking-widest mb-3"><span>📊</span> <span>Letzte 10 Schichten</span></h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-slate-500 uppercase text-[10px] tracking-wide border-b border-[#9C7A3D]/10">
+                  <th className="text-left p-2">Mitarbeiter</th>
+                  <th className="text-left p-2">Plattform</th>
+                  <th className="text-left p-2">Model</th>
+                  <th className="text-left p-2">Start</th>
+                  <th className="text-left p-2">Ende</th>
+                  <th className="text-right p-2">Dauer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentShifts.map((s) => (
+                  <tr key={s.id} className="border-b border-[#9C7A3D]/5">
+                    <td className="p-2 text-slate-200 font-bold">{s.chatterName}</td>
+                    <td className="p-2 text-slate-400">{s.platform === "stripchat" ? "Stripchat" : "OnlyFans"}</td>
+                    <td className="p-2 text-slate-400">{s.modelName}</td>
+                    <td className="p-2 text-slate-400 font-mono">{formatDashboardDateTime(s.started_at)}</td>
+                    <td className="p-2 text-slate-400 font-mono">{s.ended_at ? formatDashboardDateTime(s.ended_at) : "läuft noch"}</td>
+                    <td className="p-2 text-[#C9A86A] font-mono text-right">{toDurationHours(s.started_at, s.ended_at).toFixed(2)} h</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       )}
