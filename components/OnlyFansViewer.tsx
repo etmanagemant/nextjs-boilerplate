@@ -438,12 +438,18 @@ export function OnlyFansViewer({
 
       {/* Stays mounted through connecting/live so the ref already exists by
           the time connectVnc() runs - the login view hit exactly this bug
-          when the container was only rendered in "live". onClick unlocks
-          audio autoplay on the first real click (see unlockAudio) -
-          clicking to actually use the view already happens naturally,
-          no extra prompt needed. */}
+          when the container was only rendered in "live". onClickCapture
+          unlocks audio autoplay on the first real click (see unlockAudio).
+          CONFIRMED (read noVNC's own source, public/novnc/core/rfb.js):
+          plain onClick NEVER fired here at all - noVNC's canvas itself has
+          its own native 'click' listener that calls stopPropagation(),
+          which runs in the target phase before a bubble-phase React
+          onClick on an ancestor ever sees the event. onClickCapture runs
+          in the capture phase instead, which happens BEFORE the event
+          even reaches the canvas, so it can't be stopped by anything
+          noVNC does afterward. */}
       {(phase === "connecting" || phase === "live") && (
-        <div ref={vncContainerRef} className="w-full h-full" onClick={unlockAudio} />
+        <div ref={vncContainerRef} className="w-full h-full" onClickCapture={unlockAudio} />
       )}
 
       {/* Separate pipeline from VNC (which is video-only) - only exists

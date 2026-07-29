@@ -273,7 +273,12 @@ export default function BrowserLoginStreamComponent({
               className="relative bg-black rounded-lg overflow-hidden border border-[#C9A86A]/30"
               style={{ height: "85vh" }}
             >
-              <div ref={vncContainerRef} className="w-full h-full" onClick={unlockAudio} />
+              {/* onClickCapture, not onClick - see OnlyFansViewer's identical
+                  note: noVNC's canvas has its own native 'click' listener
+                  that calls stopPropagation() in the target phase, which a
+                  bubble-phase onClick on this ancestor never gets a chance
+                  to see. Capture phase runs first, before that. */}
+              <div ref={vncContainerRef} className="w-full h-full" onClickCapture={unlockAudio} />
               {audioUrl && (phase === "live" || phase === "confirming") && (
                 <audio
                   key={audioUrl}
