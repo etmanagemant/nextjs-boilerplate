@@ -33,6 +33,17 @@ export default function BrowserLoginStreamComponent({
   // main session (no chatter-slot concept in Connection Hub), so audio is
   // always available here, unlike CRM Inbox's OnlyFansViewer.
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  // See OnlyFansViewer's identical unlockAudio for why: autoPlay alone
+  // isn't reliably tied to a real user gesture, so this view was
+  // silently buffering audio without ever actually playing it until
+  // something else happened to unlock it.
+  const audioUnlockedRef = useRef(false);
+  const unlockAudio = () => {
+    if (audioUnlockedRef.current) return;
+    audioUnlockedRef.current = true;
+    audioRef.current?.play().catch(() => {});
+  };
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<any>(null);
@@ -262,9 +273,18 @@ export default function BrowserLoginStreamComponent({
               className="relative bg-black rounded-lg overflow-hidden border border-[#C9A86A]/30"
               style={{ height: "85vh" }}
             >
-              <div ref={vncContainerRef} className="w-full h-full" />
+              <div ref={vncContainerRef} className="w-full h-full" onClick={unlockAudio} />
               {audioUrl && (phase === "live" || phase === "confirming") && (
-                <audio key={audioUrl} src={audioUrl} autoPlay className="hidden" />
+                <audio
+                  key={audioUrl}
+                  ref={audioRef}
+                  src={audioUrl}
+                  autoPlay
+                  className="hidden"
+                  onCanPlay={() => {
+                    if (audioUnlockedRef.current) audioRef.current?.play().catch(() => {});
+                  }}
+                />
               )}
               {(phase === "opening" || phase === "connecting") && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">

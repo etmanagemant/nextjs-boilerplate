@@ -60,6 +60,21 @@ export function OnlyFansViewer({
   // Audio only exists for the real main session (see /audio-stream on the
   // VPS) - a chatter-slot copy has no dedicated audio sink to capture yet.
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  // CONFIRMED LIVE (2026-07-29): reported as audio playing nothing during
+  // an actual video, then dumping the whole thing back-to-back after
+  // closing it - the classic signature of a browser silently blocking
+  // autoplay-with-sound (element keeps buffering in the background, then
+  // plays through the backlog once something finally unlocks it), not a
+  // real sync/latency bug in the stream itself. The plain autoPlay
+  // attribute isn't reliably tied to a real user gesture; an explicit
+  // .play() from an actual click on the viewer is.
+  const audioUnlockedRef = useRef(false);
+  const unlockAudio = () => {
+    if (audioUnlockedRef.current) return;
+    audioUnlockedRef.current = true;
+    audioRef.current?.play().catch(() => {});
+  };
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const viewerOuterRef = useRef<HTMLDivElement>(null);
@@ -218,6 +233,7 @@ export function OnlyFansViewer({
     }
     noSessionStreakRef.current = 0;
     setAudioUrl(null);
+    audioUnlockedRef.current = false;
     setPhase("connecting");
     setError("");
     try {
@@ -417,16 +433,34 @@ export function OnlyFansViewer({
 
       {/* Stays mounted through connecting/live so the ref already exists by
           the time connectVnc() runs - the login view hit exactly this bug
-          when the container was only rendered in "live". */}
+          when the container was only rendered in "live". onClick unlocks
+          audio autoplay on the first real click (see unlockAudio) -
+          clicking to actually use the view already happens naturally,
+          no extra prompt needed. */}
       {(phase === "connecting" || phase === "live") && (
-        <div ref={vncContainerRef} className="w-full h-full" />
+        <div ref={vncContainerRef} className="w-full h-full" onClick={unlockAudio} />
       )}
 
       {/* Separate pipeline from VNC (which is video-only) - only exists
           for the real main session, see /audio-stream on the VPS. Per the
           user's explicit ask, no visible player - just plays in the
           background. */}
-      {phase === "live" && audioUrl && <audio key={audioUrl} src={audioUrl} autoPlay className="hidden" />}
+      {phase === "live" && audioUrl && (
+        <audio
+          key={audioUrl}
+          ref={audioRef}
+          src={audioUrl}
+          autoPlay
+          className="hidden"
+          // The token can finish loading AFTER the click that unlocked
+          // audio already happened - autoPlay alone isn't reliably tied
+          // to that gesture, so explicitly (re)try once this exact
+          // element actually exists.
+          onCanPlay={() => {
+            if (audioUnlockedRef.current) audioRef.current?.play().catch(() => {});
+          }}
+        />
+      )}
 
       {phase === "live" && (
         <>

@@ -3611,6 +3611,13 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
   const ff = spawn(
     'ffmpeg',
     [
+      // Reported live as sounding badly delayed (a whole video's audio
+      // arriving all at once, well after the video itself ended) - most
+      // of that turned out to be the browser silently blocking
+      // autoplay-with-sound (fixed client-side, see unlockAudio), but
+      // ffmpeg's own default buffering adds real delay on top of that
+      // regardless - fflags nobuffer/flags low_delay minimize it here too.
+      '-fflags', 'nobuffer', '-flags', 'low_delay',
       '-f', 'pulse', '-i', `${sink}.monitor`,
       // CONFIRMED LIVE (2026-07-29): reported too quiet to be useful even
       // at the sink's own volume already maxed (100%, checked directly) -
@@ -3619,7 +3626,7 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
       // without blowing out louder parts, instead of a flat multiplier
       // that would either still be too quiet or clip on louder content.
       '-af', 'dynaudnorm=f=200:g=15',
-      '-ac', '2', '-ar', '44100', '-f', 'mp3', '-b:a', '64k', '-flush_packets', '1', 'pipe:1',
+      '-ac', '2', '-ar', '44100', '-f', 'mp3', '-b:a', '64k', '-reservoir', '0', '-flush_packets', '1', 'pipe:1',
     ],
     { env: { ...process.env, PULSE_SERVER: '/run/pulse/native' }, stdio: ['ignore', 'pipe', 'ignore'] }
   );
