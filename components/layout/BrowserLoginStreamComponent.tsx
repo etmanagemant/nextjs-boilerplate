@@ -264,7 +264,7 @@ export default function BrowserLoginStreamComponent({
             >
               <div ref={vncContainerRef} className="w-full h-full" />
               {audioUrl && (phase === "live" || phase === "confirming") && (
-                <audio key={audioUrl} src={audioUrl} autoPlay controls className="absolute bottom-2 left-2 z-30 h-8 opacity-80 hover:opacity-100" />
+                <audio key={audioUrl} src={audioUrl} autoPlay className="hidden" />
               )}
               {(phase === "opening" || phase === "connecting") && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">

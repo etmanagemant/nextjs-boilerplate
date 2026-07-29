@@ -177,11 +177,56 @@ const DARK_MODE_SCRIPT = `
     var style = document.createElement('style');
     style.id = '__crm_dark_mode__';
     style.textContent = 'html { filter: invert(1) hue-rotate(180deg) saturate(1.4) sepia(0.35) !important; background: #0A0A0A !important; } ' +
-      'img, video, picture, svg, canvas, iframe { filter: invert(1) hue-rotate(180deg) !important; }';
+      'img, video, picture, svg, canvas, iframe { filter: invert(1) hue-rotate(180deg) !important; } ' +
+      '.__etm_emoji_fix__ { filter: invert(1) hue-rotate(180deg) !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
   if (document.head) inject();
   else document.addEventListener('DOMContentLoaded', inject);
+
+  // CONFIRMED LIVE (2026-07-29): reported as an emoji rendering "like a
+  // pumpkin" instead of its real colors - emoji are TEXT (a font glyph),
+  // not one of the img/video/etc elements the counter-filter above
+  // targets, so the page-wide invert+hue-rotate+sepia was hitting them
+  // directly with no correction at all. Text nodes can't be selectively
+  // filtered by CSS, so this wraps each emoji character in its own span
+  // (once) so THAT can be targeted the same way media already is.
+  var EMOJI_TEST = /(\\p{Emoji_Presentation}|\\p{Extended_Pictographic})/u;
+  var EMOJI_SPLIT = /(\\p{Emoji_Presentation}|\\p{Extended_Pictographic})/gu;
+  function wrapEmojiIn(root) {
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    var targets = [];
+    var node;
+    while ((node = walker.nextNode())) {
+      var p = node.parentNode;
+      if (p && p.nodeType === 1 && p.classList && p.classList.contains('__etm_emoji_fix__')) continue;
+      if (EMOJI_TEST.test(node.nodeValue)) targets.push(node);
+    }
+    targets.forEach(function(textNode) {
+      var parts = textNode.nodeValue.split(EMOJI_SPLIT);
+      if (parts.length < 2) return;
+      var frag = document.createDocumentFragment();
+      parts.forEach(function(part, i) {
+        if (!part) return;
+        if (i % 2 === 1) {
+          var span = document.createElement('span');
+          span.className = '__etm_emoji_fix__';
+          span.textContent = part;
+          frag.appendChild(span);
+        } else {
+          frag.appendChild(document.createTextNode(part));
+        }
+      });
+      textNode.parentNode.replaceChild(frag, textNode);
+    });
+  }
+  function scan() {
+    wrapEmojiIn(document.body);
+  }
+  if (document.body) scan();
+  new MutationObserver(function() {
+    scan();
+  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 })();
 `;
 
@@ -3543,7 +3588,17 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
 
   const ff = spawn(
     'ffmpeg',
-    ['-f', 'pulse', '-i', `${sink}.monitor`, '-ac', '2', '-ar', '44100', '-f', 'mp3', '-b:a', '64k', '-flush_packets', '1', 'pipe:1'],
+    [
+      '-f', 'pulse', '-i', `${sink}.monitor`,
+      // CONFIRMED LIVE (2026-07-29): reported too quiet to be useful even
+      // at the sink's own volume already maxed (100%, checked directly) -
+      // OnlyFans' own in-page player volume is outside anything this
+      // pipeline controls. dynaudnorm adaptively boosts quiet audio
+      // without blowing out louder parts, instead of a flat multiplier
+      // that would either still be too quiet or clip on louder content.
+      '-af', 'dynaudnorm=f=200:g=15',
+      '-ac', '2', '-ar', '44100', '-f', 'mp3', '-b:a', '64k', '-flush_packets', '1', 'pipe:1',
+    ],
     { env: { ...process.env, PULSE_SERVER: '/run/pulse/native' }, stdio: ['ignore', 'pipe', 'ignore'] }
   );
   ff.stdout.pipe(res);

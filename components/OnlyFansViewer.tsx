@@ -423,13 +423,10 @@ export function OnlyFansViewer({
       )}
 
       {/* Separate pipeline from VNC (which is video-only) - only exists
-          for the real main session, see /audio-stream on the VPS. Browsers
-          can block autoplay-with-sound without a user gesture; opening
-          this view already is one, but native controls stay visible as a
-          fallback so a click always works even if autoplay gets blocked. */}
-      {phase === "live" && audioUrl && (
-        <audio key={audioUrl} src={audioUrl} autoPlay controls className="absolute bottom-2 left-2 z-30 h-8 opacity-80 hover:opacity-100" />
-      )}
+          for the real main session, see /audio-stream on the VPS. Per the
+          user's explicit ask, no visible player - just plays in the
+          background. */}
+      {phase === "live" && audioUrl && <audio key={audioUrl} src={audioUrl} autoPlay className="hidden" />}
 
       {phase === "live" && (
         <>
