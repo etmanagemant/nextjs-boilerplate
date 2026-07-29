@@ -29,6 +29,10 @@ export default function BrowserLoginStreamComponent({
   const [error, setError] = useState<string>("");
   const [pasteText, setPasteText] = useState("");
   const [pasteStatus, setPasteStatus] = useState<"idle" | "done" | "error">("idle");
+  // Separate pipeline from VNC (video-only) - this view is always the real
+  // main session (no chatter-slot concept in Connection Hub), so audio is
+  // always available here, unlike CRM Inbox's OnlyFansViewer.
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<any>(null);
@@ -141,6 +145,17 @@ export default function BrowserLoginStreamComponent({
       setPhase("connecting");
       await connectVnc();
 
+      fetch("/api/crm/audio-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.audioUrl) setAudioUrl(data.audioUrl);
+        })
+        .catch(() => {});
+
       setPhase("live");
       await checkLoginState();
       pollRef.current = setInterval(checkLoginState, 2000);
@@ -248,6 +263,9 @@ export default function BrowserLoginStreamComponent({
               style={{ height: "85vh" }}
             >
               <div ref={vncContainerRef} className="w-full h-full" />
+              {audioUrl && (phase === "live" || phase === "confirming") && (
+                <audio key={audioUrl} src={audioUrl} autoPlay controls className="absolute bottom-2 left-2 z-30 h-8 opacity-80 hover:opacity-100" />
+              )}
               {(phase === "opening" || phase === "connecting") && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
                   <div className="animate-spin mb-4">

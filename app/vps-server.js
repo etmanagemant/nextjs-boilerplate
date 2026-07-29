@@ -55,7 +55,11 @@ app.use((req, res, next) => {
   // every connected model's live browser to every client, defeating the
   // whole point of it). That route verifies its own short-lived, model-
   // scoped signed token instead - see verifyUploadToken below.
-  if (req.path === '/health' || req.path === '/public-upload-to-vault-fan') return next();
+  // /audio-stream is loaded directly by a plain <audio src> tag in the
+  // browser (see OnlyFansViewer.tsx/BrowserLoginStreamComponent.tsx),
+  // which can't attach a custom header - same reasoning and same signed,
+  // model-scoped token mechanism as /public-upload-to-vault-fan below.
+  if (req.path === '/health' || req.path === '/public-upload-to-vault-fan' || req.path === '/audio-stream') return next();
   const expected = process.env.VPS_SHARED_SECRET;
   if (!expected) return next(); // not configured - fail open rather than lock everyone out
   if (req.headers['x-vps-secret'] !== expected) {
@@ -1211,22 +1215,25 @@ async function enforceSessionCap(excludeModelId) {
   await closeSession(oldestModelId, 'session cap reached, evicted least recently used');
 }
 
-async function launchBrowser(modelId, display) {
+async function launchBrowser(modelId, display, audioSink) {
   const launchOnce = () =>
     puppeteer.launch({
       headless: false,
       // Uses Puppeteer's own managed Chrome (downloaded into ~/.cache/puppeteer
       // by `npm install`) unless CHROMIUM_PATH points somewhere else.
       executablePath: process.env.CHROMIUM_PATH || puppeteer.executablePath(),
-      // getOrCreateSession always points this at :1, the single display
-      // both the admin's login flow and the ongoing CRM Inbox live view are
-      // VNC-viewed on - the same persistent browser serves both. NOTE: with
-      // only one shared display, two models connected at once would render
-      // overlapping Chrome windows on top of each other over VNC; fine for
-      // now (single test model), but running multiple models concurrently
-      // will need one Xvfb+x11vnc+websockify set per display slot instead
-      // of everything sharing :1.
-      env: display ? { ...process.env, DISPLAY: display } : process.env,
+      // display comes from assignModelDisplay - each connected model gets
+      // its own dedicated Xvfb/x11vnc/websockify trio now, not a shared
+      // one. PULSE_SINK routes this Chrome's audio to its own dedicated
+      // virtual speaker (see MODEL_DISPLAY_SLOTS/crm-system.pa) so
+      // /audio-stream can capture just this model's sound - otherwise
+      // every model's Chrome would share the system default sink and mix
+      // together.
+      env: {
+        ...process.env,
+        ...(display ? { DISPLAY: display } : {}),
+        ...(audioSink ? { PULSE_SERVER: '/run/pulse/native', PULSE_SINK: audioSink } : {}),
+      },
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -1408,10 +1415,15 @@ async function ensureSlotInfra(slot) {
 // like CHATTER_SLOTS above.
 // ============================================================================
 
+// audioSink names a PulseAudio null sink (see crm-system.pa on the VPS,
+// loaded by the separate pulseaudio-crm.service) that this display's
+// Chrome routes its output to via PULSE_SINK - one dedicated virtual
+// speaker per model so their audio never mixes, mirroring the one-
+// display-per-model approach above.
 const MODEL_DISPLAY_SLOTS = [
-  { id: 0, display: ':1', vncPort: 5901, wsPort: 6080, wsPath: '/vnc-login/websockify', static: true },
-  { id: 1, display: ':6', vncPort: 5906, wsPort: 6086, wsPath: '/vnc-model-2/websockify', static: false },
-  { id: 2, display: ':7', vncPort: 5907, wsPort: 6087, wsPath: '/vnc-model-3/websockify', static: false },
+  { id: 0, display: ':1', vncPort: 5901, wsPort: 6080, wsPath: '/vnc-login/websockify', static: true, audioSink: 'model0' },
+  { id: 1, display: ':6', vncPort: 5906, wsPort: 6086, wsPath: '/vnc-model-2/websockify', static: false, audioSink: 'model1' },
+  { id: 2, display: ':7', vncPort: 5907, wsPort: 6087, wsPath: '/vnc-model-3/websockify', static: false, audioSink: 'model2' },
 ].map((slot) => ({
   ...slot,
   modelId: null,
@@ -1869,7 +1881,7 @@ async function getOrCreateSession(modelId, restoreCookies) {
   }
 
   const displaySlot = await assignModelDisplay(modelId);
-  const browser = await launchBrowser(modelId, displaySlot.display);
+  const browser = await launchBrowser(modelId, displaySlot.display, displaySlot.audioSink);
   // App mode (see the --app comment in launchBrowser) opens its own window
   // directly at the given URL - there's no separate blank tab to grab via
   // newPage() (that would open a second, regular window instead).
@@ -3509,6 +3521,43 @@ function verifyUploadToken(req, res, next) {
   }
   next();
 }
+
+// Per the user's explicit ask (2026-07-29): VNC only ever carries video,
+// never audio - this is a genuinely separate pipeline running alongside
+// it. Captures the model's dedicated PulseAudio null sink (see
+// MODEL_DISPLAY_SLOTS/crm-system.pa - Chrome's own audio output is
+// routed there via PULSE_SINK at launch) and streams it live as MP3, one
+// ffmpeg process per listener (pulse monitor sources support multiple
+// simultaneous readers natively, so this doesn't need to be shared/
+// deduped the way a Chrome launch does). Scoped to the main session only
+// for now, not chatter-slot copies - matches assignSlot handing out the
+// real main session first.
+app.get('/audio-stream', verifyUploadToken, (req, res) => {
+  const { modelId } = req.query;
+  const session = modelSessions[modelId];
+  const sink = session?.displaySlot?.audioSink;
+  if (!sink) return res.status(404).end();
+
+  res.setHeader('Content-Type', 'audio/mpeg');
+  res.setHeader('Cache-Control', 'no-cache, no-store');
+
+  const ff = spawn(
+    'ffmpeg',
+    ['-f', 'pulse', '-i', `${sink}.monitor`, '-ac', '2', '-ar', '44100', '-f', 'mp3', '-b:a', '64k', '-flush_packets', '1', 'pipe:1'],
+    { env: { ...process.env, PULSE_SERVER: '/run/pulse/native' }, stdio: ['ignore', 'pipe', 'ignore'] }
+  );
+  ff.stdout.pipe(res);
+  const cleanup = () => {
+    try {
+      ff.kill('SIGTERM');
+    } catch (e) {
+      /* ignore */
+    }
+  };
+  req.on('close', cleanup);
+  res.on('close', cleanup);
+  ff.on('error', (e) => console.warn(`[AUDIO-STREAM] ffmpeg error for ${modelId}:`, e.message));
+});
 
 async function handleUploadToVaultFan(req, res) {
   const { modelId, vaultFanLabel, vaultFanId, price, fileName, batchId, isLastInBatch, chatterName } = req.query;

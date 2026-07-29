@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
       status: "success",
       wsUrl: `${wsOrigin}${slotData.wsPath}`,
       password,
+      isMain: !!slotData.isMain,
     });
   } catch (error: any) {
     console.error("[CHATTER-SLOT] Error:", error.message);

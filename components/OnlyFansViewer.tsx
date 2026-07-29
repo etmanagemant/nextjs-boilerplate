@@ -57,6 +57,9 @@ export function OnlyFansViewer({
   const [error, setError] = useState("");
   const [pasteStatus, setPasteStatus] = useState<"idle" | "done">("idle");
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  // Audio only exists for the real main session (see /audio-stream on the
+  // VPS) - a chatter-slot copy has no dedicated audio sink to capture yet.
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const viewerOuterRef = useRef<HTMLDivElement>(null);
@@ -145,6 +148,20 @@ export function OnlyFansViewer({
 
     noSessionSyncedRef.current = false;
     noSessionStreakRef.current = 0;
+    if (slotData.isMain) {
+      fetch("/api/crm/audio-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!isStale(generation) && data?.audioUrl) setAudioUrl(data.audioUrl);
+        })
+        .catch(() => {});
+    } else {
+      setAudioUrl(null);
+    }
     await connectVnc(slotData.wsUrl, slotData.password, generation);
   };
 
@@ -200,6 +217,7 @@ export function OnlyFansViewer({
       noSessionPollRef.current = null;
     }
     noSessionStreakRef.current = 0;
+    setAudioUrl(null);
     setPhase("connecting");
     setError("");
     try {
@@ -402,6 +420,15 @@ export function OnlyFansViewer({
           when the container was only rendered in "live". */}
       {(phase === "connecting" || phase === "live") && (
         <div ref={vncContainerRef} className="w-full h-full" />
+      )}
+
+      {/* Separate pipeline from VNC (which is video-only) - only exists
+          for the real main session, see /audio-stream on the VPS. Browsers
+          can block autoplay-with-sound without a user gesture; opening
+          this view already is one, but native controls stay visible as a
+          fallback so a click always works even if autoplay gets blocked. */}
+      {phase === "live" && audioUrl && (
+        <audio key={audioUrl} src={audioUrl} autoPlay controls className="absolute bottom-2 left-2 z-30 h-8 opacity-80 hover:opacity-100" />
       )}
 
       {phase === "live" && (
