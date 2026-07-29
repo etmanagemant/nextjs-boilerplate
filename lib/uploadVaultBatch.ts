@@ -172,11 +172,12 @@ async function sendOneBatch(
         return false;
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Netzwerkfehler";
       if (isLast) {
-        stagedOk.forEach((b) => onItemUpdate(b.id, "error", "Netzwerkfehler"));
-        onItemUpdate(item.id, "error", "Netzwerkfehler");
+        stagedOk.forEach((b) => onItemUpdate(b.id, "error", message));
+        onItemUpdate(item.id, "error", message);
       } else {
-        onItemUpdate(item.id, "error", "Netzwerkfehler");
+        onItemUpdate(item.id, "error", message);
       }
     }
   }
