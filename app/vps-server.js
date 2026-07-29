@@ -142,6 +142,21 @@ function withModelLock(modelId, fn) {
   pendingLaunches[modelId] = p;
   return p;
 }
+// CONFIRMED LIVE (2026-07-29): withModelLock alone doesn't protect
+// ensureSlotBrowser's own profileDir(modelId) copy (see assignSlot) -
+// calling withModelLock there would just silently skip that copy and hand
+// back whatever the OTHER in-flight call was doing (a /connect wipe+
+// relaunch, an auto-reconnect, our own resume), not run it at all. This
+// instead just waits for any in-flight main-session operation on this
+// modelId to fully settle - wipe-then-relaunch included - before letting
+// a chatter-slot request read that model's profile dir at all, so it
+// never reads it mid-write. Errors from whatever we waited on are that
+// caller's problem, not ours - swallowed here on purpose.
+async function waitForModelLock(modelId) {
+  if (pendingLaunches[modelId]) {
+    await pendingLaunches[modelId].catch(() => {});
+  }
+}
 
 // Auto dark-mode with a gold tint: invert the whole page (white -> black),
 // then push the result warm/gold with sepia+saturate. Media gets the base
@@ -1575,6 +1590,11 @@ setInterval(() => {
 }, 2 * 60 * 1000);
 
 async function assignSlot(userId, modelId, role, chatterName) {
+  // Must happen before anything below touches modelSessions[modelId] or
+  // profileDir(modelId) - a manual Connection Hub /connect wipes and
+  // rebuilds that exact profile dir, and this can otherwise land while
+  // that's mid-flight (see ensureSlotBrowser's profile copy further down).
+  await waitForModelLock(modelId);
   if (!modelSessions[modelId]) {
     // A model paused by the idle sweep above (CHATTER_IDLE_PAUSE_MS) still
     // has its real Chrome profile sitting untouched on disk - resume from
