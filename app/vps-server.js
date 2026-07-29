@@ -1021,10 +1021,11 @@ const FAN_SPEND_OVERLAY_SCRIPT_TEMPLATE = `
 
   function labelFor(value) {
     if (value === 'NEW') return 'NEW';
-    // Per the user's explicit ask (Task #86): a fan with no spend yet
-    // shows plain "0", not "$0" - the $ implies a real (if zero) amount
-    // was looked up, "0" alone reads more like "nothing here yet".
-    if (value === '0' || !value) return '0';
+    // CORRECTED (2026-07-29): the user never asked for the $ to be
+    // removed - Task #86's "$0 statt 0" complaint was about the ring
+    // not showing at all (fixed separately, see the server-driven
+    // rescan), not the $ sign itself. Reverted the earlier wrong guess.
+    if (value === '0' || !value) return '$0';
     return '$' + value;
   }
 
