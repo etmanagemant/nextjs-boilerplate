@@ -115,8 +115,14 @@ const CHATTER_IDLE_PAUSE_MS = 30 * 60 * 1000;
 // Bump via MAX_CONCURRENT_SESSIONS env var if you upgrade the VPS.
 const MAX_CONCURRENT_SESSIONS = Number(process.env.MAX_CONCURRENT_SESSIONS || 1);
 
+// CONFIRMED LIVE (2026-07-29): /tmp gets wiped on a real VPS reboot (a
+// Vultr plan resize triggers exactly this, not just a `systemctl restart`
+// of this service) - every connected model's saved login vanished at once
+// and had to be redone by hand, since the auto-reconnect fallback (a lossy
+// cookie map from Supabase) isn't reliable enough on its own. Profiles now
+// live next to the app itself, which survives a real reboot.
 function profileDir(modelId) {
-  return `/tmp/chromium-${modelId}`;
+  return path.join('/root/puppeteer-server/chrome-profiles', `chromium-${modelId}`);
 }
 
 // Concurrent /connect or /restore calls for the same model (e.g. the chatter
