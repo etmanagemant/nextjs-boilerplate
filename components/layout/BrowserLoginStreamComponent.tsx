@@ -86,7 +86,7 @@ export default function BrowserLoginStreamComponent({
   const connectVnc = async (): Promise<void> => {
     const [RFB, vncInfoRes] = await Promise.all([
       loadRFB(),
-      fetch("/api/crm/browser-login/vnc-info"),
+      fetch(`/api/crm/browser-login/vnc-info?modelId=${encodeURIComponent(modelId)}`),
     ]);
     if (!vncInfoRes.ok) throw new Error("VNC-Verbindung konnte nicht eingerichtet werden");
     const { wsUrl, password } = await vncInfoRes.json();

@@ -1171,6 +1171,7 @@ async function closeSession(modelId, reason = 'manual', wipeProfile = false) {
     } catch (e) {
       console.warn(`[SESSION] Error closing session for ${modelId}:`, e.message);
     }
+    releaseModelDisplay(modelId);
   }
   if (wipeProfile) {
     await wipeProfileDir(modelId);
@@ -1368,6 +1369,98 @@ async function ensureSlotInfra(slot) {
   })();
 
   await slot.infraReady;
+}
+
+// ============================================================================
+// PER-MODEL MAIN-SESSION DISPLAYS
+// Per the user's explicit ask (2026-07-29): every connected model's main
+// session used to share one display (:1), so its VNC feed just showed
+// whichever model's window happened to be on top - not an OnlyFans issue,
+// purely display-sharing. Slot 0 reuses :1's existing systemd-managed
+// Xvfb/x11vnc/websockify trio (already running, already wired into Caddy)
+// so nothing about the very first connected model changes; the other two
+// slots (matching MAX_CONCURRENT_SESSIONS) are spawned on demand exactly
+// like CHATTER_SLOTS above.
+// ============================================================================
+
+const MODEL_DISPLAY_SLOTS = [
+  { id: 0, display: ':1', vncPort: 5901, wsPort: 6080, wsPath: '/vnc-login/websockify', static: true },
+  { id: 1, display: ':6', vncPort: 5906, wsPort: 6086, wsPath: '/vnc-model-2/websockify', static: false },
+  { id: 2, display: ':7', vncPort: 5907, wsPort: 6087, wsPath: '/vnc-model-3/websockify', static: false },
+].map((slot) => ({
+  ...slot,
+  modelId: null,
+  xvfbProc: null,
+  x11vncProc: null,
+  websockifyProc: null,
+  infraReady: null,
+}));
+
+async function ensureModelDisplayInfra(slot) {
+  if (slot.static) return; // :1's trio is systemd-managed, already running
+  if (slot.infraReady) {
+    try {
+      await slot.infraReady;
+      return;
+    } catch (e) {
+      slot.infraReady = null;
+    }
+  }
+  slot.infraReady = (async () => {
+    if (!slot.xvfbProc || slot.xvfbProc.exitCode !== null) {
+      slot.xvfbProc = spawn('/usr/bin/Xvfb', [slot.display, '-screen', '0', '1280x800x24', '-nolisten', 'tcp'], { stdio: 'ignore' });
+      slot.xvfbProc.on('exit', (code) => console.warn(`[MODEL-DISPLAY ${slot.id}] Xvfb exited (${code})`));
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    spawn('/usr/bin/setxkbmap', ['de'], { env: { ...process.env, DISPLAY: slot.display }, stdio: 'ignore' });
+
+    if (!slot.x11vncProc || slot.x11vncProc.exitCode !== null) {
+      slot.x11vncProc = spawn('/usr/bin/x11vnc', [
+        '-display', slot.display,
+        '-rfbport', String(slot.vncPort),
+        '-rfbauth', '/root/.vnc/login_passwd',
+        '-forever', '-shared', '-localhost', '-quiet', '-xkb', '-add_keysyms', '-nap',
+      ], { stdio: 'ignore' });
+      slot.x11vncProc.on('exit', (code) => console.warn(`[MODEL-DISPLAY ${slot.id}] x11vnc exited (${code})`));
+      await new Promise((r) => setTimeout(r, 300));
+      spawn('/usr/bin/setxkbmap', ['de'], { env: { ...process.env, DISPLAY: slot.display }, stdio: 'ignore' });
+    }
+
+    if (!slot.websockifyProc || slot.websockifyProc.exitCode !== null) {
+      slot.websockifyProc = spawn('/usr/bin/websockify', [String(slot.wsPort), `localhost:${slot.vncPort}`], { stdio: 'ignore' });
+      slot.websockifyProc.on('exit', (code) => console.warn(`[MODEL-DISPLAY ${slot.id}] websockify exited (${code})`));
+    }
+
+    await waitForPort(slot.wsPort);
+  })();
+
+  await slot.infraReady;
+}
+
+// Assigns (or reuses) a dedicated display for this model's main session.
+// Always succeeds without eviction under normal use - there are exactly as
+// many slots as MAX_CONCURRENT_SESSIONS, and enforceSessionCap already
+// keeps concurrent main sessions at or below that everywhere else. The LRU
+// eviction fallback exists only as a safety net, not the expected path.
+async function assignModelDisplay(modelId) {
+  let slot = MODEL_DISPLAY_SLOTS.find((s) => s.modelId === modelId);
+  if (!slot) {
+    slot = MODEL_DISPLAY_SLOTS.find((s) => !s.modelId);
+    if (!slot) {
+      const busy = MODEL_DISPLAY_SLOTS.filter((s) => s.modelId && modelSessions[s.modelId]);
+      slot = busy.sort((a, b) => modelSessions[a.modelId].lastActivity - modelSessions[b.modelId].lastActivity)[0];
+      if (slot) await closeSession(slot.modelId, 'display slot reclaimed (unexpected: more concurrent sessions than display slots)');
+      else slot = MODEL_DISPLAY_SLOTS[0];
+    }
+    slot.modelId = modelId;
+  }
+  await ensureModelDisplayInfra(slot);
+  return slot;
+}
+
+function releaseModelDisplay(modelId) {
+  const slot = MODEL_DISPLAY_SLOTS.find((s) => s.modelId === modelId);
+  if (slot) slot.modelId = null; // Xvfb/x11vnc/websockify stay up for fast reuse, same as chatter slots
 }
 
 // Launches (or reuses) this slot's Chrome window for the given model,
@@ -1589,6 +1682,30 @@ setInterval(() => {
   }
 }, 2 * 60 * 1000);
 
+const MAIN_VIEWER_IDLE_MS = 20 * 60 * 1000; // matches CHATTER_SLOT_IDLE_MS
+
+// Every route that interacts with a chatter's already-assigned session
+// (sending messages, reading the vault picker, etc.) used to only ever
+// look in CHATTER_SLOTS - now that the first viewer of a model can be
+// using the REAL main session instead of a copy (see assignSlot), this is
+// the one place that knows to check both. modelSessions[modelId] and a
+// CHATTER_SLOTS entry both expose a plain .page, so this is a safe
+// drop-in for every `CHATTER_SLOTS.find(s => s.assignedTo === key)` call.
+function resolveViewerSlot(userId, modelId) {
+  const key = `${userId}:${modelId}`;
+  const session = modelSessions[modelId];
+  if (session?.mainViewer?.key === key) {
+    // Keeps the claim alive from ordinary use of the session (sending a
+    // message, polling current-fan, etc.), not just from re-opening the
+    // view - otherwise a quiet-but-still-open tab could lose its claim to
+    // someone else after MAIN_VIEWER_IDLE_MS despite genuinely still
+    // being in use.
+    session.mainViewer.lastActivity = Date.now();
+    return session;
+  }
+  return CHATTER_SLOTS.find((s) => s.assignedTo === key);
+}
+
 async function assignSlot(userId, modelId, role, chatterName) {
   // Must happen before anything below touches modelSessions[modelId] or
   // profileDir(modelId) - a manual Connection Hub /connect wipes and
@@ -1627,9 +1744,27 @@ async function assignSlot(userId, modelId, role, chatterName) {
   // being actively worked all day via chatter slots, with nobody
   // separately opening Connection Hub, still silently idle-timed-out and
   // closed after IDLE_TIMEOUT_MS - exactly backwards from "in active use".
-  modelSessions[modelId].lastActivity = Date.now();
+  const session = modelSessions[modelId];
+  session.lastActivity = Date.now();
 
   const key = `${userId}:${modelId}`;
+
+  // Per the user's explicit ask (2026-07-29): the persistent main browser
+  // sitting untouched while everyone gets a copy was wasted RAM for no
+  // reason - whoever gets to a model FIRST (admin or chatter, role
+  // doesn't matter) should just use that real session directly, no copy
+  // needed. Only once someone else is ALREADY on it concurrently does a
+  // second person get their own chatter-slot copy. A claim goes stale
+  // after MAIN_VIEWER_IDLE_MS of no activity from its holder, same idea
+  // as CHATTER_SLOT_IDLE_MS below - whoever asks next just reclaims it.
+  const now = Date.now();
+  const mainFree =
+    !session.mainViewer || session.mainViewer.key === key || now - session.mainViewer.lastActivity > MAIN_VIEWER_IDLE_MS;
+  if (mainFree) {
+    session.mainViewer = { key, lastActivity: now };
+    return { wsPath: session.displaySlot.wsPath, isMain: true };
+  }
+
   let slot = CHATTER_SLOTS.find((s) => s.assignedTo === key);
   if (!slot) {
     slot = CHATTER_SLOTS.find((s) => !s.assignedTo);
@@ -1647,7 +1782,7 @@ async function assignSlot(userId, modelId, role, chatterName) {
   await ensureSlotInfra(slot);
   await ensureSlotBrowser(slot, modelId, role, chatterName, userId);
   slot.lastActivity = Date.now();
-  return slot;
+  return { wsPath: `/vnc-chatter-${slot.id}/websockify`, isMain: false, slotId: slot.id };
 }
 
 // Get an existing live session, or open a fresh one. Normally navigates
@@ -1696,7 +1831,8 @@ async function getOrCreateSession(modelId, restoreCookies) {
     await wipeProfileDir(modelId);
   }
 
-  const browser = await launchBrowser(modelId, ':1');
+  const displaySlot = await assignModelDisplay(modelId);
+  const browser = await launchBrowser(modelId, displaySlot.display);
   // App mode (see the --app comment in launchBrowser) opens its own window
   // directly at the given URL - there's no separate blank tab to grab via
   // newPage() (that would open a second, regular window instead).
@@ -1824,7 +1960,7 @@ async function getOrCreateSession(modelId, restoreCookies) {
     await new Promise((r) => setTimeout(r, 2000));
   }
 
-  const session = { browser, page, lastActivity: Date.now(), createdAt: new Date(), loggedInSince: null };
+  const session = { browser, page, lastActivity: Date.now(), createdAt: new Date(), loggedInSince: null, displaySlot, mainViewer: null };
   session.meProfileRef = capturedMeProfile;
   modelSessions[modelId] = session;
   return session;
@@ -2201,23 +2337,9 @@ app.post('/connect', async (req, res) => {
 
     const session = await withModelLock(modelId, () => getOrCreateSession(modelId));
 
-    // CONFIRMED LIVE: every model's main session shares this ONE X11
-    // display (':1', see launchBrowser call in getOrCreateSession) - fine
-    // with a single connected model, but with several connected at once
-    // their windows all coexist on the same shared screen, and the
-    // Connect view's VNC feed just shows whichever one happens to be on
-    // top. Without this, opening "Connect" for one model could show a
-    // DIFFERENT model's already-logged-in session instead of this one's
-    // login form - not an OnlyFans issue, purely this shared-display
-    // stacking order. Raising this model's own window here every time
-    // Connect is opened makes sure the admin actually sees the model they
-    // asked for.
-    try {
-      await session.page.bringToFront();
-    } catch (e) {
-      console.warn(`[CONNECT] bringToFront failed for ${modelId}:`, e.message);
-    }
-
+    // Each model's main session now has its own dedicated display (see
+    // assignModelDisplay) - no more shared-display stacking order to fix
+    // with bringToFront(), so that workaround is gone.
     const state = await getLoginState(session.page);
 
     res.json({ status: 'success', modelId, ...state });
@@ -2533,7 +2655,13 @@ app.get('/vnc-info', (req, res) => {
   if (!password) {
     return res.status(500).json({ error: 'VNC_LOGIN_PASSWORD not configured on the VPS' });
   }
-  res.json({ status: 'success', password });
+  // modelId optional for backward compat (falls back to the :1 slot's
+  // path) - callers that know their modelId (Connection Hub) should
+  // always pass it now that each model has its own display.
+  const { modelId } = req.query;
+  const session = modelId ? modelSessions[modelId] : null;
+  const wsPath = session?.displaySlot?.wsPath || MODEL_DISPLAY_SLOTS[0].wsPath;
+  res.json({ status: 'success', password, wsPath });
 });
 
 // Assign (or reuse) an independent chatter slot for this (userId, modelId)
@@ -2548,8 +2676,8 @@ app.post('/chatter-slot', async (req, res) => {
     const { userId, modelId, role, chatterName } = req.body || {};
     if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
 
-    const slot = await withModelLock(`slot:${userId}:${modelId}`, () => assignSlot(userId, modelId, role, chatterName));
-    res.json({ status: 'success', slotId: slot.id, wsPath: `/vnc-chatter-${slot.id}/websockify` });
+    const result = await withModelLock(`slot:${userId}:${modelId}`, () => assignSlot(userId, modelId, role, chatterName));
+    res.json({ status: 'success', slotId: result.slotId ?? null, isMain: result.isMain, wsPath: result.wsPath });
   } catch (error) {
     if (error.code === 'NO_MODEL_SESSION') {
       return res.json({ status: 'no_session', modelId: req.body?.modelId });
@@ -2569,7 +2697,7 @@ app.get('/chatter-slot-page', async (req, res) => {
   const { userId, modelId } = req.query;
   if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
 
-  const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+  const slot = resolveViewerSlot(userId, modelId);
   if (!slot || !slot.page) return res.json({ status: 'no_slot' });
 
   let pageUrl = 'unknown';
@@ -2629,7 +2757,7 @@ app.get('/chatter-slot-chat-text', async (req, res) => {
     const { userId, modelId } = req.query;
     if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
 
-    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    const slot = resolveViewerSlot(userId, modelId);
     if (!slot || !slot.page) return res.json({ status: 'no_slot' });
 
     const text = await slot.page.evaluate(() => document.body.innerText);
@@ -2656,7 +2784,7 @@ app.post('/insert-emoji', async (req, res) => {
       return res.status(400).json({ error: 'Missing userId, modelId, or emoji' });
     }
 
-    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    const slot = resolveViewerSlot(userId, modelId);
     if (!slot || !slot.page) return res.json({ status: 'no_slot' });
 
     const focused = await slot.page.evaluate(() => {
@@ -2703,7 +2831,7 @@ app.post('/insert-script-step', async (req, res) => {
     return res.status(400).json({ error: 'Missing userId, modelId, or messageText' });
   }
 
-  const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+  const slot = resolveViewerSlot(userId, modelId);
   if (!slot || !slot.page) return res.json({ status: 'no_slot' });
   const page = slot.page;
 
@@ -3149,7 +3277,7 @@ app.post('/vault-picker-goto', async (req, res) => {
   try {
     const { userId, modelId } = req.body || {};
     if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
-    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    const slot = resolveViewerSlot(userId, modelId);
     if (!slot || !slot.page) return res.json({ status: 'no_slot' });
     const page = slot.page;
 
@@ -3195,7 +3323,7 @@ app.post('/vault-picker-read', async (req, res) => {
   try {
     const { userId, modelId } = req.body || {};
     if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
-    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    const slot = resolveViewerSlot(userId, modelId);
     if (!slot || !slot.page) return res.json({ status: 'no_slot', items: [] });
 
     const items = await slot.page.evaluate(() => window.__pickedMedia || []);
@@ -3947,7 +4075,7 @@ app.post('/vault-media', async (req, res) => {
   try {
     const { userId, modelId, listId } = req.body || {};
     if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
-    const slot = CHATTER_SLOTS.find((s) => s.assignedTo === `${userId}:${modelId}`);
+    const slot = resolveViewerSlot(userId, modelId);
     if (!slot || !slot.page) return res.json({ status: 'no_slot', items: [], lists: [] });
     const page = slot.page;
 
@@ -4179,6 +4307,14 @@ for (const slot of CHATTER_SLOTS) {
   spawn('pkill', ['-9', '-f', `x11vnc -display ${slot.display} `], { stdio: 'ignore' });
   spawn('pkill', ['-9', '-f', `websockify ${slot.wsPort} `], { stdio: 'ignore' });
 }
+// Same orphan-cleanup, for the dynamically-spawned model-display slots -
+// skips the static :1 slot, which is systemd-managed and outside this
+// process's lifecycle entirely.
+for (const slot of MODEL_DISPLAY_SLOTS.filter((s) => !s.static)) {
+  spawn('pkill', ['-9', '-f', `Xvfb ${slot.display} `], { stdio: 'ignore' });
+  spawn('pkill', ['-9', '-f', `x11vnc -display ${slot.display} `], { stdio: 'ignore' });
+  spawn('pkill', ['-9', '-f', `websockify ${slot.wsPort} `], { stdio: 'ignore' });
+}
 
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, '0.0.0.0', () => {
@@ -4199,7 +4335,7 @@ async function shutdown(signal) {
   // The slot Xvfb/x11vnc/websockify processes are spawned by this process
   // directly (not systemd units) - they'd otherwise survive as orphans
   // across a redeploy/restart, quietly piling up on every deploy.
-  for (const slot of CHATTER_SLOTS) {
+  for (const slot of [...CHATTER_SLOTS, ...MODEL_DISPLAY_SLOTS.filter((s) => !s.static)]) {
     for (const proc of [slot.xvfbProc, slot.x11vncProc, slot.websockifyProc]) {
       if (proc && proc.exitCode === null) {
         try {
