@@ -33,20 +33,6 @@ export default function BrowserLoginStreamComponent({
   const vncContainerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<any>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
-  // CONFIRMED LIVE: crm_model_sessions.is_active only ever got set back to
-  // true by the admin explicitly clicking "Creator verbinden" below - if a
-  // session was already fine (still logged in from before, nothing to
-  // actually confirm) and whoever reconnected just saw it working and
-  // closed this modal, is_active stayed stuck false forever, even though
-  // the real OnlyFans session was perfectly healthy. That silently broke
-  // auto-reconnect on every subsequent restart (sessions-to-restore only
-  // ever looks at is_active), making the SAME model need "reconnecting"
-  // over and over. Auto-saving the instant a valid login is detected -
-  // not waiting for a manual click - closes that gap; the button stays as
-  // an explicit fallback/reassurance, not the only path to actually saving.
-  const autoConfirmedRef = useRef(false);
-  const loginStreakRef = useRef(0);
-
   // The login display's X11 keymap can end up mismatched with whatever
   // physical keyboard layout the admin's OS/browser is using (e.g. AltGr
   // combos for "@" on a German layout), and x11vnc resets its own keymap
@@ -84,25 +70,14 @@ export default function BrowserLoginStreamComponent({
       const res = await fetch(`/api/crm/browser-login/status?modelId=${encodeURIComponent(modelId)}`);
       if (!res.ok) return;
       const data = await res.json();
-      const loggedIn = !!data.isLoggedIn;
-      setIsLoggedIn(loggedIn);
-      // CONFIRMED LIVE (2026-07-29): a single loggedIn:true tick isn't
-      // reliable enough to auto-save on - if the login page itself
-      // reloads mid-typing (OnlyFans' own redirect/challenge, unrelated
-      // to anything typed), there's a brief moment where the password
-      // field hasn't rendered back in yet, which the VPS-side heuristic
-      // can misread as "logged in" for exactly one poll. Requiring 2
-      // consecutive true reads (4s apart) filters that transient blip
-      // without meaningfully delaying a genuine login.
-      if (loggedIn) {
-        loginStreakRef.current += 1;
-      } else {
-        loginStreakRef.current = 0;
-      }
-      if (loginStreakRef.current >= 2 && !autoConfirmedRef.current) {
-        autoConfirmedRef.current = true;
-        handleConfirm();
-      }
+      setIsLoggedIn(!!data.isLoggedIn);
+      // Per the user's explicit ask (2026-07-29): auto-confirming on a
+      // detected login - even debounced - kept firing far too eagerly
+      // (reported live: within one keystroke into email/password), so
+      // "Creator verbunden" showed up with nothing actually verified.
+      // Back to manual-only: the isLoggedIn state above still lights up
+      // the "Creator verbinden" button below, but nothing gets saved
+      // without that explicit click.
     } catch (err) {
       console.error("[LOGIN-VIEW] state check error:", err);
     }
@@ -207,10 +182,6 @@ export default function BrowserLoginStreamComponent({
     } catch (err: any) {
       setPhase("live");
       setError(err.message || "Speichern fehlgeschlagen");
-      // Let the next poll tick auto-retry instead of staying stuck - this
-      // was only ever a transient network/API hiccup, not a real login
-      // problem (isLoggedIn was already confirmed true to get here).
-      autoConfirmedRef.current = false;
     }
   };
 
