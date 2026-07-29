@@ -2137,6 +2137,24 @@ app.post('/connect', async (req, res) => {
     if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
 
     const session = await withModelLock(modelId, () => getOrCreateSession(modelId));
+
+    // CONFIRMED LIVE: every model's main session shares this ONE X11
+    // display (':1', see launchBrowser call in getOrCreateSession) - fine
+    // with a single connected model, but with several connected at once
+    // their windows all coexist on the same shared screen, and the
+    // Connect view's VNC feed just shows whichever one happens to be on
+    // top. Without this, opening "Connect" for one model could show a
+    // DIFFERENT model's already-logged-in session instead of this one's
+    // login form - not an OnlyFans issue, purely this shared-display
+    // stacking order. Raising this model's own window here every time
+    // Connect is opened makes sure the admin actually sees the model they
+    // asked for.
+    try {
+      await session.page.bringToFront();
+    } catch (e) {
+      console.warn(`[CONNECT] bringToFront failed for ${modelId}:`, e.message);
+    }
+
     const state = await getLoginState(session.page);
 
     res.json({ status: 'success', modelId, ...state });
