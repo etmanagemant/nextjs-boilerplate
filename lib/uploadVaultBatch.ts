@@ -30,21 +30,39 @@ export interface BatchFile {
   file: File;
 }
 
-// Vercel's Node.js functions hard-cap request bodies at 4.5MB and it isn't
-// configurable (confirmed against Vercel's own docs) - a photo usually
-// squeaks under that, a video essentially never does. Staying well clear
-// of the cap (rather than hugging it) leaves room for multipart overhead.
-const CHUNK_SIZE = 3.5 * 1024 * 1024;
+// Uploads go straight to the VPS now (see /public-upload-to-vault-fan),
+// not through this app's own serverless function - Vercel's fixed 4.5MB
+// request body cap (confirmed against Vercel's own docs, not configurable)
+// no longer applies at all, so the chunking this used to need here is
+// gone. Confirmed live that routing every file byte through Vercel twice
+// (client->Vercel->VPS) was both slow and burning through Vercel's own
+// bandwidth allowance for no benefit once a direct path exists.
+async function getUploadToken(modelId: string): Promise<{ token: string; uploadUrl: string }> {
+  const res = await fetch("/api/crm/upload-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modelId }),
+  });
+  const data = await res.json();
+  if (data.status !== "success" || !data.token || !data.uploadUrl) {
+    throw new Error(data.error || "Konnte keinen Upload-Zugang bekommen");
+  }
+  return { token: data.token, uploadUrl: data.uploadUrl };
+}
 
 // fetch() has no reliable cross-browser way to observe upload progress
 // (its ReadableStream body support covers downloads, not uploads) -
 // XMLHttpRequest's upload.onprogress is the only thing that gives real,
 // incremental bytes-sent numbers, which is what actually lets the queue
 // show a genuine percentage instead of jumping straight from 0 to 100.
-function postFileChunkXHR(formData: FormData, onUploadProgress?: (loaded: number, total: number) => void): Promise<any> {
+function postFileDirectXHR(
+  uploadUrl: string,
+  file: File,
+  onUploadProgress?: (loaded: number, total: number) => void
+): Promise<any> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/crm/upload-to-vault-fan");
+    xhr.open("POST", uploadUrl);
     if (onUploadProgress) {
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onUploadProgress(e.loaded, e.total);
@@ -58,48 +76,23 @@ function postFileChunkXHR(formData: FormData, onUploadProgress?: (loaded: number
       }
     };
     xhr.onerror = () => reject(new Error("Netzwerkfehler"));
-    xhr.send(formData);
+    xhr.send(file);
   });
 }
 
 /**
- * Uploads one file, transparently splitting it into sub-cap chunks (with
- * their own shared uploadId) when it's too big for a single request - the
- * VPS reassembles them before treating the file as staged, so every chunk
- * except the last gets back {status:"chunk_staged"} instead of the real
- * staged/success response. Throws on any non-final chunk that doesn't
- * confirm chunk_staged (network error or a real server error), which
- * aborts this file the same way a single failed request always did.
- * onProgress reports 0-100 across the WHOLE file, not per-chunk.
+ * Sends one file's raw bytes directly to the VPS, authorized by a fresh
+ * short-lived token scoped to this exact modelId (see getUploadToken) -
+ * the VPS never sees this app's own shared secret, only a token it can
+ * verify and that expires on its own. onProgress reports a real 0-100 for
+ * this file, driven by the browser's own upload progress event.
  */
 async function postFile(file: File, fields: Record<string, string>, onProgress?: (percent: number) => void): Promise<any> {
-  const buildFormData = (blob: Blob) => {
-    const formData = new FormData();
-    formData.append("file", blob, file.name);
-    Object.entries(fields).forEach(([key, value]) => formData.append(key, value));
-    return formData;
-  };
-
-  if (file.size <= CHUNK_SIZE) {
-    return postFileChunkXHR(buildFormData(file), (loaded, total) => onProgress?.(Math.round((loaded / total) * 100)));
-  }
-
-  const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-  let data: any = null;
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * CHUNK_SIZE;
-    const chunk = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
-    const formData = buildFormData(chunk);
-    formData.append("chunkIndex", String(i));
-    formData.append("totalChunks", String(totalChunks));
-    formData.append("uploadId", uploadId);
-    data = await postFileChunkXHR(formData, (loaded) => onProgress?.(Math.round(((start + loaded) / file.size) * 100)));
-    if (i < totalChunks - 1 && data.status !== "chunk_staged") {
-      throw new Error(data.message || data.error || "Chunk-Upload fehlgeschlagen");
-    }
-  }
-  return data;
+  const { token, uploadUrl } = await getUploadToken(fields.modelId);
+  const params = new URLSearchParams({ ...fields, fileName: file.name, token });
+  return postFileDirectXHR(`${uploadUrl}?${params.toString()}`, file, (loaded, total) =>
+    onProgress?.(Math.round((loaded / total) * 100))
+  );
 }
 
 /**

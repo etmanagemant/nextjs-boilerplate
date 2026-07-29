@@ -12,6 +12,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 const fs = require('fs/promises');
 const path = require('path');
+const crypto = require('crypto');
 
 // ============================================================================
 // PROCESS HARDENING - Global Exception Shield
@@ -47,7 +48,13 @@ app.use((req, res, next) => {
 // directly to port 6080) rather than through this Express app at all, so
 // its own password auth is what actually gates that traffic.
 app.use((req, res, next) => {
-  if (req.path === '/health') return next();
+  // /public-upload-to-vault-fan is called directly by a chatter/model's own
+  // browser (see lib/uploadVaultBatch.ts) - it can never carry the shared
+  // secret (that would mean shipping the one credential that controls
+  // every connected model's live browser to every client, defeating the
+  // whole point of it). That route verifies its own short-lived, model-
+  // scoped signed token instead - see verifyUploadToken below.
+  if (req.path === '/health' || req.path === '/public-upload-to-vault-fan') return next();
   const expected = process.env.VPS_SHARED_SECRET;
   if (!expected) return next(); // not configured - fail open rather than lock everyone out
   if (req.headers['x-vps-secret'] !== expected) {
@@ -3078,7 +3085,52 @@ app.post('/chat-search', async (req, res) => {
 // them, exactly like a chatter attaching multiple files by hand. A batch
 // of size 1 collapses to the exact same single-file-per-message behavior
 // as before - there's no separate code path needed for "just one file".
-app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), async (req, res) => {
+// Verifies the short-lived, model-scoped signed token issued by Next.js's
+// /api/crm/upload-token (see that route for the matching creation side -
+// same HMAC-SHA256-over-{modelId,exp} scheme, both sides derive the key
+// from VPS_SHARED_SECRET so no new secret/shared state is needed anywhere).
+// Deliberately stateless (no server-side token store) - a leaked token is
+// only ever useful for the one modelId it names, and only until it expires
+// (5 minutes), which is enough for a whole upload batch (chunked uploads of
+// the same file reuse one token; a fresh batch just requests a new one).
+function verifyUploadToken(req, res, next) {
+  const secret = process.env.VPS_SHARED_SECRET;
+  if (!secret) return res.status(500).json({ error: 'VPS_SHARED_SECRET not configured' });
+
+  const token = req.query.token;
+  const modelId = req.query.modelId;
+  if (!token || typeof token !== 'string' || !modelId) {
+    return res.status(401).json({ error: 'Missing or invalid upload token' });
+  }
+
+  const dot = token.lastIndexOf('.');
+  if (dot < 0) return res.status(401).json({ error: 'Malformed upload token' });
+  const payloadB64 = token.slice(0, dot);
+  const signatureHex = token.slice(dot + 1);
+
+  const expectedSig = crypto.createHmac('sha256', secret).update(payloadB64).digest('hex');
+  const sigBuf = Buffer.from(signatureHex, 'hex');
+  const expectedBuf = Buffer.from(expectedSig, 'hex');
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+    return res.status(401).json({ error: 'Invalid upload token' });
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+  } catch (e) {
+    return res.status(401).json({ error: 'Malformed upload token' });
+  }
+  if (!payload || payload.modelId !== modelId) {
+    return res.status(401).json({ error: 'Token does not match modelId' });
+  }
+  if (!payload.exp || Date.now() > payload.exp) {
+    return res.status(401).json({ error: 'Upload token expired' });
+  }
+  next();
+}
+
+async function handleUploadToVaultFan(req, res) {
   const { modelId, vaultFanLabel, vaultFanId, price, fileName, batchId, isLastInBatch, chatterName, chunkIndex, totalChunks, uploadId } = req.query;
   if (!modelId || (!vaultFanLabel && !vaultFanId) || !fileName) {
     return res.status(400).json({ error: 'Missing modelId, vaultFanLabel/vaultFanId, or fileName' });
@@ -3394,7 +3446,21 @@ app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), a
   } finally {
     await Promise.all(filePaths.map((p) => fs.unlink(p).catch(() => {})));
   }
-});
+}
+
+// Server-to-server variant (Next.js forwarding a file it already received
+// from the client) - kept for now as a fallback/for any caller still using
+// it, gated by the global shared-secret middleware like everything else.
+app.post('/upload-to-vault-fan', express.raw({ limit: '300mb', type: '*/*' }), handleUploadToVaultFan);
+
+// Direct browser-to-VPS variant - the client (Upload Vault / model
+// workspace, see lib/uploadVaultBatch.ts) uploads straight here instead of
+// routing every file byte through a Vercel serverless function twice
+// (client->Vercel->VPS), which is both slower and burns Vercel's own
+// bandwidth allowance for no benefit. Exempted from the global X-VPS-Secret
+// middleware above (that secret must never reach a browser) - verifyUploadToken
+// checks a short-lived, model-scoped signed token instead.
+app.post('/public-upload-to-vault-fan', verifyUploadToken, express.raw({ limit: '300mb', type: '*/*' }), handleUploadToVaultFan);
 
 // One-off diagnostic screenshot of a model's or slot's current page -
 // useful for verifying layout/CSS changes without needing a live VNC
