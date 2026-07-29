@@ -4002,7 +4002,17 @@ async function shutdown(signal) {
     }
   }
   server.close(() => process.exit(0));
-  setTimeout(() => process.exit(0), 5000).unref();
+  // CONFIRMED LIVE (journalctl): with 3 concurrent live sessions, closing
+  // every session's real Chrome/Xvfb/x11vnc processes plus releasing
+  // chatter slots took longer than 5s even running in parallel - systemd's
+  // matching TimeoutStopSec=5 then SIGKILLed the process mid-cleanup,
+  // abandoning whatever closeSession()/releaseSlot() work was still
+  // in-flight for whichever model happened to still be closing. That's a
+  // real, reproducible cause of a model looking "randomly" disconnected
+  // after any restart (crash, deploy, or manual). Raised alongside
+  // TimeoutStopSec in the systemd unit so a clean shutdown actually gets
+  // to finish before anything forces the process to exit.
+  setTimeout(() => process.exit(0), 20000).unref();
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
