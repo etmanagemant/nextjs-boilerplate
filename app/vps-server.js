@@ -1226,7 +1226,7 @@ async function launchBrowser(modelId, display) {
         // larger/readable.
         '--window-size=1280,800',
         '--window-position=0,0',
-        `--user-data-dir=/tmp/chromium-${modelId}`,
+        `--user-data-dir=${profileDir(modelId)}`,
         // App mode: no address bar, no back/forward toolbar, no tab strip -
         // just the page content filling the window. page.screenshot() never
         // showed this stuff anyway (it only ever captures page content, not
