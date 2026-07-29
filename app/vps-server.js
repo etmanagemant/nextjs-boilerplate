@@ -102,6 +102,13 @@ const pendingUploadBatches = {};
 // outright - actual usage refreshes lastActivity long before this would
 // ever fire for a model anyone is still working.
 const IDLE_TIMEOUT_MS = 90 * 24 * 60 * 60 * 1000; // close a session after 90 days of no requests
+// Per the user's explicit ask (2026-07-29): with real RAM pressure on this
+// 2GB box, a model nobody has actually looked at/chatted through in a
+// while shouldn't keep costing ~950MB just to sit there. Distinct from
+// IDLE_TIMEOUT_MS above - this is a PAUSE (browser closed, cookies/profile
+// kept, Connection Hub still shows it connected), not a disconnect. See
+// assignSlot below for the resume side.
+const CHATTER_IDLE_PAUSE_MS = 30 * 60 * 1000;
 
 // Your Vultr box (ETMANAGEMENT, 80.240.30.188) has 1GB RAM - a single headful
 // Chromium session already uses 300-500MB, so default to ONE at a time.
@@ -1563,9 +1570,18 @@ setInterval(() => {
 
 async function assignSlot(userId, modelId, role, chatterName) {
   if (!modelSessions[modelId]) {
-    const err = new Error('NO_MODEL_SESSION');
-    err.code = 'NO_MODEL_SESSION';
-    throw err;
+    // A model paused by the idle sweep above (CHATTER_IDLE_PAUSE_MS) still
+    // has its real Chrome profile sitting untouched on disk - resume from
+    // that instead of failing outright. A model that was never connected
+    // in the first place has no profile dir, so this still correctly falls
+    // through to NO_MODEL_SESSION for that case (nothing to resume).
+    const hasProfile = await fs.access(profileDir(modelId)).then(() => true).catch(() => false);
+    if (!hasProfile) {
+      const err = new Error('NO_MODEL_SESSION');
+      err.code = 'NO_MODEL_SESSION';
+      throw err;
+    }
+    await getOrCreateSession(modelId, true);
   }
   // CONFIRMED LIVE (2026-07-27) as the actual cause of both connected
   // models silently going idle and getting disconnected: every chatter
@@ -1872,6 +1888,10 @@ setInterval(() => {
   for (const [modelId, session] of Object.entries(modelSessions)) {
     if (now - session.lastActivity > IDLE_TIMEOUT_MS) {
       closeSession(modelId, 'idle timeout');
+    } else if (now - session.lastActivity > CHATTER_IDLE_PAUSE_MS) {
+      // wipeProfile stays false (the default) - this must stay resumable
+      // from assignSlot below, not a real disconnect.
+      closeSession(modelId, 'paused - no chatter activity for 30min');
     }
   }
 }, 5 * 60 * 1000);
