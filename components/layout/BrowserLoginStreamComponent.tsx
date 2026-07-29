@@ -111,6 +111,14 @@ export default function BrowserLoginStreamComponent({
     const rfb = new RFB(vncContainerRef.current, wsUrl, { credentials: { password } });
     rfb.scaleViewport = true;
     rfb.resizeSession = false;
+    // Default (6) favors per-frame sharpness over update rate - fine for
+    // mostly-static chat UI, but noticeably choppy for actual video
+    // playback inside OnlyFans, which is CPU-decoded/re-encoded frame by
+    // frame with no hardware acceleration on this VPS. Trading a bit of
+    // sharpness for a higher achievable frame rate; VNC still can't match
+    // native video smoothness (it's a screen-share protocol, not built
+    // for motion content), but this is a real, low-risk improvement.
+    rfb.qualityLevel = 4;
     rfbRef.current = rfb;
 
     rfb.addEventListener("disconnect", (e: any) => {

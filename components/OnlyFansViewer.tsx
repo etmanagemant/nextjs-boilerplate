@@ -157,6 +157,12 @@ export function OnlyFansViewer({
     const rfb = new RFB(vncContainerRef.current, wsUrl, { credentials: { password } });
     rfb.scaleViewport = true;
     rfb.resizeSession = false;
+    // See BrowserLoginStreamComponent's identical setting for why: default
+    // quality (6) is choppy for actual video playback on this VPS (CPU-only
+    // decode/re-encode, no GPU). Real, if partial, smoothness improvement -
+    // VNC fundamentally isn't built for motion content the way native
+    // playback is.
+    rfb.qualityLevel = 4;
     rfbRef.current = rfb;
 
     rfb.addEventListener("disconnect", (e: any) => {
