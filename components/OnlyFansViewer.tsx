@@ -62,6 +62,8 @@ export function OnlyFansViewer({
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const isMainRef = useRef(false);
+  const [isMainState, setIsMainState] = useState(false);
+  const [audioUnlockedState, setAudioUnlockedState] = useState(false);
   // CONFIRMED LIVE (2026-07-29): reported as audio arriving ~20s after
   // the video that produced it had already finished - NOT a stream
   // latency bug. The <audio> element used to start loading (and the
@@ -85,6 +87,7 @@ export function OnlyFansViewer({
     logAudioDebug(`Klick erkannt (isMain=${isMainRef.current}, schonEntsperrt=${audioUnlockedRef.current})`);
     if (audioUnlockedRef.current || !isMainRef.current) return;
     audioUnlockedRef.current = true;
+    setAudioUnlockedState(true);
     logAudioDebug("Fordere Audio-Token an...");
     fetch("/api/crm/audio-token", {
       method: "POST",
@@ -197,6 +200,7 @@ export function OnlyFansViewer({
     // for why the actual token/stream only starts on a real click, not
     // eagerly here.
     isMainRef.current = !!slotData.isMain;
+    setIsMainState(!!slotData.isMain);
     logAudioDebug(`Sitzung verbunden, isMain=${slotData.isMain}, slotId=${slotData.slotId ?? "-"}`);
     setAudioUrl(null);
     await connectVnc(slotData.wsUrl, slotData.password, generation);
@@ -256,6 +260,7 @@ export function OnlyFansViewer({
     noSessionStreakRef.current = 0;
     setAudioUrl(null);
     audioUnlockedRef.current = false;
+    setAudioUnlockedState(false);
     setPhase("connecting");
     setError("");
     try {
@@ -467,6 +472,22 @@ export function OnlyFansViewer({
           noVNC does afterward. */}
       {(phase === "connecting" || phase === "live") && (
         <div ref={vncContainerRef} className="w-full h-full" onClickCapture={unlockAudio} />
+      )}
+
+      {/* CONFIRMED LIVE (2026-07-30): onClickCapture on the VNC container
+          still never fired, even for a real click that visibly did start
+          the video remotely - noVNC swallows it somewhere before it ever
+          reaches React, capture phase included. Dedicated button OUTSIDE
+          the VNC canvas entirely instead - guaranteed to receive a plain
+          click, nothing noVNC does can be in the way of an element it
+          never touches. Disappears once used. */}
+      {phase === "live" && isMainState && !audioUnlockedState && (
+        <button
+          onClick={unlockAudio}
+          className="absolute bottom-3 right-3 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#C9A86A] text-black text-xs font-bold shadow-lg hover:bg-[#E2C48A] transition-colors"
+        >
+          🔊 Ton aktivieren
+        </button>
       )}
 
       {/* Separate pipeline from VNC (which is video-only) - only exists
