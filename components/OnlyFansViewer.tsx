@@ -61,19 +61,33 @@ export function OnlyFansViewer({
   // VPS) - a chatter-slot copy has no dedicated audio sink to capture yet.
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  // CONFIRMED LIVE (2026-07-29): reported as audio playing nothing during
-  // an actual video, then dumping the whole thing back-to-back after
-  // closing it - the classic signature of a browser silently blocking
-  // autoplay-with-sound (element keeps buffering in the background, then
-  // plays through the backlog once something finally unlocks it), not a
-  // real sync/latency bug in the stream itself. The plain autoPlay
-  // attribute isn't reliably tied to a real user gesture; an explicit
-  // .play() from an actual click on the viewer is.
+  const isMainRef = useRef(false);
+  // CONFIRMED LIVE (2026-07-29): reported as audio arriving ~20s after
+  // the video that produced it had already finished - NOT a stream
+  // latency bug. The <audio> element used to start loading (and the
+  // server-side ffmpeg capture behind it) the instant VNC connected,
+  // whether or not autoplay-with-sound was actually allowed yet; a
+  // browser that blocks autoplay still keeps fetching/buffering in the
+  // background regardless, so by the time a later click finally
+  // unlocked playback, minutes of stale buffered audio played back
+  // sped-through instead of picking up live. Fix is architectural, not
+  // a tuning knob: don't request the token / mount the element / start
+  // the VPS's ffmpeg capture AT ALL until the exact moment a real click
+  // happens, so what starts playing is always genuinely live.
   const audioUnlockedRef = useRef(false);
   const unlockAudio = () => {
-    if (audioUnlockedRef.current) return;
+    if (audioUnlockedRef.current || !isMainRef.current) return;
     audioUnlockedRef.current = true;
-    audioRef.current?.play().catch(() => {});
+    fetch("/api/crm/audio-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modelId }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.audioUrl) setAudioUrl(data.audioUrl);
+      })
+      .catch(() => {});
   };
 
   const vncContainerRef = useRef<HTMLDivElement>(null);
@@ -163,20 +177,11 @@ export function OnlyFansViewer({
 
     noSessionSyncedRef.current = false;
     noSessionStreakRef.current = 0;
-    if (slotData.isMain) {
-      fetch("/api/crm/audio-token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId }),
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (!isStale(generation) && data?.audioUrl) setAudioUrl(data.audioUrl);
-        })
-        .catch(() => {});
-    } else {
-      setAudioUrl(null);
-    }
+    // Just remembers whether audio is available here - see unlockAudio
+    // for why the actual token/stream only starts on a real click, not
+    // eagerly here.
+    isMainRef.current = !!slotData.isMain;
+    setAudioUrl(null);
     await connectVnc(slotData.wsUrl, slotData.password, generation);
   };
 

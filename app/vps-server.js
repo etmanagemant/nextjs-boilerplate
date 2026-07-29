@@ -3671,12 +3671,20 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
   const ff = spawn(
     'ffmpeg',
     [
-      // Reported live as sounding badly delayed (a whole video's audio
-      // arriving all at once, well after the video itself ended) - most
-      // of that turned out to be the browser silently blocking
-      // autoplay-with-sound (fixed client-side, see unlockAudio), but
-      // ffmpeg's own default buffering adds real delay on top of that
-      // regardless - fflags nobuffer/flags low_delay minimize it here too.
+      // CONFIRMED LIVE (2026-07-29, measured directly): reported as audio
+      // arriving 10-20s after the video that produced it had already
+      // finished, growing worse the longer playback ran - real pipeline
+      // latency, not a browser autoplay quirk (that was a separate,
+      // already-fixed issue - see unlockAudio). Root cause measured via
+      // `pactl list sinks`: this null sink's own configured latency was
+      // 2 SECONDS (PulseAudio's default for virtual sinks, meant for
+      // hardware compatibility, meaningless here) - combined with
+      // ffmpeg's own startup overhead, direct timing showed ~2.5-5.5s
+      // just to get the first byte out. PULSE_LATENCY_MSEC (a standard
+      // PulseAudio client env var) overrides the requested buffer for
+      // THIS capture specifically, down to ~0.4s measured - fflags
+      // nobuffer/flags low_delay alone (still useful, kept) never
+      // touched this, since the delay was upstream of ffmpeg entirely.
       '-fflags', 'nobuffer', '-flags', 'low_delay',
       '-f', 'pulse', '-i', `${sink}.monitor`,
       // CONFIRMED LIVE (2026-07-29): reported too quiet to be useful even
@@ -3688,7 +3696,10 @@ app.get('/audio-stream', verifyUploadToken, (req, res) => {
       '-af', 'dynaudnorm=f=200:g=15',
       '-ac', '2', '-ar', '44100', '-f', 'mp3', '-b:a', '64k', '-reservoir', '0', '-flush_packets', '1', 'pipe:1',
     ],
-    { env: { ...process.env, PULSE_SERVER: '/run/pulse/native' }, stdio: ['ignore', 'pipe', 'ignore'] }
+    {
+      env: { ...process.env, PULSE_SERVER: '/run/pulse/native', PULSE_LATENCY_MSEC: '20' },
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }
   );
   ff.stdout.pipe(res);
   const cleanup = () => {
