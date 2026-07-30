@@ -16,6 +16,64 @@ const path = require('path');
 const crypto = require('crypto');
 
 // ============================================================================
+// ONLYFANS REQUEST SIGNING (dynamic rules)
+// OnlyFans' own /api2/ endpoints reject plain page.evaluate(fetch(...)) calls
+// with HTTP 400 (CONFIRMED LIVE via /sync-live's discover pass on
+// /api2/v2/users/me - see /profile-info's comment) because real requests
+// carry a proprietary 'sign' header OnlyFans computes client-side from
+// rules that rotate multiple times a day. Community-maintained, free,
+// openly reverse-engineered rule sets (DATAHOARDERS/dynamic-rules on
+// GitHub) publish exactly the inputs needed to reproduce that header
+// ourselves - no paid signing API required. NOT YET LIVE-VERIFIED against
+// a real OnlyFans response - byte-for-byte checksum order/sign handling
+// was reconstructed from public write-ups, not from OnlyFans' own source,
+// so treat computeOnlyFansSign's output as unproven until a debug pass
+// (see /debug-of-sign-test) shows a request built with it actually
+// succeeding against a real endpoint.
+const ONLYFANS_RULES_URL = 'https://raw.githubusercontent.com/DATAHOARDERS/dynamic-rules/main/onlyfans.json';
+let onlyFansRules = null;
+let onlyFansRulesFetchedAt = 0;
+
+async function refreshOnlyFansRules() {
+  try {
+    const res = await fetch(ONLYFANS_RULES_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rules = await res.json();
+    if (!rules || !rules.static_param || !Array.isArray(rules.checksum_indexes)) {
+      throw new Error('Unexpected rules shape');
+    }
+    onlyFansRules = rules;
+    onlyFansRulesFetchedAt = Date.now();
+    console.log(`[OF-RULES] Refreshed (app_token=${rules.app_token || 'n/a'})`);
+  } catch (error) {
+    console.error('[OF-RULES] Refresh failed, keeping previous rules if any:', error.message);
+  }
+}
+refreshOnlyFansRules();
+setInterval(refreshOnlyFansRules, 60 * 60 * 1000); // rules rotate multiple times/day - re-check hourly
+
+// Builds the 'sign' header for a given request path exactly as OnlyFans'
+// own frontend does: SHA1("static_param\ntime\npath\nuserId"), then a
+// checksum over specific characters of that hash (indexes + per-index
+// offsets, both supplied by the rules), formatted into the rules' own
+// template string.
+function computeOnlyFansSign(pathWithQuery, userId, timeMs) {
+  if (!onlyFansRules) throw new Error('OnlyFans dynamic rules not loaded yet');
+  const { static_param, format, checksum_indexes, checksum_constants, checksum_constant } = onlyFansRules;
+  const time = String(timeMs);
+  const msg = `${static_param}\n${time}\n${pathWithQuery}\n${userId || ''}`;
+  const hash = crypto.createHash('sha1').update(msg).digest('hex');
+  let sum = 0;
+  for (let i = 0; i < checksum_indexes.length; i++) {
+    sum += hash.charCodeAt(checksum_indexes[i]) + (checksum_constants ? checksum_constants[i] || 0 : 0);
+  }
+  if (typeof checksum_constant === 'number') sum += checksum_constant;
+  const checksumHex = Math.abs(sum).toString(16);
+  const sign = format.replace('{}', hash).replace('{:x}', checksumHex);
+  return { sign, time, hash, appToken: onlyFansRules.app_token };
+}
+
+// ============================================================================
 // PROCESS HARDENING - Global Exception Shield
 // ============================================================================
 process.on('unhandledRejection', (reason, promise) => {
@@ -4264,6 +4322,61 @@ app.post('/debug-fetch', async (req, res) => {
       return { status: r.status, ok: r.ok, json: json, textSample: json ? null : text.slice(0, 500) };
     }, url);
     res.json({ status: 'success', result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// One-off diagnostic only - proves (or disproves) whether
+// computeOnlyFansSign actually reproduces a header OnlyFans accepts. Reads
+// the model's already-captured /api2/v2/users/me id (session.meProfileRef,
+// see /profile-info) as the sign's userId, builds the auth headers
+// ourselves, fires the request from inside the real page (so cookies are
+// the genuine session's), and returns both the raw result AND the full
+// localStorage dump so a real x-bc-style key can be spotted by eye if this
+// still 400s. modelId only (not slotId) - needs meProfileRef.
+app.get('/debug-of-sign-test', async (req, res) => {
+  const { modelId, url } = req.query || {};
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+  const session = modelSessions[modelId];
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+
+  try {
+    const localStorageDump = await session.page.evaluate(() => {
+      try { return JSON.parse(JSON.stringify(localStorage)); } catch (e) { return {}; }
+    }).catch(() => ({}));
+    // OnlyFans' own frontend stores its client-generated x-bc value here
+    // (CONFIRMED LIVE 2026-07-30 via this same route's localStorage dump) -
+    // the earlier 400 was missing this header entirely, not just a wrong
+    // signature.
+    const xbc = localStorageDump.bcTokenSha || '';
+    // meProfileRef only gets populated once OnlyFans' own app has made its
+    // /users/me call naturally (see /profile-info) - not guaranteed for
+    // every session. localStorage's own 'user' key (CONFIRMED LIVE
+    // 2026-07-30: caused "Wrong user" [301] when this was empty) is the
+    // same id and always present once logged in, so prefer it.
+    const userId = localStorageDump.user || (session.meProfileRef && session.meProfileRef.current && session.meProfileRef.current.id) || '';
+    const target = new URL(url);
+    const pathWithQuery = target.pathname + target.search;
+    const built = computeOnlyFansSign(pathWithQuery, userId, Date.now());
+
+    const result = await session.page.evaluate(async (u, headers) => {
+      const r = await fetch(u, { credentials: 'include', headers });
+      const text = await r.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch (e) {}
+      return { status: r.status, ok: r.ok, json, textSample: json ? null : text.slice(0, 500) };
+    }, url, {
+      sign: built.sign,
+      time: built.time,
+      'app-token': built.appToken,
+      'user-id': String(userId || ''),
+      'x-bc': xbc,
+      accept: 'application/json',
+    });
+
+    res.json({ status: 'success', userIdUsed: userId, xbcUsed: xbc, sentHeaders: { sign: built.sign, time: built.time, appToken: built.appToken }, result, localStorageKeys: Object.keys(localStorageDump) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
