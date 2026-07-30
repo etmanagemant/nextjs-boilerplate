@@ -45,6 +45,7 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
   const [spendDisplay, setSpendDisplay] = useState<Record<string, string>>({});
   const [fanMetadata, setFanMetadata] = useState<any | null>(null);
   const [fanMetaLastEditedBy, setFanMetaLastEditedBy] = useState<string | null>(null);
+  const [messageSearch, setMessageSearch] = useState<string | null>(null);
 
   const loadChats = useCallback(async () => {
     if (!modelId) return;
@@ -131,6 +132,7 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
   function openChat(fanId: number) {
     setActiveFanId(fanId);
     setSendError("");
+    setMessageSearch(null);
     loadMessages(fanId);
     loadFanMetadata(fanId);
   }
@@ -206,24 +208,20 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
   }
 
   return (
-    <main className="p-6 w-full min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
-      <div className="flex items-center justify-between border-b border-[#9C7A3D]/20 pb-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-black uppercase tracking-wider">📡 OnlyFans Inbox (API, Beta)</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Direkt über die OnlyFans-API, kein VNC - experimentell</p>
-        </div>
-        {connectedModels.length > 1 && (
+    <main className="p-3 w-full min-h-screen bg-[#0A0A0A] text-[#E2C48A]">
+      {connectedModels.length > 1 && (
+        <div className="flex items-center justify-end mb-2">
           <select
             value={modelId}
             onChange={(e) => setModelId(e.target.value)}
-            className="bg-[#050505] border border-[#9C7A3D]/30 rounded px-3 py-2 text-sm text-white"
+            className="bg-[#050505] border border-[#9C7A3D]/30 rounded px-3 py-1.5 text-sm text-white"
           >
             {connectedModels.map((m) => (
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
-        )}
-      </div>
+        </div>
+      )}
 
       {!modelId ? (
         <div className="text-sm text-slate-400">Kein verbundenes Model gefunden.</div>
@@ -278,10 +276,40 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
                   >
                     ✏️
                   </button>
+                  <div className="flex items-center gap-2 ml-auto text-slate-400">
+                    <button
+                      onClick={() => setMessageSearch((v) => (v === null ? "" : null))}
+                      className={`hover:text-[#E2C48A] ${messageSearch !== null ? "text-[#E2C48A]" : ""}`}
+                      title="In dieser Konversation suchen"
+                    >
+                      🔍
+                    </button>
+                    {/* Noch nicht an echte OnlyFans-Endpunkte angebunden (der
+                        genaue API-Aufruf dafür wurde noch nicht live
+                        gefunden) - bewusst ausgegraut statt so zu tun als
+                        würden sie funktionieren. */}
+                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">⭐</button>
+                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">🔔</button>
+                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">📌</button>
+                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">🖼️</button>
+                  </div>
                 </div>
+                {messageSearch !== null && (
+                  <div className="px-3 py-2 border-b border-[#9C7A3D]/20 bg-black/20">
+                    <input
+                      autoFocus
+                      value={messageSearch}
+                      onChange={(e) => setMessageSearch(e.target.value)}
+                      placeholder="Nachrichten durchsuchen…"
+                      className="w-full bg-[#050505] border border-[#9C7A3D]/30 rounded px-3 py-1.5 text-sm text-white outline-none focus:border-[#C9A86A]"
+                    />
+                  </div>
+                )}
                 <div className="flex-1 overflow-y-auto p-4 space-y-2">
                   {messagesLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}
-                  {messages.map((m) => {
+                  {messages
+                    .filter((m) => !messageSearch || m.text.toLowerCase().includes(messageSearch.toLowerCase()))
+                    .map((m) => {
                     const isOwn = String(m.fromUser?.id) !== String(activeFanId);
                     return (
                       <div key={m.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
