@@ -3063,6 +3063,28 @@ app.get('/of-user-details', async (req, res) => {
   }
 });
 
+// GET /of-notifications?modelId=X&offset=0 - real bell-icon notifications
+// (new subscribers, price changes, etc. - PPV/tips also come through here
+// per OnlyFans' own UI, CONFIRMED LIVE 2026-07-30 via a real fetch against
+// this exact endpoint before this route existed).
+app.get('/of-notifications', async (req, res) => {
+  const { modelId, offset } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = modelSessions[modelId];
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  session.lastActivity = Date.now();
+
+  try {
+    const url = `https://onlyfans.com/api2/v2/users/notifications?limit=20&offset=${Number(offset) || 0}&types[]=all`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-NOTIFICATIONS] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Hands a CRM user's browser what it needs to open a real VNC connection -
 // the password itself, since VNC auth happens client-side via noVNC. Used
 // for both the admin login flow and the CRM Inbox live view (both connect

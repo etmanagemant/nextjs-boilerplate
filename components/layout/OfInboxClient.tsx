@@ -46,6 +46,42 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
   const [fanMetadata, setFanMetadata] = useState<any | null>(null);
   const [fanMetaLastEditedBy, setFanMetaLastEditedBy] = useState<string | null>(null);
   const [messageSearch, setMessageSearch] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  const [notifError, setNotifError] = useState("");
+
+  const loadNotifications = useCallback(async () => {
+    if (!modelId) return;
+    setNotifLoading(true);
+    setNotifError("");
+    try {
+      const res = await fetch(`/api/crm/of-inbox/notifications?modelId=${encodeURIComponent(modelId)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
+      setNotifications(Array.isArray(data.data) ? data.data : []);
+    } catch (e: any) {
+      setNotifError(e.message || "Fehler beim Laden der Benachrichtigungen");
+    } finally {
+      setNotifLoading(false);
+    }
+  }, [modelId]);
+
+  function toggleNotifPanel() {
+    setNotifPanelOpen((v) => {
+      const next = !v;
+      if (next && notifications.length === 0) loadNotifications();
+      return next;
+    });
+  }
+
+  function notifIcon(type: string): string {
+    if (type === "subscribed") return "🆕";
+    if (type === "price_changed") return "💲";
+    if (type.includes("tip")) return "💰";
+    if (type.includes("purchase") || type.includes("ppv")) return "🛒";
+    return "🔔";
+  }
 
   const loadChats = useCallback(async () => {
     if (!modelId) return;
@@ -227,6 +263,61 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
         <div className="text-sm text-slate-400">Kein verbundenes Model gefunden.</div>
       ) : (
         <div className="flex gap-4 min-h-[500px]">
+          {/* Icon-Leiste, in der Reihenfolge wie bei OnlyFans selbst - nur
+              Glocke und Nachrichten sind bisher an echte Endpunkte
+              angebunden, der Rest ist bewusst ausgegraut statt vorgetäuscht
+              funktionsfähig zu sein. */}
+          <div className="w-12 flex-shrink-0 flex flex-col items-center gap-3 pt-1">
+            <button
+              disabled
+              title="Zeigt nur Werbe-/Entdecken-Beiträge anderer Creator - für uns nicht relevant"
+              className="text-xl opacity-30 cursor-not-allowed"
+            >
+              🏠
+            </button>
+            <div className="relative">
+              <button
+                onClick={toggleNotifPanel}
+                className={`text-xl hover:scale-110 transition ${notifPanelOpen ? "scale-110" : ""}`}
+                title="Benachrichtigungen"
+              >
+                🔔
+              </button>
+              {notifPanelOpen && (
+                <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
+                  <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between sticky top-0 bg-[#0A0A0A]">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Benachrichtigungen</span>
+                    <button onClick={loadNotifications} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
+                  </div>
+                  {notifLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
+                  {notifError && <div className="p-3 text-xs text-red-400">{notifError}</div>}
+                  {!notifLoading && notifications.length === 0 && !notifError && (
+                    <div className="p-3 text-xs text-slate-500">Keine Benachrichtigungen</div>
+                  )}
+                  <div className="divide-y divide-[#9C7A3D]/10">
+                    {notifications.map((n) => (
+                      <div key={n.id} className={`p-3 flex gap-2 ${!n.isRead ? "bg-[#C9A86A]/5" : ""}`}>
+                        <span className="text-base flex-shrink-0">{notifIcon(n.type)}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs text-slate-200" dangerouslySetInnerHTML={{ __html: n.text }} />
+                          <div className="text-[10px] text-slate-500 mt-0.5">
+                            {n.createdAt ? new Date(n.createdAt).toLocaleString("de-DE") : ""}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <button title="Nachrichten (aktiv)" className="text-xl text-[#C9A86A]">💬</button>
+            {["📁", "🖼️", "📅", "📊", "🧾"].map((icon, i) => (
+              <button key={i} disabled title="Noch nicht verfügbar" className="text-xl opacity-30 cursor-not-allowed">
+                {icon}
+              </button>
+            ))}
+          </div>
+
           <div className="w-[320px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden self-start">
             <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Chats</span>
