@@ -59,13 +59,19 @@ setInterval(refreshOnlyFansRules, 60 * 60 * 1000); // rules rotate multiple time
 // template string.
 function computeOnlyFansSign(pathWithQuery, userId, timeMs) {
   if (!onlyFansRules) throw new Error('OnlyFans dynamic rules not loaded yet');
-  const { static_param, format, checksum_indexes, checksum_constants, checksum_constant } = onlyFansRules;
+  const { static_param, format, checksum_indexes, checksum_constant } = onlyFansRules;
   const time = String(timeMs);
   const msg = `${static_param}\n${time}\n${pathWithQuery}\n${userId || ''}`;
   const hash = crypto.createHash('sha1').update(msg).digest('hex');
+  // CONFIRMED LIVE (2026-07-30, 401 "Please refresh the page"): this used
+  // to also add checksum_constants[i] (a per-index array from the rules
+  // JSON) inside the loop below, on top of the single checksum_constant
+  // added after it - double-counting against two independent reference
+  // implementations (Voldrix/onlyfans-dl-2, taux1c/onlyfans-scraper) that
+  // both only ever add checksum_constant once, never per-index.
   let sum = 0;
   for (let i = 0; i < checksum_indexes.length; i++) {
-    sum += hash.charCodeAt(checksum_indexes[i]) + (checksum_constants ? checksum_constants[i] || 0 : 0);
+    sum += hash.charCodeAt(checksum_indexes[i]);
   }
   if (typeof checksum_constant === 'number') sum += checksum_constant;
   const checksumHex = Math.abs(sum).toString(16);
