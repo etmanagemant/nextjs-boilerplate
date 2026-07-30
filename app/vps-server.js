@@ -4220,7 +4220,7 @@ function resolveDebugPage(req) {
   return session ? session.page : null;
 }
 
-app.post('/debug-network-start', (req, res) => {
+app.post('/debug-network-start', async (req, res) => {
   const page = resolveDebugPage(req);
   if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
 
@@ -4230,23 +4230,59 @@ app.post('/debug-network-start', (req, res) => {
   page._networkCaptureCalls = [];
   page._networkCaptureHandler = (r) => {
     if (r.url().includes('/api2/')) {
-      page._networkCaptureCalls.push(`${r.method()} ${r.url()}`);
+      // Headers + postData added (2026-07-30) - needed to find the real
+      // send-message endpoint's exact shape (URL, headers, body) by
+      // watching a real message actually get sent through the live UI,
+      // instead of guessing at it for a signed POST attempt.
+      page._networkCaptureCalls.push({
+        method: r.method(),
+        url: r.url(),
+        headers: r.headers(),
+        postData: r.postData() || null,
+      });
     }
   };
   page.on('request', page._networkCaptureHandler);
-  res.json({ status: 'success', message: 'Capturing /api2/ calls - go click around now, then call /debug-network-stop' });
+
+  // CONFIRMED LIVE (2026-07-30): a real sent chat message produced ZERO
+  // /api2/ HTTP requests - page.on('request') never sees WebSocket traffic
+  // at all, and OnlyFans' own frontend has its own live socket
+  // (wsUrl/wsAuthToken from /users/me) that sending a message likely goes
+  // through instead of a plain POST. Capturing raw WS frames via CDP
+  // directly to actually find out, rather than guessing further.
+  try {
+    const client = await page.target().createCDPSession();
+    await client.send('Network.enable');
+    page._networkCaptureCdpClient = client;
+    page._networkCaptureWsFrames = [];
+    client.on('Network.webSocketFrameSent', (e) => {
+      page._networkCaptureWsFrames.push({ dir: 'sent', payload: e.response && e.response.payloadData });
+    });
+    client.on('Network.webSocketFrameReceived', (e) => {
+      page._networkCaptureWsFrames.push({ dir: 'received', payload: e.response && e.response.payloadData });
+    });
+  } catch (e) {
+    console.warn('[DEBUG-NETWORK-START] CDP WS capture failed:', e.message);
+  }
+
+  res.json({ status: 'success', message: 'Capturing /api2/ calls + WebSocket frames - go click around now, then call /debug-network-stop' });
 });
 
-app.post('/debug-network-stop', (req, res) => {
+app.post('/debug-network-stop', async (req, res) => {
   const page = resolveDebugPage(req);
   if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
 
   const calls = page._networkCaptureCalls || [];
+  const wsFrames = page._networkCaptureWsFrames || [];
   if (page._networkCaptureHandler) {
     page.off('request', page._networkCaptureHandler);
     page._networkCaptureHandler = null;
   }
-  res.json({ status: 'success', calls, pageUrl: page.url() });
+  if (page._networkCaptureCdpClient) {
+    try { await page._networkCaptureCdpClient.detach(); } catch (e) { /* already detached */ }
+    page._networkCaptureCdpClient = null;
+  }
+  res.json({ status: 'success', calls, wsFrames, pageUrl: page.url() });
 });
 
 // Diagnostic-only: navigates a slot's page to an arbitrary OnlyFans URL,
@@ -4348,8 +4384,8 @@ app.post('/debug-fetch', async (req, res) => {
 // the genuine session's), and returns both the raw result AND the full
 // localStorage dump so a real x-bc-style key can be spotted by eye if this
 // still 400s. modelId only (not slotId) - needs meProfileRef.
-app.get('/debug-of-sign-test', async (req, res) => {
-  const { modelId, url } = req.query || {};
+app.post('/debug-of-sign-test', async (req, res) => {
+  const { modelId, url, method, body } = req.body || {};
   if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
   if (!url) return res.status(400).json({ error: 'Missing url' });
   const session = modelSessions[modelId];
@@ -4370,12 +4406,23 @@ app.get('/debug-of-sign-test', async (req, res) => {
     // 2026-07-30: caused "Wrong user" [301] when this was empty) is the
     // same id and always present once logged in, so prefer it.
     const userId = localStorageDump.user || (session.meProfileRef && session.meProfileRef.current && session.meProfileRef.current.id) || '';
+    // x-of-rev (CONFIRMED LIVE 2026-07-30, required for at least the
+    // message-send endpoint) isn't in any storage - it's the static-asset
+    // build revision, embedded all over the page's own HTML (CDN image
+    // URLs etc, format YYYYMMDDHHmm-<10 hex chars>). Not in the free
+    // DATAHOARDERS rules file at all, has to come from the live page.
+    const ofRev = await session.page.evaluate(() => {
+      const m = document.documentElement.outerHTML.match(/\d{12}-[a-f0-9]{10}/);
+      return m ? m[0] : '';
+    }).catch(() => '');
     const target = new URL(url);
     const pathWithQuery = target.pathname + target.search;
     const built = computeOnlyFansSign(pathWithQuery, userId, Date.now());
 
-    const result = await session.page.evaluate(async (u, headers) => {
-      const r = await fetch(u, { credentials: 'include', headers });
+    const result = await session.page.evaluate(async (u, headers, m, b) => {
+      const opts = { credentials: 'include', headers, method: m || 'GET' };
+      if (b) opts.body = b;
+      const r = await fetch(u, opts);
       const text = await r.text();
       let json = null;
       try { json = JSON.parse(text); } catch (e) {}
@@ -4386,10 +4433,12 @@ app.get('/debug-of-sign-test', async (req, res) => {
       'app-token': built.appToken,
       'user-id': String(userId || ''),
       'x-bc': xbc,
+      'x-of-rev': ofRev,
       accept: 'application/json',
-    });
+      ...(body ? { 'content-type': 'application/json' } : {}),
+    }, method || 'GET', body ? JSON.stringify(body) : null);
 
-    res.json({ status: 'success', userIdUsed: userId, xbcUsed: xbc, sentHeaders: { sign: built.sign, time: built.time, appToken: built.appToken }, result, localStorageKeys: Object.keys(localStorageDump) });
+    res.json({ status: 'success', userIdUsed: userId, xbcUsed: xbc, ofRevUsed: ofRev, sentHeaders: { sign: built.sign, time: built.time, appToken: built.appToken }, result, localStorageKeys: Object.keys(localStorageDump) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
