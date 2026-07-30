@@ -140,6 +140,11 @@ export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatu
   if (isAdminTier || hasChatterAccess) {
     items.push({ href: "/crm-inbox", label: "OnlyFans", icon: "🔮" });
   }
+  // Experimental API-driven inbox (2026-07-30) - admin-tier only for now,
+  // not yet feature-complete vs the VNC-based /crm-inbox above (no custom
+  // fan nicknames/spend-ring yet). Placed right under OnlyFans per the
+  // user's explicit ask, above Stechuhr.
+  if (isAdminTier) items.push({ href: "/of-inbox", label: "OF Inbox (Beta)", icon: "📡" });
 
   if (!isAdminTier && hasModeratorAccess) {
     items.push({ href: "/stripchat", label: "Stripchat", icon: "🎬" });
@@ -158,10 +163,6 @@ export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatu
     items.push({ href: "/stripchat", label: "Stripchat", icon: "🎬" });
   }
   if (canUse("massmessage")) items.push({ href: "/massmessage", label: "Massmessage", icon: "📨" });
-  // Experimental API-driven inbox (2026-07-30) - admin-tier only for now,
-  // not yet feature-complete vs the VNC-based /crm-inbox (no overlay
-  // features, no fan names/avatars yet).
-  if (isAdminTier) items.push({ href: "/of-inbox", label: "OF Inbox (Beta)", icon: "📡" });
   if (canUse("content-plan")) items.push({ href: "/content-plan", label: "Content Plan", icon: "📅" });
   if (canUse("buchhaltung")) items.push({ href: "/buchhaltung", label: "Buchhaltung", icon: "🧾" });
 

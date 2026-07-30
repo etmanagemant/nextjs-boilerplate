@@ -17,14 +17,16 @@ type Message = {
   fromUser?: { id: number };
 };
 
+type UserDetail = { name?: string; username?: string; avatar?: string | null };
+
 // First-pass native inbox UI reading OnlyFans directly via our own signed
-// API calls (see app/of-inbox/page.tsx's comment) - fan names/avatars
-// aren't wired up yet (the chat-list endpoint only returns fan IDs, a
-// separate users/list batch call is needed for that - not built yet), so
-// conversations show by numeric fan ID for now. No overlay features
-// (dark mode, sent-by, script-vault button, fan-spend ring, PPV detector)
-// ported over yet either - those need to become native pieces of this UI,
-// not a straight port of the DOM-overlay versions built for VNC.
+// API calls (see app/of-inbox/page.tsx's comment). Fan names/avatars (via
+// /of-user-details), custom CRM-only nicknames (crm_fan_nicknames, purely
+// local, never touches OnlyFans), and the gold spend-ring (reusing the
+// same /api/crm/fan-spend-overlay + crm_fan_metadata the VNC overlay
+// script already used) are wired in. NOT yet ported: dark mode toggle,
+// sent-by overlay, script-vault button, PPV purchase detector, multi-
+// model tab bar, new-tab/refresh chrome - still VNC-only for now.
 export default function OfInboxClient({ connectedModels }: { connectedModels: ConnectedModel[] }) {
   const [modelId, setModelId] = useState(connectedModels[0]?.id || "");
   const [chats, setChats] = useState<ChatListItem[]>([]);
@@ -36,6 +38,9 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [userDetails, setUserDetails] = useState<Record<string, UserDetail>>({});
+  const [nicknames, setNicknames] = useState<Record<string, string>>({});
+  const [spendDisplay, setSpendDisplay] = useState<Record<string, string>>({});
 
   const loadChats = useCallback(async () => {
     if (!modelId) return;
@@ -45,7 +50,38 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
       const res = await fetch(`/api/crm/of-inbox/chats?modelId=${encodeURIComponent(modelId)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
-      setChats(data.data?.list || []);
+      const list: ChatListItem[] = data.data?.list || [];
+      setChats(list);
+
+      const fanIds = list.map((c) => String(c.withUser.id));
+      if (fanIds.length > 0) {
+        fetch(`/api/crm/of-inbox/user-details?modelId=${encodeURIComponent(modelId)}&ids=${fanIds.join(",")}`)
+          .then((r) => r.json())
+          .then((d) => {
+            const raw = d.data;
+            const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
+            const map: Record<string, UserDetail> = {};
+            arr.forEach((u: any) => {
+              if (u && u.id != null) map[String(u.id)] = { name: u.name || u.displayName, username: u.username, avatar: u.avatar || null };
+            });
+            setUserDetails((prev) => ({ ...prev, ...map }));
+          })
+          .catch(() => {});
+
+        fetch("/api/crm/fan-spend-overlay", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ modelId, fanIds, newFanIds: [] }),
+        })
+          .then((r) => r.json())
+          .then((d) => setSpendDisplay((prev) => ({ ...prev, ...(d.display || {}) })))
+          .catch(() => {});
+      }
+
+      fetch(`/api/crm/of-inbox/nickname?modelId=${encodeURIComponent(modelId)}`)
+        .then((r) => r.json())
+        .then((d) => setNicknames(d.nicknames || {}))
+        .catch(() => {});
     } catch (e: any) {
       setChatsError(e.message || "Fehler beim Laden der Chats");
     } finally {
@@ -104,6 +140,51 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
     }
   }
 
+  async function editNickname(fanId: number) {
+    const current = nicknames[String(fanId)] || "";
+    const next = window.prompt("Eigener Name für diesen Fan (nur im CRM sichtbar, OnlyFans bleibt unverändert):", current);
+    if (next === null) return;
+    setNicknames((prev) => ({ ...prev, [String(fanId)]: next.trim() }));
+    try {
+      await fetch("/api/crm/of-inbox/nickname", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, fanId, nickname: next.trim() }),
+      });
+    } catch {}
+  }
+
+  function displayName(fanId: number): string {
+    const u = userDetails[String(fanId)];
+    const nick = nicknames[String(fanId)];
+    const username = u?.username || u?.name || `Fan #${fanId}`;
+    return nick ? `${nick} (${username})` : (u?.name || username);
+  }
+
+  function Avatar({ fanId, size }: { fanId: number; size: number }) {
+    const u = userDetails[String(fanId)];
+    const spend = spendDisplay[String(fanId)];
+    const label = spend === "NEW" ? "NEW" : spend && spend !== "0" ? `$${spend}` : "$0";
+    return (
+      <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+        <div
+          className="rounded-full overflow-hidden bg-black/40 flex items-center justify-center text-xs font-bold text-slate-400"
+          style={{ width: size, height: size, boxShadow: "0 0 0 2px #0A0A0A, 0 0 0 4px #E5C158" }}
+        >
+          {u?.avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={u.avatar} alt="" className="w-full h-full object-cover" />
+          ) : (
+            (u?.name || String(fanId)).slice(0, 1).toUpperCase()
+          )}
+        </div>
+        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-gradient-to-b from-[#E5C158] to-[#9C7A3D] text-black font-extrabold text-[9px] leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap shadow">
+          {label}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <main className="p-6 max-w-6xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
       <div className="flex items-center justify-between border-b border-[#9C7A3D]/20 pb-4 mb-6">
@@ -127,7 +208,7 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
       {!modelId ? (
         <div className="text-sm text-slate-400">Kein verbundenes Model gefunden.</div>
       ) : (
-        <div className="grid grid-cols-[280px_1fr] gap-4 min-h-[500px]">
+        <div className="grid grid-cols-[320px_1fr] gap-4 min-h-[500px]">
           <div className="border border-[#9C7A3D]/20 rounded-xl overflow-hidden">
             <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Chats</span>
@@ -140,20 +221,23 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
                 <button
                   key={c.withUser.id}
                   onClick={() => openChat(c.withUser.id)}
-                  className={`w-full text-left p-3 hover:bg-black/30 transition ${activeFanId === c.withUser.id ? "bg-[#C9A86A]/10" : ""}`}
+                  className={`w-full text-left p-3 hover:bg-black/30 transition flex items-center gap-3 ${activeFanId === c.withUser.id ? "bg-[#C9A86A]/10" : ""}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-white">Fan #{c.withUser.id}</span>
-                    {c.unreadMessagesCount > 0 && (
-                      <span className="text-[10px] bg-[#C9A86A] text-black font-bold px-1.5 py-0.5 rounded-full">{c.unreadMessagesCount}</span>
+                  <Avatar fanId={c.withUser.id} size={40} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-white truncate">{displayName(c.withUser.id)}</span>
+                      {c.unreadMessagesCount > 0 && (
+                        <span className="text-[10px] bg-[#C9A86A] text-black font-bold px-1.5 py-0.5 rounded-full ml-1 flex-shrink-0">{c.unreadMessagesCount}</span>
+                      )}
+                    </div>
+                    {c.lastMessage && (
+                      <div
+                        className="text-xs text-slate-400 mt-0.5 truncate"
+                        dangerouslySetInnerHTML={{ __html: c.lastMessage.text }}
+                      />
                     )}
                   </div>
-                  {c.lastMessage && (
-                    <div
-                      className="text-xs text-slate-400 mt-1 truncate"
-                      dangerouslySetInnerHTML={{ __html: c.lastMessage.text }}
-                    />
-                  )}
                 </button>
               ))}
             </div>
@@ -164,6 +248,17 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
               <div className="flex-1 flex items-center justify-center text-sm text-slate-500">Chat auswählen</div>
             ) : (
               <>
+                <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center gap-3">
+                  <Avatar fanId={activeFanId} size={32} />
+                  <span className="text-sm font-bold text-white">{displayName(activeFanId)}</span>
+                  <button
+                    onClick={() => editNickname(activeFanId)}
+                    className="text-xs text-slate-400 hover:text-[#E2C48A] ml-1"
+                    title="Eigenen Namen vergeben"
+                  >
+                    ✏️
+                  </button>
+                </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-2">
                   {messagesLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}
                   {messages.map((m) => {

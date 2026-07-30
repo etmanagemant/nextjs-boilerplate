@@ -3040,6 +3040,29 @@ app.post('/of-send', async (req, res) => {
   }
 });
 
+// GET /of-user-details?modelId=X&ids=1,2,3 - batch fetch of name/username/
+// avatar for a list of fan ids (chat list only returns bare ids), via the
+// same 'cl[]=' batch endpoint OnlyFans' own /my/chats page uses.
+app.get('/of-user-details', async (req, res) => {
+  const { modelId, ids } = req.query;
+  if (!modelId || !ids) return res.status(400).json({ error: 'Missing modelId or ids' });
+  const session = modelSessions[modelId];
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  session.lastActivity = Date.now();
+
+  try {
+    const idList = String(ids).split(',').map((s) => s.trim()).filter(Boolean);
+    const qs = idList.map((id) => `cl[]=${encodeURIComponent(id)}`).join('&');
+    const url = `https://onlyfans.com/api2/v2/users/list?${qs}`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-USER-DETAILS] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Hands a CRM user's browser what it needs to open a real VNC connection -
 // the password itself, since VNC auth happens client-side via noVNC. Used
 // for both the admin login flow and the CRM Inbox live view (both connect
