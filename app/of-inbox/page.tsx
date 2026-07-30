@@ -47,5 +47,5 @@ export default async function OfInboxPage() {
     connectedModels = modelIds.map((id: string) => ({ id, name: detailsMap.get(id)?.name || id }));
   }
 
-  return <OfInboxClient connectedModels={connectedModels} />;
+  return <OfInboxClient connectedModels={connectedModels} isAdmin={isAdminTierRole(profile?.role) || user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"} />;
 }

@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { FanCrmPanel } from "@/components/FanCrmPanel";
 
 type ConnectedModel = { id: string; name: string };
+
+const EMOJI_BAR = ["😊", "😂", "🔥", "❤️", "😍", "👏", "🎉", "😉", "😘", "🙈", "💦", "🍑", "😏", "🥵", "😈"];
 
 type ChatListItem = {
   withUser: { id: number };
@@ -27,7 +30,7 @@ type UserDetail = { name?: string; username?: string; avatar?: string | null };
 // script already used) are wired in. NOT yet ported: dark mode toggle,
 // sent-by overlay, script-vault button, PPV purchase detector, multi-
 // model tab bar, new-tab/refresh chrome - still VNC-only for now.
-export default function OfInboxClient({ connectedModels }: { connectedModels: ConnectedModel[] }) {
+export default function OfInboxClient({ connectedModels, isAdmin }: { connectedModels: ConnectedModel[]; isAdmin: boolean }) {
   const [modelId, setModelId] = useState(connectedModels[0]?.id || "");
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [chatsLoading, setChatsLoading] = useState(false);
@@ -41,6 +44,9 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
   const [userDetails, setUserDetails] = useState<Record<string, UserDetail>>({});
   const [nicknames, setNicknames] = useState<Record<string, string>>({});
   const [spendDisplay, setSpendDisplay] = useState<Record<string, string>>({});
+  const [fanMetadata, setFanMetadata] = useState<any | null>(null);
+  const [fanMetaLastEditedBy, setFanMetaLastEditedBy] = useState<string | null>(null);
+  const [showEmoji, setShowEmoji] = useState(false);
 
   const loadChats = useCallback(async () => {
     if (!modelId) return;
@@ -112,10 +118,24 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
     }
   }, [modelId]);
 
+  const loadFanMetadata = useCallback(async (fanId: number) => {
+    if (!modelId) return;
+    try {
+      const res = await fetch(`/api/crm/of-inbox/fan-metadata?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}`);
+      const data = await res.json();
+      if (res.ok) {
+        setFanMetadata(data.metadata);
+        setFanMetaLastEditedBy(data.lastEditedBy || null);
+      }
+    } catch {}
+  }, [modelId]);
+
   function openChat(fanId: number) {
     setActiveFanId(fanId);
     setSendError("");
+    setShowEmoji(false);
     loadMessages(fanId);
+    loadFanMetadata(fanId);
   }
 
   async function handleSend() {
@@ -211,8 +231,8 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
       {!modelId ? (
         <div className="text-sm text-slate-400">Kein verbundenes Model gefunden.</div>
       ) : (
-        <div className="grid grid-cols-[320px_1fr] gap-4 min-h-[500px]">
-          <div className="border border-[#9C7A3D]/20 rounded-xl overflow-hidden">
+        <div className="flex gap-4 min-h-[500px]">
+          <div className="w-[320px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden self-start">
             <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Chats</span>
               <button onClick={loadChats} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
@@ -246,7 +266,7 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
             </div>
           </div>
 
-          <div className="border border-[#9C7A3D]/20 rounded-xl flex flex-col">
+          <div className="flex-1 min-w-0 border border-[#9C7A3D]/20 rounded-xl flex flex-col">
             {!activeFanId ? (
               <div className="flex-1 flex items-center justify-center text-sm text-slate-500">Chat auswählen</div>
             ) : (
@@ -278,7 +298,27 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
                 </div>
                 <div className="p-3 border-t border-[#9C7A3D]/20">
                   {sendError && <div className="text-xs text-red-400 mb-2">{sendError}</div>}
+                  {showEmoji && (
+                    <div className="flex flex-wrap gap-1 mb-2 bg-black/40 border border-[#9C7A3D]/20 rounded-lg p-2">
+                      {EMOJI_BAR.map((e) => (
+                        <button
+                          key={e}
+                          onClick={() => setDraft((d) => d + e)}
+                          className="text-lg hover:scale-125 transition"
+                        >
+                          {e}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowEmoji((v) => !v)}
+                      className="text-lg px-2 rounded border border-[#9C7A3D]/30 hover:bg-black/30"
+                      title="Emojis"
+                    >
+                      😊
+                    </button>
                     <input
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
@@ -298,6 +338,19 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
               </>
             )}
           </div>
+
+          {activeFanId && fanMetadata && (
+            <div className="w-80 flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden self-start max-h-[500px]">
+              <FanCrmPanel
+                modelId={modelId}
+                fanId={String(activeFanId)}
+                metadata={fanMetadata}
+                lastEditedBy={fanMetaLastEditedBy}
+                onSaved={() => loadFanMetadata(activeFanId)}
+                isAdmin={isAdmin}
+              />
+            </div>
+          )}
         </div>
       )}
     </main>
