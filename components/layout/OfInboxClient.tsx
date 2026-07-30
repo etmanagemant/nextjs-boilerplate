@@ -6,7 +6,7 @@ import { FanCrmPanel } from "@/components/FanCrmPanel";
 import EmojiBar from "@/components/layout/EmojiBar";
 import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
 import {
-  HomeIcon, BellIcon, ChatIcon, FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon,
+  HomeIcon, BellIcon, ChatIcon, FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon, ListIcon,
   NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon,
 } from "@/components/layout/GoldIcons";
 
@@ -87,6 +87,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
   const [fanMetadata, setFanMetadata] = useState<any | null>(null);
   const [fanMetaLastEditedBy, setFanMetaLastEditedBy] = useState<string | null>(null);
   const [messageSearch, setMessageSearch] = useState<string | null>(null);
+  const [nicknameModalFanId, setNicknameModalFanId] = useState<number | null>(null);
+  const [nicknameDraft, setNicknameDraft] = useState("");
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
@@ -281,16 +283,22 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
     }
   }
 
-  async function editNickname(fanId: number) {
-    const current = nicknames[String(fanId)] || "";
-    const next = window.prompt("Eigener Name für diesen Fan (nur im CRM sichtbar, OnlyFans bleibt unverändert):", current);
-    if (next === null) return;
-    setNicknames((prev) => ({ ...prev, [String(fanId)]: next.trim() }));
+  function editNickname(fanId: number) {
+    setNicknameModalFanId(fanId);
+    setNicknameDraft(nicknames[String(fanId)] || "");
+  }
+
+  async function saveNickname() {
+    if (nicknameModalFanId == null) return;
+    const fanId = nicknameModalFanId;
+    const value = nicknameDraft.trim();
+    setNicknames((prev) => ({ ...prev, [String(fanId)]: value }));
+    setNicknameModalFanId(null);
     try {
       await fetch("/api/crm/of-inbox/nickname", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId, fanId, nickname: next.trim() }),
+        body: JSON.stringify({ modelId, fanId, nickname: value }),
       });
     } catch {}
   }
@@ -316,20 +324,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
   function Avatar({ fanId, size }: { fanId: number; size: number }) {
     const u = userDetails[String(fanId)];
     const spend = spendDisplay[String(fanId)];
-    // Real lifetime spend straight from OnlyFans (subscribedByData.totalSumm,
-    // part of the same users/list batch call already made for names/
-    // avatars) wins over our own crm_fan_metadata cache (CONFIRMED LIVE:
-    // a real paying fan showed $0 because the periodic VPS sync hadn't
-    // covered them - this has no such lag, it's read fresh every time).
-    const realTotal = u?.subscribedByData?.totalSumm;
-    const label =
-      typeof realTotal === "number" && realTotal > 0
-        ? `$${realTotal.toFixed(0)}`
-        : spend === "NEW"
-        ? "NEW"
-        : spend && spend !== "0"
-        ? `$${spend}`
-        : "$0";
+    // Still reading from our own crm_fan_metadata cache (populated by a
+    // periodic VPS sync, can lag behind reality) - a same-request live
+    // OnlyFans source was attempted (subscribedByData.totalSumm) but
+    // CONFIRMED LIVE 2026-07-30 that field does NOT exist on the real
+    // users/list?cl[]= response at all (only view/avatar/name/username/
+    // subscribedOn-ish fields) - removed rather than leave dead code
+    // pretending to be live. Real fix needs a genuinely confirmed
+    // per-fan spend endpoint, not yet found - see task list.
+    const label = spend === "NEW" ? "NEW" : spend && spend !== "0" ? `$${spend}` : "$0";
     return (
       <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
         <div
@@ -390,13 +393,18 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
               angebunden, der Rest ist bewusst ausgegraut statt vorgetäuscht
               funktionsfähig zu sein. */}
           <div className="w-12 flex-shrink-0 flex flex-col items-center gap-3 pt-1">
-            <button
-              disabled
-              title="Zeigt nur Werbe-/Entdecken-Beiträge anderer Creator - für uns nicht relevant"
-              className="opacity-30 cursor-not-allowed"
-            >
-              <HomeIcon />
-            </button>
+            {/* Home zeigt nur Werbe-Feed anderer Creator - für Chatter
+                komplett raus, für Admin/Content-Manager als ausgegrauter
+                Platzhalter belassen. */}
+            {isAdmin && (
+              <button
+                disabled
+                title="Zeigt nur Werbe-/Entdecken-Beiträge anderer Creator - für uns nicht relevant"
+                className="opacity-30 cursor-not-allowed"
+              >
+                <HomeIcon />
+              </button>
+            )}
             <div className="relative">
               <button
                 onClick={toggleNotifPanel}
@@ -436,7 +444,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
               )}
             </div>
             <button title="Nachrichten (aktiv)" className="text-[#C9A86A]"><ChatIcon /></button>
-            {[FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon].map((IconComp, i) => (
+            {/* Task: chatter role only ever needs Messages/Bell (above) +
+                Tresor/Listen - the rest (Galerie/Kalender/Statistik/
+                Warteschlange) is admin/content-manager only. */}
+            {(isAdmin ? [FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon] : [FolderIcon, ListIcon]).map((IconComp, i) => (
               <button key={i} disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">
                 <IconComp />
               </button>
@@ -598,21 +609,17 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
           </div>
 
           {activeFanId && fanMetadata && (() => {
-            // Real OnlyFans subscription dates only fill in where our own
-            // crm_fan_metadata has nothing yet - a chatter's own manually
-            // entered value (if any) always wins.
-            const sub = userDetails[String(activeFanId)]?.subscribedByData;
-            const enrichedMetadata = {
-              ...fanMetadata,
-              created_at: fanMetadata.created_at || sub?.subscribeAt || null,
-              last_subscription_at: fanMetadata.last_subscription_at || sub?.subscribeAt || null,
-            };
+            // Was enriching from userDetails[...].subscribedByData.subscribeAt,
+            // but CONFIRMED LIVE 2026-07-30 that field doesn't exist on the
+            // real users/list response at all (see Avatar's spend label
+            // comment) - reverted to the plain DB value rather than keep
+            // code reading a field that's always undefined.
             return (
               <div className="w-80 flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden h-full">
                 <FanCrmPanel
                   modelId={modelId}
                   fanId={String(activeFanId)}
-                  metadata={enrichedMetadata}
+                  metadata={fanMetadata}
                   lastEditedBy={fanMetaLastEditedBy}
                   onSaved={() => loadFanMetadata(activeFanId)}
                   isAdmin={isAdmin}
@@ -620,6 +627,40 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {nicknameModalFanId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setNicknameModalFanId(null)}>
+          <div
+            className="w-full max-w-sm bg-[#0A0A0A] border border-[#C9A86A]/30 rounded-xl shadow-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-bold text-[#C9A86A] uppercase tracking-wider mb-3">Eigener Name für diesen Fan</h3>
+            <p className="text-xs text-slate-400 mb-3">Nur im CRM sichtbar, OnlyFans bleibt unverändert.</p>
+            <input
+              autoFocus
+              value={nicknameDraft}
+              onChange={(e) => setNicknameDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") saveNickname(); if (e.key === "Escape") setNicknameModalFanId(null); }}
+              className="w-full bg-black/60 border border-[#C9A86A]/30 rounded px-3 py-2 text-sm text-white outline-none focus:border-[#C9A86A] mb-4"
+              placeholder="Name eingeben…"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setNicknameModalFanId(null)}
+                className="px-3 py-1.5 rounded text-sm text-slate-400 hover:text-white transition"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={saveNickname}
+                className="px-4 py-1.5 rounded text-sm font-bold bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black hover:from-[#E5C158] transition"
+              >
+                Speichern
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </main>

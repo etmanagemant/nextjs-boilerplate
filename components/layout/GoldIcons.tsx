@@ -79,6 +79,10 @@ export const CheckIcon = (p: { size?: number }) => (
   </svg>
 );
 
+export const ListIcon = (p: { size?: number }) => (
+  <Icon {...p}><path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" /></Icon>
+);
+
 export const MuteIcon = (p: { size?: number }) => (
   <Icon {...p}><path d="M11 5 6 9H2v6h4l5 4V5Z" /><path d="m22 9-6 6M16 9l6 6" /></Icon>
 );

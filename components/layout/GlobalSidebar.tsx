@@ -137,7 +137,10 @@ export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatu
     { href: "/dashboard", label: "Dashboard", icon: "📊" },
   ];
 
-  if (isAdminTier || hasChatterAccess) {
+  // VNC-based OnlyFans view - admin-only from 2026-07-30 on (explicit user
+  // request): chatters now work through OF Inbox (Beta) below instead, no
+  // reason for them to reach the old VNC view/its RAM cost anymore.
+  if (isAdminTier) {
     items.push({ href: "/crm-inbox", label: "OnlyFans", icon: "🔮" });
   }
   // Experimental API-driven inbox (2026-07-30) - admin-tier only for now,
