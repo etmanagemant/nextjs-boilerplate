@@ -443,7 +443,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
                       : "";
                     return (
                       <div key={m.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[70%] rounded-xl px-3 py-2 text-sm ${isOwn ? "bg-[#C9A86A]/20 text-white" : "bg-black/30 text-slate-200"}`}>
+                        <div className={`max-w-[70%] rounded-xl px-4 py-2.5 text-base ${isOwn ? "bg-[#C9A86A]/20 text-white" : "bg-black/30 text-slate-200"}`}>
                           <div dangerouslySetInnerHTML={{ __html: m.text }} />
                           {isOwn && (
                             <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-400">
@@ -468,12 +468,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
                       onChange={(e) => setDraft(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
                       placeholder="Nachricht schreiben…"
-                      className="flex-1 bg-[#050505] border border-[#9C7A3D]/30 rounded px-3 py-2 text-sm text-white outline-none focus:border-[#C9A86A]"
+                      className="flex-1 bg-[#050505] border border-[#9C7A3D]/30 rounded px-4 py-2.5 text-base text-white outline-none focus:border-[#C9A86A]"
                     />
                     <button
                       onClick={handleSend}
                       disabled={sending || !draft.trim()}
-                      className="bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black font-bold px-4 py-2 rounded text-sm disabled:opacity-50"
+                      className="bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black font-bold px-5 py-2.5 rounded text-base disabled:opacity-50"
                     >
                       {sending ? "…" : "Senden"}
                     </button>
