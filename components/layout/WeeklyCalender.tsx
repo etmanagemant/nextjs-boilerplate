@@ -211,9 +211,18 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
                                   <label className="text-[9px] text-[#C9A86A] font-bold block mb-0.5">Model auswählen</label>
                                   <select value={editModel} onChange={(e) => setEditModel(e.target.value)} className="w-full bg-[#050505] border border-[#9C7A3D]/40 rounded p-1 text-xs text-white focus:border-[#C9A86A] outline-none cursor-pointer">
                                     <option value="Kein Model" className="bg-[#050505] text-white">Kein Model</option>
-                                    {(modelsListe || []).map((m) => (
-                                      <option key={m.id} value={m.name} className="bg-[#050505] text-white">{m.name}</option>
-                                    ))}
+                                    {/* Task #72: OnlyFans- und Stripchat-Models waren ununterscheidbar in
+                                        einer flachen Liste vermischt - jetzt nach platform_type gruppiert. */}
+                                    <optgroup label="OnlyFans">
+                                      {(modelsListe || []).filter((m) => m.platform_type !== "stripchat").map((m) => (
+                                        <option key={m.id} value={m.name} className="bg-[#050505] text-white">{m.name}</option>
+                                      ))}
+                                    </optgroup>
+                                    <optgroup label="Stripchat">
+                                      {(modelsListe || []).filter((m) => m.platform_type === "stripchat").map((m) => (
+                                        <option key={m.id} value={m.name} className="bg-[#050505] text-white">{m.name}</option>
+                                      ))}
+                                    </optgroup>
                                   </select>
                                 </div>
                                 <div>

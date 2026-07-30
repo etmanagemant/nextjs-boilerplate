@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import CRMInboxClient from "@/components/layout/CRMInboxClient";
 import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
+import { hasRole, isAdminTierRole } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,12 @@ export default async function CRMInboxPage() {
   // 🔐 SECURITY: Allow chatter, moderator, OR admin access
   const profile = await getCurrentProfile(user.id);
 
-  // Allow: chatter, moderator, admin roles. If no profile, allow (could be admin from auth)
+  // Allow: chatter (this is an OnlyFans-only tool - a plain moderator is
+  // Stripchat-only and shouldn't reach it, see hasRole/secondary_role for
+  // the chatter+moderator dual-role case) + admin-tier. If no profile,
+  // allow (could be admin from auth)
   const userRole = profile?.role || "guest";
-  const isAllowed = ["chatter", "moderator", "admin", "content-manager"].includes(userRole) ||
+  const isAllowed = hasRole(profile, "chatter") || isAdminTierRole(userRole) ||
                     user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ||
                     user.email === "etmanagement@gmail.com" ||
                     user.email === "etmanagemant@gmail.com";

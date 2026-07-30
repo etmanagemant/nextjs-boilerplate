@@ -16,6 +16,20 @@ export function isAdminTierRole(role: string | null | undefined): boolean {
   return !!role && (ADMIN_TIER_ROLES as readonly string[]).includes(role);
 }
 
+// A user can hold a second role at once (profiles.secondary_role, see
+// ADD_SECONDARY_ROLE.sql - Task #80, currently only Chatter+Moderator
+// combos are exposed in RoleSelect.tsx). Existing role === "x" equality
+// checks intentionally keep working against the primary role only; use
+// this instead anywhere "does this user have role X at all" is the actual
+// question (e.g. which Stechuhr panels to show).
+export function hasRole(
+  profile: { role?: string | null; secondary_role?: string | null } | null | undefined,
+  roleName: string
+): boolean {
+  if (!profile) return false;
+  return profile.role === roleName || profile.secondary_role === roleName;
+}
+
 // Every toggle in the Management page's Rechte-Kontrollzentrum grid - page
 // access AND specific things inside the live OnlyFans mask (currently just
 // whether Model-Notizen is editable vs read-only). Explicitly set per role

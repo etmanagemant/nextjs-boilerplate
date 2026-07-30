@@ -35,7 +35,7 @@ export default async function CalendarPage() {
   // 2-4. Schichten, Models und alle Profile unabhängig voneinander laden
   const [{ data: shifts }, { data: models }, { data: profiles }] = await Promise.all([
     supabase.from("shifts").select("*"),
-    supabase.from("models").select("id, name").order("name", { ascending: true }),
+    supabase.from("models").select("id, name, platform_type").order("name", { ascending: true }),
     supabase.from("profiles").select("user_id, role, full_name, email"),
   ]);
   const profileMap = new Map((profiles || []).map(p => [p.user_id, p.role || "chatter"]));

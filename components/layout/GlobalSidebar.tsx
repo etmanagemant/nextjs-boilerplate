@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { isAdminTierRole, hasFeatureAccess, type GrantableFeatureKey } from "@/lib/roles";
+import { isAdminTierRole, hasFeatureAccess, hasRole, type GrantableFeatureKey } from "@/lib/roles";
 
 interface GlobalSidebarProps {
   role: string;
+  // Task #80: optional second role (profiles.secondary_role) - a chatter
+  // who's also moderator (or vice versa) sees both role's nav items.
+  secondaryRole?: string | null;
   // This role's explicit feature_key -> enabled rows from the Management
   // page's Rechte-Kontrollzentrum (see app/layout.tsx) - a plain object
   // since Map isn't serializable across the server/client boundary.
@@ -25,7 +28,7 @@ interface NavItem {
 // as two sidebars stacked side by side once this global one existed too.
 const ONLYFANS_SECTION_PATHS = ["/crm-inbox", "/management/crm-connect", "/script-vault", "/upload-vault"];
 
-export default function GlobalSidebar({ role, grantedFeatures = {} }: GlobalSidebarProps) {
+export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatures = {} }: GlobalSidebarProps) {
   const pathname = usePathname();
   // Content-manager gets the exact same view/rights as admin everywhere
   // EXCEPT the Management page itself (Mitarbeiter- und Rollen-Verwaltung)
@@ -39,6 +42,13 @@ export default function GlobalSidebar({ role, grantedFeatures = {} }: GlobalSide
   const isAdmin = role === "admin";
   const isAdminTier = isAdminTierRole(role);
   const canUse = (key: GrantableFeatureKey) => hasFeatureAccess(role, key, grantedFeatures);
+  // Task #72: /crm-inbox ("OnlyFans") is a pure OnlyFans tool, /stripchat is
+  // Stripchat-only - a plain moderator shouldn't see the former, a plain
+  // chatter shouldn't see the latter. hasRole() also covers the
+  // chatter+moderator dual-role case (Task #80) via secondaryRole.
+  const profileForRole = { role, secondary_role: secondaryRole };
+  const hasChatterAccess = hasRole(profileForRole, "chatter");
+  const hasModeratorAccess = hasRole(profileForRole, "moderator");
   // CONFIRMED LIVE: the fixed 224px sidebar plus its matching 224px content
   // padding (app/layout.tsx) ate almost half the screen on a phone -
   // models do most of their uploading from there. Off-canvas below the md
@@ -125,10 +135,13 @@ export default function GlobalSidebar({ role, grantedFeatures = {} }: GlobalSide
   const items: NavItem[] = [
     { href: "/", label: "Schichtplan", icon: "🏠" },
     { href: "/dashboard", label: "Dashboard", icon: "📊" },
-    { href: "/crm-inbox", label: "OnlyFans", icon: "🔮" },
   ];
 
-  if (!isAdminTier) {
+  if (isAdminTier || hasChatterAccess) {
+    items.push({ href: "/crm-inbox", label: "OnlyFans", icon: "🔮" });
+  }
+
+  if (!isAdminTier && hasModeratorAccess) {
     items.push({ href: "/stripchat", label: "Stripchat", icon: "🎬" });
   }
 

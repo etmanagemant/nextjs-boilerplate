@@ -1,9 +1,10 @@
 import { createClient } from "@/utils/supabase/server";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
-import { updateMitarbeiterRolle, updateMitarbeiterName, deleteMitarbeiter, updateMitarbeiterCompensation, updateRolePermission } from "./actions";
+import { updateMitarbeiterRolle, updateMitarbeiterZweitrolle, updateMitarbeiterName, deleteMitarbeiter, updateMitarbeiterCompensation, updateRolePermission } from "./actions";
 import { revalidatePath } from "next/cache";
 import RoleSelect from "@/components/layout/RoleSelect";
+import SecondaryRoleSelect from "@/components/layout/SecondaryRoleSelect";
 import PermissionCheckbox from "@/components/layout/PermissionCheckbox";
 import { GRANTABLE_FEATURES, PERMISSION_GRID_ROLES, hasFeatureAccess } from "@/lib/roles";
 
@@ -26,7 +27,7 @@ export default async function ManagementPage() {
 
   // 🛡️ ERWEITERTES SELECT: Zieht provision_rate + hourly_rate mit aus der Datenbank heraus!
   const [{ data: profilListe }, { data: alleSchichten }, { data: rolePerms }] = await Promise.all([
-    supabase.from("profiles").select("user_id, role, email, full_name, provision_rate, hourly_rate"),
+    supabase.from("profiles").select("user_id, role, secondary_role, email, full_name, provision_rate, hourly_rate"),
     supabase.from("shift_assignments").select("*"),
     supabase.from("crm_role_permissions").select("role, feature_key, enabled"),
   ]);
@@ -94,6 +95,7 @@ export default async function ManagementPage() {
                 <th className="p-3">E-Mail</th>
                 <th className="p-3 w-[140px]">Provision %</th>
                 <th className="p-3 w-[150px]">Rolle ändern</th>
+                <th className="p-3 w-[150px]">Zweitrolle</th>
                 <th className="p-3 w-[80px] text-center">Löschen</th>
               </tr>
             </thead>
@@ -144,6 +146,9 @@ export default async function ManagementPage() {
 
                   <td className="p-3">
                     <RoleSelect userId={p.user_id} defaultRole={p.role} onUpdateAction={updateMitarbeiterRolle} />
+                  </td>
+                  <td className="p-3">
+                    <SecondaryRoleSelect userId={p.user_id} primaryRole={p.role} defaultSecondaryRole={p.secondary_role} onUpdateAction={updateMitarbeiterZweitrolle} />
                   </td>
                   <td className="p-3 text-center">
                     {p.email !== "etmanagement@gmail.com" && p.email !== "etmanagemant@gmail.com" && p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" ? (

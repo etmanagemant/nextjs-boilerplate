@@ -15,6 +15,21 @@ export async function updateMitarbeiterRolle(formData: FormData) {
   }
 }
 
+// Task #80: optional second role (e.g. a Chatter who also clocks in as
+// Moderator) - kept as its own action/column (profiles.secondary_role)
+// rather than touching updateMitarbeiterRolle, so the primary role and its
+// existing role === "x" checks everywhere else stay untouched.
+export async function updateMitarbeiterZweitrolle(formData: FormData) {
+  const targetUserId = formData.get("user_id");
+  const neueZweitrolle = (formData.get("zweitrolle") as string) || "";
+  if (targetUserId) {
+    const supabaseServer = await createClient();
+    await supabaseServer.from("profiles").update({ secondary_role: neueZweitrolle || null }).eq("user_id", targetUserId);
+    revalidatePath("/management");
+    revalidatePath("/management/crm-connect");
+  }
+}
+
 // 👤 NEU: Ermöglicht das direkte Ändern des Mitarbeiternamens in der DB
 export async function updateMitarbeiterName(formData: FormData) {
   const targetUserId = formData.get("user_id");

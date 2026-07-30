@@ -27,6 +27,10 @@ export default async function RootLayout({
   const isSoloView = pathname.startsWith("/live/");
 
   let role = "chatter";
+  // Task #80: a user can hold a second role (profiles.secondary_role) -
+  // passed through to GlobalSidebar so it can show both role's nav items
+  // instead of just the primary one.
+  let secondaryRole: string | null = null;
   // A brand-new self-registered user (see app/login/page.tsx) gets no role
   // at all until an admin assigns one via Management - pending is the true
   // default now, not a silent "chatter" fallback, so nothing should render
@@ -50,6 +54,7 @@ export default async function RootLayout({
       } else {
         role = profile.role;
       }
+      secondaryRole = profile?.secondary_role || null;
     }
   }
 
@@ -79,7 +84,7 @@ export default async function RootLayout({
         {user && !pending && !isSoloView && (
           <ModelTabsProvider>
             <GlobalTopBar userId={user.id} />
-            <GlobalSidebar role={role} grantedFeatures={grantedFeatures} />
+            <GlobalSidebar role={role} secondaryRole={secondaryRole} grantedFeatures={grantedFeatures} />
             <main className="pt-32 pl-0 md:pl-56 min-h-screen bg-gradient-to-b from-[#050505] via-[#080808] to-[#030303]">
               {children}
             </main>

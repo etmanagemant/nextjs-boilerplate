@@ -90,6 +90,7 @@ export default function ChatterPage() {
   const [copiedShiftId, setCopiedShiftId] = useState<number | null>(null);
   const [jetztZeit, setJetztZeit] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<string>("chatter");
+  const [currentSecondaryRole, setCurrentSecondaryRole] = useState<string | null>(null);
   const [sichereModels, setSichereModels] = useState<any[]>([]);
 
   useEffect(() => {
@@ -107,12 +108,13 @@ export default function ChatterPage() {
       if (data?.user) {
         setCurrentUserEmail(data.user.email || "");
         setCurrentUserId(data.user.id);
-        const { data: prof } = await supabase.from("profiles").select("full_name, role").eq("user_id", data.user.id).maybeSingle();
+        const { data: prof } = await supabase.from("profiles").select("full_name, role, secondary_role").eq("user_id", data.user.id).maybeSingle();
         if (prof?.full_name) setCurrentUserFullName(prof.full_name);
         if (prof?.role) setCurrentUserRole(prof.role);
-        
+        setCurrentSecondaryRole(prof?.secondary_role || null);
+
         // 🔴 Lade Models für Moderator + Admin - NUR Stripchat-Models!
-        const isModeratorOrAdmin = prof?.role === "moderator" || data.user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || data.user.email === "etmanagement@gmail.com" || data.user.email === "etmanagemant@gmail.com";
+        const isModeratorOrAdmin = prof?.role === "moderator" || prof?.secondary_role === "moderator" || data.user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || data.user.email === "etmanagement@gmail.com" || data.user.email === "etmanagemant@gmail.com";
         if (isModeratorOrAdmin) {
           const { data: models } = await supabase.from("models").select("id, name").eq("platform_type", "stripchat").order("name");
           if (models && models.length > 0) setSichereModels(models);
@@ -208,13 +210,21 @@ export default function ChatterPage() {
     setTimeout(() => setCopiedShiftId(null), 2000);
   }
 
+  // Task #80: a user can hold both Chatter and Moderator at once
+  // (profiles.secondary_role) - admin already saw both panels stacked, this
+  // extends that same dual view to any chatter+moderator combo instead of
+  // only reacting to the primary role.
+  const hasModeratorAccess = currentUserRole === "moderator" || currentSecondaryRole === "moderator" || currentUserRole === "admin";
+  const hasChatterAccess = currentUserRole === "chatter" || currentSecondaryRole === "chatter" || currentUserRole === "admin";
+  const bothVisible = hasModeratorAccess && hasChatterAccess;
+
   return (
     <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
       {/* Header-Zustand */}
       <div className="flex justify-between items-center border-b border-[#9C7A3D]/20 pb-4 mb-6">
         <div>
-          <h1 className="text-2xl font-black uppercase tracking-wider">{currentUserRole === "moderator" ? <><span>🎭</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Stripchat Stechuhr</span></> : currentUserRole === "admin" ? <><span>👑</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Admin: Dual-Mode Stechuhr</span></> : <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Mitarbeiter Stechuhr</span>}</h1>
-          <p className="text-xs text-slate-400 mt-0.5">{currentUserRole === "moderator" ? "Stripchat Sessions & Umsatz-Tracking" : currentUserRole === "admin" ? "OnlyFans + Stripchat Stechuhr-Systeme" : "Schichten erfassen und Live-Mass-Messages kopieren"}</p>
+          <h1 className="text-2xl font-black uppercase tracking-wider">{bothVisible ? <><span>👑</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Dual-Mode Stechuhr</span></> : currentUserRole === "moderator" ? <><span>🎭</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Stripchat Stechuhr</span></> : <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Mitarbeiter Stechuhr</span>}</h1>
+          <p className="text-xs text-slate-400 mt-0.5">{bothVisible ? "OnlyFans + Stripchat Stechuhr-Systeme" : currentUserRole === "moderator" ? "Stripchat Sessions & Umsatz-Tracking" : "Schichten erfassen und Live-Mass-Messages kopieren"}</p>
         </div>
         <form action="/api/logout" method="POST">
           <button type="submit" className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg hover:bg-red-500/20 transition font-bold cursor-pointer">Abmelden</button>
@@ -222,9 +232,9 @@ export default function ChatterPage() {
       </div>
 
       {/* MODERATOR + ADMIN MODE - Stripchat Schicht */}
-      {(currentUserRole === "moderator" || currentUserRole === "admin") && (
+      {hasModeratorAccess && (
         <>
-          {currentUserRole === "admin" && (
+          {bothVisible && (
             <div className="mb-4 pb-3 border-b-2 border-[#9C7A3D]/30">
               <h2 className="text-lg font-black text-[#C9A86A] uppercase tracking-wider"><span>🎭</span> <span>Stripchat Schicht</span></h2>
             </div>
@@ -234,7 +244,7 @@ export default function ChatterPage() {
             currentUserFullName={currentUserFullName}
             sichereModels={sichereModels}
           />
-          {currentUserRole === "moderator" && (
+          {(currentUserRole === "moderator" || currentSecondaryRole === "moderator") && (
             <div className="mt-8">
               <h2 className="text-sm font-bold uppercase tracking-wider mb-4"><span>📊</span> <span className="text-[#C9A86A]">Deine Stripchat-Sessions</span></h2>
               {loading ? (
@@ -264,15 +274,15 @@ export default function ChatterPage() {
       )}
 
       {/* REGULAR CHATTER MODE + ADMIN MODE - Normal Stechuhr */}
-      {(currentUserRole === "chatter" || currentUserRole === "admin") && (
+      {hasChatterAccess && (
         <>
-          {currentUserRole === "admin" && (
+          {bothVisible && (
             <div className="mt-8 mb-4 pb-3 border-b-2 border-[#9C7A3D]/30">
               <h2 className="text-lg font-black uppercase tracking-wider"><span>💼</span> <span className="text-[#E2C48A]">OnlyFans Stechuhr</span></h2>
             </div>
           )}
           <div className="bg-gradient-to-r from-[#050505] to-black border border-[#9C7A3D]/20 rounded-xl p-4 mb-6">
-            <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">{currentUserRole === "admin" ? "OnlyFans Stechuhr:" : "Deine Stechuhr:"}</span>
+            <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 mr-2">{bothVisible ? "OnlyFans Stechuhr:" : "Deine Stechuhr:"}</span>
             <button onClick={triggerGlobalStart} disabled={!!activeShift} className="rounded-lg bg-gradient-to-b from-emerald-400 to-emerald-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer">Start Schicht</button>
             <button onClick={triggerGlobalEnd} disabled={!activeShift} className="rounded-lg bg-gradient-to-b from-red-400 to-red-600 disabled:from-slate-800 disabled:to-slate-900 text-black disabled:text-slate-500 px-4 py-2 text-xs font-bold shadow-md transition cursor-pointer ml-2">Ende Schicht</button>
           </div>

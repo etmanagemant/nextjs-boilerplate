@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "../../lib/supabaseClient";
+import { hasRole, isAdminTierRole } from "../../lib/roles";
 
 // Task #85: consistent zero-padded 24h format for the new shift overview,
 // matching this app's convention elsewhere (see app/chatter/page.tsx).
@@ -28,6 +29,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [currentUserRole, setCurrentUserRole] = useState<string>("chatter");
+  const [currentSecondaryRole, setCurrentSecondaryRole] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   
   const [gesamtBruttoAgentur, setGesamtBruttoAgentur] = useState<number>(0);
@@ -56,10 +58,11 @@ export default function DashboardPage() {
       setIsAdmin(adminCheck);
       
       // Lade Benutzer-Role
-      const { data: userProfile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+      const { data: userProfile } = await supabase.from("profiles").select("role, secondary_role").eq("user_id", user.id).maybeSingle();
       if (userProfile?.role) {
         setCurrentUserRole(userProfile.role);
       }
+      setCurrentSecondaryRole(userProfile?.secondary_role || null);
 
       const [profilesRes, assignmentsRes, revenueRes, modelsRes, abandonedLeadsRes] = await Promise.all([
         supabase.from("profiles").select("user_id, full_name, email"),
@@ -299,6 +302,12 @@ export default function DashboardPage() {
     );
   }
   
+  // Task #72: "isAdmin" above is only the hardcoded Hauptadmin check -
+  // isAdminTier also covers the DB "admin"/"content-manager" roles.
+  // hasChatterAccess covers the chatter+moderator dual-role case (Task #80).
+  const isAdminTier = isAdminTierRole(currentUserRole) || isAdmin;
+  const hasChatterAccess = hasRole({ role: currentUserRole, secondary_role: currentSecondaryRole }, "chatter");
+
   // ADMIN DASHBOARD (Original)
   return (
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
@@ -390,18 +399,19 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* 💬 CRM LIVE INBOX - CHATTER & MODERATOR */}
-      {(currentUserRole === "chatter" || currentUserRole === "moderator" || isAdmin) && (
+      {/* 💬 CRM LIVE INBOX - CHATTER (OnlyFans-only tool - a plain moderator
+          is Stripchat-only, see hasChatterAccess/Task #80+#72) */}
+      {(hasChatterAccess || isAdminTier) && (
         <section className="mb-8">
           <Link href="/crm-inbox" className="group block">
             <div className="bg-gradient-to-br from-gold-900/30 to-black p-8 rounded-xl border-2 border-[#C9A86A]/60 shadow-2xl hover:border-[#E2C48A]/80 hover:shadow-[0_0_30px_rgba(201, 168, 106,0.5)] transition-all duration-300 transform hover:scale-105">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-black uppercase tracking-widest animate-pulse"><span>💬</span> <span className="text-[#E2C48A] group-hover:text-[#C9A86A] transition">Live-Inbox & Chat-Zentrale (CRM)</span></h2>
-                  <p className="text-sm text-slate-300 mt-3 font-semibold">Verwalte Fan-Konversationen • Injiziere Sales-Scripts • Nutze personalisierte Emoji-Leiste</p>
+                  <p className="text-sm text-slate-300 mt-3 font-semibold">Verwalte Fan-Konversationen{isAdminTier ? " • Injiziere Sales-Scripts" : ""} • Nutze personalisierte Emoji-Leiste</p>
                   <div className="mt-3 flex gap-3 text-xs font-bold text-[#C9A86A]">
                     <span className="bg-[#C9A86A]/20 px-3 py-1 rounded">📨 Live-Messaging</span>
-                    <span className="bg-[#C9A86A]/20 px-3 py-1 rounded">🔥 Script-Injector</span>
+                    {isAdminTier && <span className="bg-[#C9A86A]/20 px-3 py-1 rounded">🔥 Script-Injector</span>}
                     <span className="bg-[#C9A86A]/20 px-3 py-1 rounded">😊 Emoji-Leiste</span>
                   </div>
                 </div>
@@ -474,32 +484,34 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* 👑 NEUE MODEL RANGLISTE (Vollautomatisch basierend auf der Herkunft der Einnahmen!) */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg mb-8">
-        <h2 className="text-sm font-bold mb-4 text-[#9C7A3D] uppercase tracking-wider">Model Live-Umsatz-Performance</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#9C7A3D] font-semibold text-xs uppercase tracking-wider">
-                <th className="p-3 w-12">Platz</th>
-                <th className="p-3">Model Name</th>
-                <th className="p-3 text-gold-200">Generiert Brutto</th>
-                <th className="p-3 text-emerald-400">Netto Account-Eingang</th>
-              </tr>
-            </thead>
-            <tbody>
-              {modelStatsArray.map((model, idx) => (
-                <tr key={idx} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
-                  <td className="p-3 font-mono font-black text-[#C9A86A]">#{idx + 1}</td>
-                  <td className="p-3 font-semibold text-white tracking-wide">✨ {model.name}</td>
-                  <td className="p-3 font-mono text-gold-200/80">${model.brutto.toFixed(2)}</td>
-                  <td className="p-3 font-mono font-bold text-emerald-400">${model.netto.toFixed(2)}</td>
+      {/* 👑 NEUE MODEL RANGLISTE (Vollautomatisch basierend auf der Herkunft der Einnahmen!) - Task #72: nur Admin/Content-Manager */}
+      {isAdminTier && (
+        <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg mb-8">
+          <h2 className="text-sm font-bold mb-4 text-[#9C7A3D] uppercase tracking-wider">Model Live-Umsatz-Performance</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#9C7A3D] font-semibold text-xs uppercase tracking-wider">
+                  <th className="p-3 w-12">Platz</th>
+                  <th className="p-3">Model Name</th>
+                  <th className="p-3 text-gold-200">Generiert Brutto</th>
+                  <th className="p-3 text-emerald-400">Netto Account-Eingang</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {modelStatsArray.map((model, idx) => (
+                  <tr key={idx} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
+                    <td className="p-3 font-mono font-black text-[#C9A86A]">#{idx + 1}</td>
+                    <td className="p-3 font-semibold text-white tracking-wide">✨ {model.name}</td>
+                    <td className="p-3 font-mono text-gold-200/80">${model.brutto.toFixed(2)}</td>
+                    <td className="p-3 font-mono font-bold text-emerald-400">${model.netto.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* ⚠️ UNVOLLSTÄNDIGE BEWERBUNGEN (ABBRÜCHE) */}
       {abandonedLeads.length > 0 && (
