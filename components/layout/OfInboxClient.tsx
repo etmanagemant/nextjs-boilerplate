@@ -157,8 +157,11 @@ export default function OfInboxClient({ connectedModels }: { connectedModels: Co
   function displayName(fanId: number): string {
     const u = userDetails[String(fanId)];
     const nick = nicknames[String(fanId)];
-    const username = u?.username || u?.name || `Fan #${fanId}`;
-    return nick ? `${nick} (${username})` : (u?.name || username);
+    // The real OnlyFans display name (e.g. "Daniel Buda") is what a fan
+    // actually chose to be called - prefer it over the @username (often
+    // just an auto-generated "u12345678" if they never customized it).
+    const realName = u?.name || u?.username || `Fan #${fanId}`;
+    return nick ? `${nick} (${realName})` : realName;
   }
 
   function Avatar({ fanId, size }: { fanId: number; size: number }) {
