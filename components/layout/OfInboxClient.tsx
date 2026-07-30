@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { FanCrmPanel } from "@/components/FanCrmPanel";
 import EmojiBar from "@/components/layout/EmojiBar";
+import {
+  HomeIcon, BellIcon, ChatIcon, FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon,
+  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon,
+} from "@/components/layout/GoldIcons";
 
 type ConnectedModel = { id: string; name: string };
 
@@ -17,6 +21,7 @@ type Message = {
   text: string;
   createdAt: string;
   fromUser?: { id: number };
+  isOpened?: boolean;
 };
 
 type UserDetail = { name?: string; username?: string; avatar?: string | null };
@@ -75,12 +80,12 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
     });
   }
 
-  function notifIcon(type: string): string {
-    if (type === "subscribed") return "🆕";
-    if (type === "price_changed") return "💲";
-    if (type.includes("tip")) return "💰";
-    if (type.includes("purchase") || type.includes("ppv")) return "🛒";
-    return "🔔";
+  function notifIcon(type: string) {
+    if (type === "subscribed") return <NewBadgeIcon size={16} />;
+    if (type === "price_changed") return <PriceTagIcon size={16} />;
+    if (type.includes("tip")) return <TipIcon size={16} />;
+    if (type.includes("purchase") || type.includes("ppv")) return <CartIcon size={16} />;
+    return <BellIcon size={16} />;
   }
 
   const loadChats = useCallback(async () => {
@@ -244,9 +249,9 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
   }
 
   return (
-    <main className="p-3 w-full min-h-screen bg-[#0A0A0A] text-[#E2C48A]">
+    <main className="p-3 w-full h-screen flex flex-col overflow-hidden bg-[#0A0A0A] text-[#E2C48A]">
       {connectedModels.length > 1 && (
-        <div className="flex items-center justify-end mb-2">
+        <div className="flex items-center justify-end mb-2 flex-shrink-0">
           <select
             value={modelId}
             onChange={(e) => setModelId(e.target.value)}
@@ -262,7 +267,7 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
       {!modelId ? (
         <div className="text-sm text-slate-400">Kein verbundenes Model gefunden.</div>
       ) : (
-        <div className="flex gap-4 min-h-[500px]">
+        <div className="flex gap-4 flex-1 min-h-0">
           {/* Icon-Leiste, in der Reihenfolge wie bei OnlyFans selbst - nur
               Glocke und Nachrichten sind bisher an echte Endpunkte
               angebunden, der Rest ist bewusst ausgegraut statt vorgetäuscht
@@ -271,17 +276,17 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
             <button
               disabled
               title="Zeigt nur Werbe-/Entdecken-Beiträge anderer Creator - für uns nicht relevant"
-              className="text-xl opacity-30 cursor-not-allowed"
+              className="opacity-30 cursor-not-allowed"
             >
-              🏠
+              <HomeIcon />
             </button>
             <div className="relative">
               <button
                 onClick={toggleNotifPanel}
-                className={`text-xl hover:scale-110 transition ${notifPanelOpen ? "scale-110" : ""}`}
+                className={`hover:scale-110 transition ${notifPanelOpen ? "scale-110" : ""}`}
                 title="Benachrichtigungen"
               >
-                🔔
+                <BellIcon />
               </button>
               {notifPanelOpen && (
                 <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
@@ -297,9 +302,12 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
                   <div className="divide-y divide-[#9C7A3D]/10">
                     {notifications.map((n) => (
                       <div key={n.id} className={`p-3 flex gap-2 ${!n.isRead ? "bg-[#C9A86A]/5" : ""}`}>
-                        <span className="text-base flex-shrink-0">{notifIcon(n.type)}</span>
+                        <span className="flex-shrink-0 mt-0.5">{notifIcon(n.type)}</span>
                         <div className="min-w-0 flex-1">
-                          <div className="text-xs text-slate-200" dangerouslySetInnerHTML={{ __html: n.text }} />
+                          {n.user?.name && (
+                            <div className="text-xs font-bold text-[#E2C48A]">{n.user.name}</div>
+                          )}
+                          <div className="text-xs text-slate-300" dangerouslySetInnerHTML={{ __html: n.text }} />
                           <div className="text-[10px] text-slate-500 mt-0.5">
                             {n.createdAt ? new Date(n.createdAt).toLocaleString("de-DE") : ""}
                           </div>
@@ -310,22 +318,22 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
                 </div>
               )}
             </div>
-            <button title="Nachrichten (aktiv)" className="text-xl text-[#C9A86A]">💬</button>
-            {["📁", "🖼️", "📅", "📊", "🧾"].map((icon, i) => (
-              <button key={i} disabled title="Noch nicht verfügbar" className="text-xl opacity-30 cursor-not-allowed">
-                {icon}
+            <button title="Nachrichten (aktiv)" className="text-[#C9A86A]"><ChatIcon /></button>
+            {[FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon].map((IconComp, i) => (
+              <button key={i} disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">
+                <IconComp />
               </button>
             ))}
           </div>
 
-          <div className="w-[320px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden self-start">
+          <div className="w-[320px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden flex flex-col h-full">
             <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Chats</span>
               <button onClick={loadChats} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
             </div>
             {chatsLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
             {chatsError && <div className="p-3 text-xs text-red-400">{chatsError}</div>}
-            <div className="divide-y divide-[#9C7A3D]/10 max-h-[480px] overflow-y-auto">
+            <div className="divide-y divide-[#9C7A3D]/10 flex-1 min-h-0 overflow-y-auto">
               {chats.map((c) => (
                 <button
                   key={c.withUser.id}
@@ -367,22 +375,22 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
                   >
                     ✏️
                   </button>
-                  <div className="flex items-center gap-2 ml-auto text-slate-400">
+                  <div className="flex items-center gap-3 ml-auto text-slate-400">
                     <button
                       onClick={() => setMessageSearch((v) => (v === null ? "" : null))}
-                      className={`hover:text-[#E2C48A] ${messageSearch !== null ? "text-[#E2C48A]" : ""}`}
+                      className={messageSearch !== null ? "text-[#E2C48A]" : "hover:text-[#E2C48A]"}
                       title="In dieser Konversation suchen"
                     >
-                      🔍
+                      <SearchIcon size={18} />
                     </button>
                     {/* Noch nicht an echte OnlyFans-Endpunkte angebunden (der
                         genaue API-Aufruf dafür wurde noch nicht live
                         gefunden) - bewusst ausgegraut statt so zu tun als
                         würden sie funktionieren. */}
-                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">⭐</button>
-                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">🔔</button>
-                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">📌</button>
-                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">🖼️</button>
+                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><StarIcon size={18} /></button>
+                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><BellIcon size={18} /></button>
+                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><PinIcon size={18} /></button>
+                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><ImageIcon size={18} /></button>
                   </div>
                 </div>
                 {messageSearch !== null && (
@@ -396,18 +404,29 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
                     />
                   </div>
                 )}
-                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2">
                   {messagesLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}
                   {messages
                     .filter((m) => !messageSearch || m.text.toLowerCase().includes(messageSearch.toLowerCase()))
                     .map((m) => {
                     const isOwn = String(m.fromUser?.id) !== String(activeFanId);
+                    const time = m.createdAt
+                      ? new Date(m.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })
+                      : "";
                     return (
                       <div key={m.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                        <div
-                          className={`max-w-[70%] rounded-xl px-3 py-2 text-sm ${isOwn ? "bg-[#C9A86A]/20 text-white" : "bg-black/30 text-slate-200"}`}
-                          dangerouslySetInnerHTML={{ __html: m.text }}
-                        />
+                        <div className={`max-w-[70%] rounded-xl px-3 py-2 text-sm ${isOwn ? "bg-[#C9A86A]/20 text-white" : "bg-black/30 text-slate-200"}`}>
+                          <div dangerouslySetInnerHTML={{ __html: m.text }} />
+                          {isOwn && (
+                            <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-400">
+                              <span>{time}</span>
+                              {m.isOpened ? <DoubleCheckIcon size={13} /> : <CheckIcon size={11} />}
+                            </div>
+                          )}
+                          {!isOwn && time && (
+                            <div className="text-[10px] text-slate-500 mt-1">{time}</div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -437,7 +456,7 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
           </div>
 
           {activeFanId && fanMetadata && (
-            <div className="w-80 flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden self-start max-h-[500px]">
+            <div className="w-80 flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden h-full">
               <FanCrmPanel
                 modelId={modelId}
                 fanId={String(activeFanId)}
