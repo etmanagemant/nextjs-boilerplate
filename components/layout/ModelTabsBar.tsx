@@ -52,12 +52,16 @@ export default function ModelTabsBar({ models, activeModelId, chatterId, basePat
 
   const openInNewTab = (modelId: string) => {
     // /live/<modelId> is a separate, chrome-free route (see app/layout.tsx)
-    // showing only the live view + overlay widgets - meant to be dragged
-    // onto its own monitor. It targets the SAME underlying VPS slot/VNC
-    // session this model already uses elsewhere (assignSlot keys off
-    // modelId, and x11vnc runs with -shared) - opening it here never spins
-    // up a second slot or browser for the same model.
-    window.open(`/live/${modelId}`, "_blank", "noopener,noreferrer");
+    // showing only the live VNC view + overlay widgets - only makes sense
+    // for the VNC-based /crm-inbox. OF Inbox (Beta) has no VNC session to
+    // show there at all, so it just opens itself with ?model= instead -
+    // CONFIRMED this was still hardcoded to /live/ (the VNC view) even
+    // from inside the Beta page before this fix.
+    if (basePath === "/crm-inbox") {
+      window.open(`/live/${modelId}`, "_blank", "noopener,noreferrer");
+    } else {
+      window.open(`${basePath}?model=${modelId}`, "_blank", "noopener,noreferrer");
+    }
     setContextMenu(null);
   };
 

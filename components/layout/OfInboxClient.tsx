@@ -27,7 +27,16 @@ type Message = {
   isOpened?: boolean;
 };
 
-type UserDetail = { name?: string; username?: string; avatar?: string | null };
+type UserDetail = {
+  name?: string;
+  username?: string;
+  avatar?: string | null;
+  // Real OnlyFans subscription dates (from the same users/list batch call
+  // already used for name/avatar) - CONFIRMED LIVE present on that
+  // response, used to fill Fan-CRM's "Fan seit"/"Letztes Abo" without a
+  // separate endpoint.
+  subscribedByData?: { subscribeAt?: string | null; expiredAt?: string | null; regularPrice?: number | null };
+};
 
 // First-pass native inbox UI reading OnlyFans directly via our own signed
 // API calls (see app/of-inbox/page.tsx's comment). Fan names/avatars (via
@@ -132,7 +141,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
             const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
             const map: Record<string, UserDetail> = {};
             arr.forEach((u: any) => {
-              if (u && u.id != null) map[String(u.id)] = { name: u.name || u.displayName, username: u.username, avatar: u.avatar || null };
+              if (u && u.id != null) map[String(u.id)] = { name: u.name || u.displayName, username: u.username, avatar: u.avatar || null, subscribedByData: u.subscribedByData || undefined };
             });
             setUserDetails((prev) => ({ ...prev, ...map }));
           })
@@ -247,6 +256,14 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
         body: JSON.stringify({ modelId, fanId, nickname: next.trim() }),
       });
     } catch {}
+  }
+
+  // OnlyFans' own message HTML often has <br>/<p> line breaks (e.g. multi-
+  // line promo spam) - CSS truncate alone can't collapse those explicit
+  // breaks, which was blowing up individual chat-list rows to many lines
+  // tall. Stripping tags entirely for the preview guarantees one line.
+  function stripHtmlPreview(html: string): string {
+    return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   }
 
   function displayName(fanId: number): string {
@@ -376,10 +393,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
                       )}
                     </div>
                     {c.lastMessage && (
-                      <div
-                        className="text-sm text-slate-400 mt-0.5 truncate"
-                        dangerouslySetInnerHTML={{ __html: c.lastMessage.text }}
-                      />
+                      <div className="text-sm text-slate-400 mt-0.5 truncate">
+                        {stripHtmlPreview(c.lastMessage.text)}
+                      </div>
                     )}
                   </div>
                 </button>
@@ -483,18 +499,29 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
             )}
           </div>
 
-          {activeFanId && fanMetadata && (
-            <div className="w-80 flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden h-full">
-              <FanCrmPanel
-                modelId={modelId}
-                fanId={String(activeFanId)}
-                metadata={fanMetadata}
-                lastEditedBy={fanMetaLastEditedBy}
-                onSaved={() => loadFanMetadata(activeFanId)}
-                isAdmin={isAdmin}
-              />
-            </div>
-          )}
+          {activeFanId && fanMetadata && (() => {
+            // Real OnlyFans subscription dates only fill in where our own
+            // crm_fan_metadata has nothing yet - a chatter's own manually
+            // entered value (if any) always wins.
+            const sub = userDetails[String(activeFanId)]?.subscribedByData;
+            const enrichedMetadata = {
+              ...fanMetadata,
+              created_at: fanMetadata.created_at || sub?.subscribeAt || null,
+              last_subscription_at: fanMetadata.last_subscription_at || sub?.subscribeAt || null,
+            };
+            return (
+              <div className="w-80 flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden h-full">
+                <FanCrmPanel
+                  modelId={modelId}
+                  fanId={String(activeFanId)}
+                  metadata={enrichedMetadata}
+                  lastEditedBy={fanMetaLastEditedBy}
+                  onSaved={() => loadFanMetadata(activeFanId)}
+                  isAdmin={isAdmin}
+                />
+              </div>
+            );
+          })()}
         </div>
       )}
     </main>
