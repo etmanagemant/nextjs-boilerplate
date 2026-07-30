@@ -1643,11 +1643,18 @@ async function ensureModelDisplayInfra(slot) {
       // already had -noxdamage removed on purpose to fix a different,
       // already-confirmed bug (a persistent vertical line) and haven't
       // shown this symptom.
+      // -noxfixes -noxrecord added alongside -noxdamage (2026-07-30) -
+      // -noxdamage alone didn't resolve the ghosting when tested live;
+      // standard reference Xvfb+x11vnc setups combine all three, since
+      // Xvfb doesn't fully implement every X extension the way a real X
+      // server does, so leaving XFIXES/XRECORD enabled while only
+      // distrusting XDAMAGE can still leave stale-frame artifacts through
+      // one of the other two.
       slot.x11vncProc = spawn('/usr/bin/x11vnc', [
         '-display', slot.display,
         '-rfbport', String(slot.vncPort),
         '-rfbauth', '/root/.vnc/login_passwd',
-        '-forever', '-shared', '-noxdamage', '-localhost', '-quiet', '-xkb', '-add_keysyms', '-nap',
+        '-forever', '-shared', '-noxdamage', '-noxfixes', '-noxrecord', '-localhost', '-quiet', '-xkb', '-add_keysyms', '-nap',
       ], { stdio: 'ignore' });
       slot.x11vncProc.on('exit', (code) => console.warn(`[MODEL-DISPLAY ${slot.id}] x11vnc exited (${code})`));
       await new Promise((r) => setTimeout(r, 300));
