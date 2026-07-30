@@ -12,6 +12,9 @@ interface ModelTabsContextValue {
   models: ModelTabsContextModel[];
   activeModelId: string | null;
   chatterId: string;
+  // Which page's tabs these are - OF Inbox (Beta) reuses this same
+  // context/bar as /crm-inbox, just needs its links to point at itself.
+  basePath?: string;
 }
 
 // Split into two contexts on purpose - CONFIRMED LIVE this caused an
@@ -57,13 +60,14 @@ export function useModelTabsDisplay(): ModelTabsContextValue | null {
 export function usePublishModelTabs(
   models: ModelTabsContextModel[],
   activeModelId: string | null,
-  chatterId: string
+  chatterId: string,
+  basePath?: string
 ) {
   const setValue = useContext(SetterContext);
   useEffect(() => {
     if (!setValue) return;
-    setValue({ models, activeModelId, chatterId });
+    setValue({ models, activeModelId, chatterId, basePath });
     return () => setValue(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setValue, JSON.stringify(models), activeModelId, chatterId]);
+  }, [setValue, JSON.stringify(models), activeModelId, chatterId, basePath]);
 }

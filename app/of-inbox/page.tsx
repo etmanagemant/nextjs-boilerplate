@@ -37,15 +37,25 @@ export default async function OfInboxPage() {
     .order("model_id", { ascending: true });
 
   const modelIds = (crm_models || []).map((m: any) => m.model_id);
-  let connectedModels: { id: string; name: string }[] = [];
+  let connectedModels: { id: string; name: string; avatar_url?: string | null }[] = [];
   if (modelIds.length > 0) {
     const { data: modelDetails } = await adminSupabase
       .from("models")
-      .select("id, name")
+      .select("id, name, avatar_url")
       .in("id", modelIds);
     const detailsMap = new Map(modelDetails?.map((m: any) => [m.id, m]) || []);
-    connectedModels = modelIds.map((id: string) => ({ id, name: detailsMap.get(id)?.name || id }));
+    connectedModels = modelIds.map((id: string) => ({
+      id,
+      name: detailsMap.get(id)?.name || id,
+      avatar_url: detailsMap.get(id)?.avatar_url || null,
+    }));
   }
 
-  return <OfInboxClient connectedModels={connectedModels} isAdmin={isAdminTierRole(profile?.role) || user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"} />;
+  return (
+    <OfInboxClient
+      connectedModels={connectedModels}
+      isAdmin={isAdminTierRole(profile?.role) || user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"}
+      chatterId={user.id}
+    />
+  );
 }

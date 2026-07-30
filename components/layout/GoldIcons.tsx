@@ -79,6 +79,10 @@ export const CheckIcon = (p: { size?: number }) => (
   </svg>
 );
 
+export const MuteIcon = (p: { size?: number }) => (
+  <Icon {...p}><path d="M11 5 6 9H2v6h4l5 4V5Z" /><path d="m22 9-6 6M16 9l6 6" /></Icon>
+);
+
 export const DoubleCheckIcon = (p: { size?: number }) => (
   <svg width={p.size ?? 16} height={p.size ?? 14} viewBox="0 0 28 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
     <path d="M2 12l5 5L18 6" /><path d="M9 17l3 3L26 6" />

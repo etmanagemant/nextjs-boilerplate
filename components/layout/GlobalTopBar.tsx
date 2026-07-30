@@ -90,7 +90,7 @@ export default function GlobalTopBar({ userId }: { userId?: string }) {
           can visually merge into the content below it (see ModelTabsBar). */}
       {modelTabs && modelTabs.models.length > 0 && (
         <div className="absolute left-4 md:left-56 right-48 bottom-0 flex items-end">
-          <ModelTabsBar models={modelTabs.models} activeModelId={modelTabs.activeModelId} chatterId={modelTabs.chatterId} />
+          <ModelTabsBar models={modelTabs.models} activeModelId={modelTabs.activeModelId} chatterId={modelTabs.chatterId} basePath={modelTabs.basePath} />
         </div>
       )}
 

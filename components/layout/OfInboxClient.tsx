@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { FanCrmPanel } from "@/components/FanCrmPanel";
 import EmojiBar from "@/components/layout/EmojiBar";
+import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
 import {
   HomeIcon, BellIcon, ChatIcon, FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon,
-  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon,
+  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon,
 } from "@/components/layout/GoldIcons";
 
-type ConnectedModel = { id: string; name: string };
+type ConnectedModel = { id: string; name: string; avatar_url?: string | null };
 
 type ChatListItem = {
   withUser: { id: number };
   unreadMessagesCount: number;
+  isMutedNotifications?: boolean;
   lastMessage?: { text: string; createdAt: string; fromUser?: { id: number } };
 };
 
@@ -34,8 +37,21 @@ type UserDetail = { name?: string; username?: string; avatar?: string | null };
 // script already used) are wired in. NOT yet ported: dark mode toggle,
 // sent-by overlay, script-vault button, PPV purchase detector, multi-
 // model tab bar, new-tab/refresh chrome - still VNC-only for now.
-export default function OfInboxClient({ connectedModels, isAdmin }: { connectedModels: ConnectedModel[]; isAdmin: boolean }) {
-  const [modelId, setModelId] = useState(connectedModels[0]?.id || "");
+export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: { connectedModels: ConnectedModel[]; isAdmin: boolean; chatterId: string }) {
+  const searchParams = useSearchParams();
+  const modelFromUrl = searchParams.get("model");
+  const [modelId, setModelId] = useState(modelFromUrl || connectedModels[0]?.id || "");
+
+  // Follows the URL like /crm-inbox's tabs do - clicking a tab in the
+  // header (a real navigation, not local state) updates ?model=, which
+  // this picks up. Falls back to the first connected model when there's
+  // no ?model= at all (unlike /crm-inbox, this page IS the tool - no
+  // separate landing state to preserve).
+  useEffect(() => {
+    if (modelFromUrl) setModelId(modelFromUrl);
+  }, [modelFromUrl]);
+
+  usePublishModelTabs(connectedModels, modelId, chatterId, "/of-inbox");
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [chatsLoading, setChatsLoading] = useState(false);
   const [chatsError, setChatsError] = useState("");
@@ -88,16 +104,24 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
     return <BellIcon size={16} />;
   }
 
-  const loadChats = useCallback(async () => {
+  const [chatsHasMore, setChatsHasMore] = useState(true);
+  const [chatsLoadingMore, setChatsLoadingMore] = useState(false);
+  const chatOffsetRef = useRef(0);
+
+  const loadChats = useCallback(async (opts: { more?: boolean } = {}) => {
     if (!modelId) return;
-    setChatsLoading(true);
+    const offset = opts.more ? chatOffsetRef.current : 0;
+    if (opts.more) setChatsLoadingMore(true);
+    else { setChatsLoading(true); chatOffsetRef.current = 0; setChatsHasMore(true); }
     setChatsError("");
     try {
-      const res = await fetch(`/api/crm/of-inbox/chats?modelId=${encodeURIComponent(modelId)}`);
+      const res = await fetch(`/api/crm/of-inbox/chats?modelId=${encodeURIComponent(modelId)}&offset=${offset}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
       const list: ChatListItem[] = data.data?.list || [];
-      setChats(list);
+      setChatsHasMore(!!data.data?.hasMore);
+      chatOffsetRef.current = typeof data.data?.nextOffset === "number" ? data.data.nextOffset : offset + list.length;
+      setChats((prev) => (opts.more ? [...prev, ...list] : list));
 
       const fanIds = list.map((c) => String(c.withUser.id));
       if (fanIds.length > 0) {
@@ -124,16 +148,27 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
           .catch(() => {});
       }
 
-      fetch(`/api/crm/of-inbox/nickname?modelId=${encodeURIComponent(modelId)}`)
-        .then((r) => r.json())
-        .then((d) => setNicknames(d.nicknames || {}))
-        .catch(() => {});
+      if (!opts.more) {
+        fetch(`/api/crm/of-inbox/nickname?modelId=${encodeURIComponent(modelId)}`)
+          .then((r) => r.json())
+          .then((d) => setNicknames(d.nicknames || {}))
+          .catch(() => {});
+      }
     } catch (e: any) {
       setChatsError(e.message || "Fehler beim Laden der Chats");
     } finally {
       setChatsLoading(false);
+      setChatsLoadingMore(false);
     }
   }, [modelId]);
+
+  function handleChatListScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    if (chatsLoadingMore || chatsLoading || !chatsHasMore) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
+      loadChats({ more: true });
+    }
+  }
 
   useEffect(() => {
     setChats([]);
@@ -249,21 +284,10 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
   }
 
   return (
-    <main className="p-3 w-full h-screen flex flex-col overflow-hidden bg-[#0A0A0A] text-[#E2C48A]">
-      {connectedModels.length > 1 && (
-        <div className="flex items-center justify-end mb-2 flex-shrink-0">
-          <select
-            value={modelId}
-            onChange={(e) => setModelId(e.target.value)}
-            className="bg-[#050505] border border-[#9C7A3D]/30 rounded px-3 py-1.5 text-sm text-white"
-          >
-            {connectedModels.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
+    <main className="p-3 w-full h-[calc(100vh-8rem)] flex flex-col overflow-hidden bg-[#0A0A0A] text-[#E2C48A]">
+      {/* Model-Auswahl läuft jetzt über die Tabs im Header (GlobalTopBar via
+          usePublishModelTabs oben), genau wie bei /crm-inbox - kein
+          eigenes Dropdown mehr nötig. */}
       {!modelId ? (
         <div className="text-sm text-slate-400">Kein verbundenes Model gefunden.</div>
       ) : (
@@ -289,7 +313,7 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
                 <BellIcon />
               </button>
               {notifPanelOpen && (
-                <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
+                <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
                   <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between sticky top-0 bg-[#0A0A0A]">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Benachrichtigungen</span>
                     <button onClick={loadNotifications} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
@@ -326,37 +350,41 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
             ))}
           </div>
 
-          <div className="w-[320px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden flex flex-col h-full">
+          <div className="w-[380px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden flex flex-col h-full">
             <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Chats</span>
-              <button onClick={loadChats} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
+              <button onClick={() => loadChats()} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
             </div>
             {chatsLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
             {chatsError && <div className="p-3 text-xs text-red-400">{chatsError}</div>}
-            <div className="divide-y divide-[#9C7A3D]/10 flex-1 min-h-0 overflow-y-auto">
+            <div className="divide-y divide-[#9C7A3D]/10 flex-1 min-h-0 overflow-y-auto scrollbar-hide" onScroll={handleChatListScroll}>
               {chats.map((c) => (
                 <button
                   key={c.withUser.id}
                   onClick={() => openChat(c.withUser.id)}
-                  className={`w-full text-left p-3 hover:bg-black/30 transition flex items-center gap-3 ${activeFanId === c.withUser.id ? "bg-[#C9A86A]/10" : ""}`}
+                  className={`w-full text-left p-3.5 hover:bg-black/30 transition flex items-center gap-3 ${activeFanId === c.withUser.id ? "bg-[#C9A86A]/10" : ""}`}
                 >
-                  <Avatar fanId={c.withUser.id} size={40} />
+                  <Avatar fanId={c.withUser.id} size={52} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-white truncate">{displayName(c.withUser.id)}</span>
+                    <div className="flex items-center gap-1.5 justify-between">
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-base font-bold text-white truncate">{displayName(c.withUser.id)}</span>
+                        {c.isMutedNotifications && <MuteIcon size={14} />}
+                      </span>
                       {c.unreadMessagesCount > 0 && (
-                        <span className="text-[10px] bg-[#C9A86A] text-black font-bold px-1.5 py-0.5 rounded-full ml-1 flex-shrink-0">{c.unreadMessagesCount}</span>
+                        <span className="text-xs bg-[#C9A86A] text-black font-bold px-2 py-0.5 rounded-full ml-1 flex-shrink-0">{c.unreadMessagesCount}</span>
                       )}
                     </div>
                     {c.lastMessage && (
                       <div
-                        className="text-xs text-slate-400 mt-0.5 truncate"
+                        className="text-sm text-slate-400 mt-0.5 truncate"
                         dangerouslySetInnerHTML={{ __html: c.lastMessage.text }}
                       />
                     )}
                   </div>
                 </button>
               ))}
+              {chatsLoadingMore && <div className="p-3 text-xs text-slate-500 italic text-center">Lade weitere…</div>}
             </div>
           </div>
 
@@ -365,12 +393,12 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
               <div className="flex-1 flex items-center justify-center text-sm text-slate-500">Chat auswählen</div>
             ) : (
               <>
-                <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center gap-3">
-                  <Avatar fanId={activeFanId} size={32} />
-                  <span className="text-sm font-bold text-white">{displayName(activeFanId)}</span>
+                <div className="p-4 border-b border-[#9C7A3D]/20 flex items-center gap-3">
+                  <Avatar fanId={activeFanId} size={44} />
+                  <span className="text-base font-bold text-white">{displayName(activeFanId)}</span>
                   <button
                     onClick={() => editNickname(activeFanId)}
-                    className="text-xs text-slate-400 hover:text-[#E2C48A] ml-1"
+                    className="text-sm text-slate-400 hover:text-[#E2C48A] ml-1"
                     title="Eigenen Namen vergeben"
                   >
                     ✏️
@@ -404,7 +432,7 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
                     />
                   </div>
                 )}
-                <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2">
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide p-4 space-y-2">
                   {messagesLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}
                   {messages
                     .filter((m) => !messageSearch || m.text.toLowerCase().includes(messageSearch.toLowerCase()))

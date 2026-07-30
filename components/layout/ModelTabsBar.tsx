@@ -13,6 +13,9 @@ interface ModelTabsBarProps {
   models: TabModel[];
   activeModelId: string | null;
   chatterId: string;
+  // OF Inbox (Beta) reuses this same tab bar - defaults to the original
+  // /crm-inbox (VNC) target so that page's existing behavior is untouched.
+  basePath?: string;
 }
 
 const POLL_INTERVAL_MS = 25000;
@@ -28,7 +31,7 @@ const SEEN_KEY_PREFIX = "crm-inbox-seen:";
  * compares it against what was last seen (stored in localStorage, purely
  * client-local - this is a best-effort UI nicety, not an audited record).
  */
-export default function ModelTabsBar({ models, activeModelId, chatterId }: ModelTabsBarProps) {
+export default function ModelTabsBar({ models, activeModelId, chatterId, basePath = "/crm-inbox" }: ModelTabsBarProps) {
   const [unread, setUnread] = useState<Record<string, boolean>>({});
   const pollingRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<{ modelId: string; x: number; y: number } | null>(null);
@@ -124,7 +127,7 @@ export default function ModelTabsBar({ models, activeModelId, chatterId }: Model
         return (
           <Link
             key={m.id}
-            href={`/crm-inbox?model=${m.id}`}
+            href={`${basePath}?model=${m.id}`}
             onContextMenu={(e) => {
               e.preventDefault();
               setContextMenu({ modelId: m.id, x: e.clientX, y: e.clientY });
