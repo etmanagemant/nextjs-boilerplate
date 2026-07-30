@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import ModeratorStriptchatShift from "@/components/layout/ModeratorStriptchatShift";
+import { isAdminTierRole } from "@/lib/roles";
 
 type AssignmentRow = {
   id: number;
@@ -214,8 +215,8 @@ export default function ChatterPage() {
   // (profiles.secondary_role) - admin already saw both panels stacked, this
   // extends that same dual view to any chatter+moderator combo instead of
   // only reacting to the primary role.
-  const hasModeratorAccess = currentUserRole === "moderator" || currentSecondaryRole === "moderator" || currentUserRole === "admin";
-  const hasChatterAccess = currentUserRole === "chatter" || currentSecondaryRole === "chatter" || currentUserRole === "admin";
+  const hasModeratorAccess = currentUserRole === "moderator" || currentSecondaryRole === "moderator" || isAdminTierRole(currentUserRole);
+  const hasChatterAccess = currentUserRole === "chatter" || currentSecondaryRole === "chatter" || isAdminTierRole(currentUserRole);
   const bothVisible = hasModeratorAccess && hasChatterAccess;
 
   return (
