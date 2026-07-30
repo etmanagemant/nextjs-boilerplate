@@ -2,10 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { FanCrmPanel } from "@/components/FanCrmPanel";
+import EmojiBar from "@/components/layout/EmojiBar";
 
 type ConnectedModel = { id: string; name: string };
-
-const EMOJI_BAR = ["😊", "😂", "🔥", "❤️", "😍", "👏", "🎉", "😉", "😘", "🙈", "💦", "🍑", "😏", "🥵", "😈"];
 
 type ChatListItem = {
   withUser: { id: number };
@@ -46,7 +45,6 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
   const [spendDisplay, setSpendDisplay] = useState<Record<string, string>>({});
   const [fanMetadata, setFanMetadata] = useState<any | null>(null);
   const [fanMetaLastEditedBy, setFanMetaLastEditedBy] = useState<string | null>(null);
-  const [showEmoji, setShowEmoji] = useState(false);
 
   const loadChats = useCallback(async () => {
     if (!modelId) return;
@@ -133,7 +131,6 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
   function openChat(fanId: number) {
     setActiveFanId(fanId);
     setSendError("");
-    setShowEmoji(false);
     loadMessages(fanId);
     loadFanMetadata(fanId);
   }
@@ -209,7 +206,7 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
   }
 
   return (
-    <main className="p-6 max-w-6xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
+    <main className="p-6 w-full min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
       <div className="flex items-center justify-between border-b border-[#9C7A3D]/20 pb-4 mb-6">
         <div>
           <h1 className="text-2xl font-black uppercase tracking-wider">📡 OnlyFans Inbox (API, Beta)</h1>
@@ -298,27 +295,8 @@ export default function OfInboxClient({ connectedModels, isAdmin }: { connectedM
                 </div>
                 <div className="p-3 border-t border-[#9C7A3D]/20">
                   {sendError && <div className="text-xs text-red-400 mb-2">{sendError}</div>}
-                  {showEmoji && (
-                    <div className="flex flex-wrap gap-1 mb-2 bg-black/40 border border-[#9C7A3D]/20 rounded-lg p-2">
-                      {EMOJI_BAR.map((e) => (
-                        <button
-                          key={e}
-                          onClick={() => setDraft((d) => d + e)}
-                          className="text-lg hover:scale-125 transition"
-                        >
-                          {e}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <EmojiBar onPick={(e) => setDraft((d) => d + e)} />
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowEmoji((v) => !v)}
-                      className="text-lg px-2 rounded border border-[#9C7A3D]/30 hover:bg-black/30"
-                      title="Emojis"
-                    >
-                      😊
-                    </button>
                     <input
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
