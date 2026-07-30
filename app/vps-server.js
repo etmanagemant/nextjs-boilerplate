@@ -79,6 +79,62 @@ function computeOnlyFansSign(pathWithQuery, userId, timeMs) {
   return { sign, time, hash, appToken: onlyFansRules.app_token };
 }
 
+// The 3 values a signed request needs beyond computeOnlyFansSign's own
+// output, none of which live in the free rules file - all read live off
+// the real page (CONFIRMED LIVE 2026-07-30 via /debug-of-sign-test):
+// x-bc and the numeric OnlyFans user id sit in localStorage
+// (bcTokenSha/user), x-of-rev is OnlyFans' own static-asset build
+// revision, embedded in the page's HTML (CDN URLs etc), not in storage.
+async function buildOnlyFansAuthHeaders(page) {
+  const localStorageDump = await page.evaluate(() => {
+    try { return JSON.parse(JSON.stringify(localStorage)); } catch (e) { return {}; }
+  }).catch(() => ({}));
+  const ofRev = await page.evaluate(() => {
+    const m = document.documentElement.outerHTML.match(/\d{12}-[a-f0-9]{10}/);
+    return m ? m[0] : '';
+  }).catch(() => '');
+  return {
+    xbc: localStorageDump.bcTokenSha || '',
+    userId: localStorageDump.user || '',
+    ofRev,
+  };
+}
+
+// Fires a fully-signed request against a real /api2/ endpoint from inside
+// the given model's own real, logged-in page (so cookies are genuine) -
+// the one shared building block every real (non-debug) OnlyFans-API route
+// below uses. x-hash (seen on real browser traffic) was CONFIRMED LIVE
+// 2026-07-30 to NOT be required for either reads or a real message send,
+// so it's deliberately not included here.
+async function callOnlyFansApi(page, url, { method = 'GET', body } = {}) {
+  const { xbc, userId, ofRev } = await buildOnlyFansAuthHeaders(page);
+  const target = new URL(url);
+  const built = computeOnlyFansSign(target.pathname + target.search, userId, Date.now());
+  const headers = {
+    sign: built.sign,
+    time: built.time,
+    'app-token': built.appToken,
+    'user-id': String(userId || ''),
+    'x-bc': xbc,
+    'x-of-rev': ofRev,
+    accept: 'application/json',
+    ...(body ? { 'content-type': 'application/json' } : {}),
+  };
+  return page.evaluate(async (u, h, m, b) => {
+    const opts = { credentials: 'include', headers: h, method: m };
+    if (b) opts.body = b;
+    const r = await fetch(u, opts);
+    const text = await r.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch (e) {}
+    return { status: r.status, ok: r.ok, json, textSample: json ? null : text.slice(0, 500) };
+  }, url, headers, method, body ? JSON.stringify(body) : null);
+}
+
+function escapeOnlyFansHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // ============================================================================
 // PROCESS HARDENING - Global Exception Shield
 // ============================================================================
@@ -2899,6 +2955,88 @@ app.post('/sync-live', async (req, res) => {
   } catch (error) {
     console.error(`[SYNC-LIVE] Error for ${modelId}:`, error.message);
     res.status(200).json({ status: 'error', error: error.message });
+  }
+});
+
+// ============================================================================
+// ONLYFANS API-DRIVEN INBOX (Task: VNC replacement research, 2026-07-30)
+// Reads/writes OnlyFans' own real inbox directly via signed /api2/ calls
+// (see callOnlyFansApi) instead of screen-streaming the page over VNC -
+// CONFIRMED LIVE end-to-end (both a chat list read and a real message send)
+// against the disposable test model before these routes were written. Each
+// still needs the model's session to already be open (modelSessions[modelId]
+// - same live browser VNC itself would use, just not rendering the screen).
+// ============================================================================
+
+// GET /of-chats?modelId=X&offset=0 - the real "list every conversation"
+// endpoint (found via /sync-live's own discover mode, not guessed).
+app.get('/of-chats', async (req, res) => {
+  const { modelId, offset } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = modelSessions[modelId];
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  session.lastActivity = Date.now();
+
+  try {
+    const url = `https://onlyfans.com/api2/v2/chats?limit=20&offset=${Number(offset) || 0}&skip_users=all&order=recent`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-CHATS] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-messages?modelId=X&fanId=Y&offset=0 - message history for one
+// conversation.
+app.get('/of-messages', async (req, res) => {
+  const { modelId, fanId, offset } = req.query;
+  if (!modelId || !fanId) return res.status(400).json({ error: 'Missing modelId or fanId' });
+  const session = modelSessions[modelId];
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  session.lastActivity = Date.now();
+
+  try {
+    const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}/messages?limit=20&order=desc&skip_users=all${offset ? `&offset=${Number(offset)}` : ''}`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-MESSAGES] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /of-send { modelId, fanId, text } - sends a real chat message.
+// text is HTML-escaped and wrapped in <p> to match exactly what OnlyFans'
+// own compose box sends (CONFIRMED LIVE against the real endpoint).
+app.post('/of-send', async (req, res) => {
+  const { modelId, fanId, text } = req.body || {};
+  if (!modelId || !fanId || !text) return res.status(400).json({ error: 'Missing modelId, fanId, or text' });
+  const session = modelSessions[modelId];
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  session.lastActivity = Date.now();
+
+  try {
+    const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}/messages`;
+    const body = {
+      text: `<p>${escapeOnlyFansHtml(text)}</p>`,
+      lockedText: false,
+      mediaFiles: [],
+      price: 0,
+      previews: [],
+      rfTag: [],
+      rfGuest: [],
+      rfPartner: [],
+      isForward: false,
+    };
+    const result = await callOnlyFansApi(session.page, url, { method: 'POST', body });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-SEND] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
