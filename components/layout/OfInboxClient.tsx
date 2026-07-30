@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { useSearchParams } from "next/navigation";
 import { FanCrmPanel } from "@/components/FanCrmPanel";
 import EmojiBar from "@/components/layout/EmojiBar";
@@ -16,7 +16,17 @@ type ChatListItem = {
   withUser: { id: number };
   unreadMessagesCount: number;
   isMutedNotifications?: boolean;
+  lastReadMessageId?: number | string;
   lastMessage?: { text: string; createdAt: string; fromUser?: { id: number } };
+};
+
+type MediaItem = {
+  type: string; // "photo" | "video" | "audio" | "gif" | ...
+  files?: {
+    full?: { url?: string };
+    thumb?: { url?: string };
+    preview?: { url?: string };
+  };
 };
 
 type Message = {
@@ -25,6 +35,7 @@ type Message = {
   createdAt: string;
   fromUser?: { id: number };
   isOpened?: boolean;
+  media?: MediaItem[];
 };
 
 type UserDetail = {
@@ -35,7 +46,7 @@ type UserDetail = {
   // already used for name/avatar) - CONFIRMED LIVE present on that
   // response, used to fill Fan-CRM's "Fan seit"/"Letztes Abo" without a
   // separate endpoint.
-  subscribedByData?: { subscribeAt?: string | null; expiredAt?: string | null; regularPrice?: number | null };
+  subscribedByData?: { subscribeAt?: string | null; expiredAt?: string | null; regularPrice?: number | null; totalSumm?: number | null };
 };
 
 // First-pass native inbox UI reading OnlyFans directly via our own signed
@@ -186,21 +197,47 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
     loadChats();
   }, [loadChats]);
 
-  const loadMessages = useCallback(async (fanId: number) => {
+  const [messagesHasMore, setMessagesHasMore] = useState(true);
+  const [messagesLoadingMore, setMessagesLoadingMore] = useState(false);
+  const messagesOffsetRef = useRef(0);
+  const MESSAGES_PAGE_SIZE = 20;
+
+  const loadMessages = useCallback(async (fanId: number, opts: { more?: boolean } = {}) => {
     if (!modelId) return;
-    setMessagesLoading(true);
+    const offset = opts.more ? messagesOffsetRef.current : 0;
+    if (opts.more) setMessagesLoadingMore(true);
+    else { setMessagesLoading(true); messagesOffsetRef.current = 0; setMessagesHasMore(true); }
     try {
-      const res = await fetch(`/api/crm/of-inbox/messages?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}`);
+      const res = await fetch(`/api/crm/of-inbox/messages?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}&offset=${offset}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
       const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
-      setMessages(list.slice().reverse());
+      setMessagesHasMore(list.length >= MESSAGES_PAGE_SIZE);
+      messagesOffsetRef.current = offset + list.length;
+      // API returns newest-first; each older page still needs its own
+      // internal order flipped before being stitched onto the FRONT of
+      // the already-oldest-first array.
+      setMessages((prev) => (opts.more ? [...list.slice().reverse(), ...prev] : list.slice().reverse()));
     } catch (e: any) {
       setSendError(e.message || "Fehler beim Laden der Nachrichten");
     } finally {
       setMessagesLoading(false);
+      setMessagesLoadingMore(false);
     }
   }, [modelId]);
+
+  function handleMessagesScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    if (messagesLoadingMore || messagesLoading || !messagesHasMore || !activeFanId) return;
+    if (el.scrollTop <= 100) {
+      const prevHeight = el.scrollHeight;
+      loadMessages(activeFanId, { more: true }).then(() => {
+        // Keep the viewport anchored on what was visible before prepending
+        // older messages, instead of jumping to the very top each time.
+        requestAnimationFrame(() => { el.scrollTop = el.scrollHeight - prevHeight; });
+      });
+    }
+  }
 
   const loadFanMetadata = useCallback(async (fanId: number) => {
     if (!modelId) return;
@@ -279,7 +316,20 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
   function Avatar({ fanId, size }: { fanId: number; size: number }) {
     const u = userDetails[String(fanId)];
     const spend = spendDisplay[String(fanId)];
-    const label = spend === "NEW" ? "NEW" : spend && spend !== "0" ? `$${spend}` : "$0";
+    // Real lifetime spend straight from OnlyFans (subscribedByData.totalSumm,
+    // part of the same users/list batch call already made for names/
+    // avatars) wins over our own crm_fan_metadata cache (CONFIRMED LIVE:
+    // a real paying fan showed $0 because the periodic VPS sync hadn't
+    // covered them - this has no such lag, it's read fresh every time).
+    const realTotal = u?.subscribedByData?.totalSumm;
+    const label =
+      typeof realTotal === "number" && realTotal > 0
+        ? `$${realTotal.toFixed(0)}`
+        : spend === "NEW"
+        ? "NEW"
+        : spend && spend !== "0"
+        ? `$${spend}`
+        : "$0";
     return (
       <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
         <div
@@ -296,6 +346,32 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
         <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-gradient-to-b from-[#E5C158] to-[#9C7A3D] text-black font-extrabold text-[9px] leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap shadow">
           {label}
         </span>
+      </div>
+    );
+  }
+
+  // Direct CDN URLs (signed, no auth of ours needed) - real media, real
+  // audio, no VNC frame relay involved, so none of the earlier VNC audio-
+  // latency problems apply here at all.
+  function MessageMedia({ media }: { media?: MediaItem[] }) {
+    if (!media || media.length === 0) return null;
+    return (
+      <div className="flex flex-col gap-2 mb-2">
+        {media.map((m, i) => {
+          const url = m.files?.full?.url || m.files?.preview?.url;
+          if (!url) return null;
+          if (m.type === "photo" || m.type === "gif") {
+            // eslint-disable-next-line @next/next/no-img-element
+            return <img key={i} src={url} alt="" className="max-w-full rounded-lg max-h-80 object-contain" />;
+          }
+          if (m.type === "video") {
+            return <video key={i} src={url} controls className="max-w-full rounded-lg max-h-80" />;
+          }
+          if (m.type === "audio") {
+            return <audio key={i} src={url} controls className="max-w-full" />;
+          }
+          return null;
+        })}
       </div>
     );
   }
@@ -448,32 +524,54 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
                     />
                   </div>
                 )}
-                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide p-4 space-y-2">
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide p-4 space-y-2" onScroll={handleMessagesScroll}>
                   {messagesLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}
-                  {messages
-                    .filter((m) => !messageSearch || m.text.toLowerCase().includes(messageSearch.toLowerCase()))
-                    .map((m) => {
+                  {messagesLoadingMore && <div className="text-xs text-slate-500 italic text-center">Lade ältere…</div>}
+                  {(() => {
+                    // isOpened is PPV-unlock status, NOT a read receipt
+                    // (CONFIRMED LIVE 2026-07-30: stayed false on days-old
+                    // free messages) - the real read signal is the chat
+                    // list's own lastReadMessageId (highest message id the
+                    // fan has actually seen).
+                    const activeChat = chats.find((c) => c.withUser.id === activeFanId);
+                    const lastRead = activeChat?.lastReadMessageId != null ? Number(activeChat.lastReadMessageId) : 0;
+                    const filtered = messages.filter((m) => !messageSearch || m.text.toLowerCase().includes(messageSearch.toLowerCase()));
+                    let lastDateKey = "";
+                    const today = new Date().toDateString();
+                    const yesterday = new Date(Date.now() - 86400000).toDateString();
+                    return filtered.map((m) => {
                     const isOwn = String(m.fromUser?.id) !== String(activeFanId);
-                    const time = m.createdAt
-                      ? new Date(m.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })
-                      : "";
+                    const isRead = isOwn && Number(m.id) <= lastRead;
+                    const msgDate = m.createdAt ? new Date(m.createdAt) : null;
+                    const dateKey = msgDate ? msgDate.toDateString() : "";
+                    const showDivider = dateKey && dateKey !== lastDateKey;
+                    lastDateKey = dateKey;
+                    const dividerLabel = !msgDate ? "" : dateKey === today ? "Heute" : dateKey === yesterday ? "Gestern" : msgDate.toLocaleDateString("de-DE", { day: "numeric", month: "long" });
+                    const time = msgDate ? msgDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
                     return (
-                      <div key={m.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[70%] rounded-xl px-4 py-2.5 text-base ${isOwn ? "bg-[#C9A86A]/20 text-white" : "bg-black/30 text-slate-200"}`}>
-                          <div dangerouslySetInnerHTML={{ __html: m.text }} />
-                          {isOwn && (
-                            <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-400">
-                              <span>{time}</span>
-                              {m.isOpened ? <DoubleCheckIcon size={13} /> : <CheckIcon size={11} />}
-                            </div>
-                          )}
-                          {!isOwn && time && (
-                            <div className="text-[10px] text-slate-500 mt-1">{time}</div>
-                          )}
+                      <Fragment key={m.id}>
+                        {showDivider && (
+                          <div className="text-center text-[11px] text-slate-500 font-bold uppercase tracking-wider my-3">{dividerLabel}</div>
+                        )}
+                        <div className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                          <div className={`max-w-[70%] rounded-xl px-4 py-2.5 text-base ${isOwn ? "bg-[#C9A86A]/20 text-white" : "bg-black/30 text-slate-200"}`}>
+                            <MessageMedia media={m.media} />
+                            {m.text && <div dangerouslySetInnerHTML={{ __html: m.text }} />}
+                            {isOwn && (
+                              <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-400">
+                                <span>{time}</span>
+                                {isRead ? <DoubleCheckIcon size={13} /> : <CheckIcon size={11} />}
+                              </div>
+                            )}
+                            {!isOwn && time && (
+                              <div className="text-[10px] text-slate-500 mt-1">{time}</div>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      </Fragment>
                     );
-                  })}
+                  });
+                  })()}
                 </div>
                 <div className="p-3 border-t border-[#9C7A3D]/20">
                   {sendError && <div className="text-xs text-red-400 mb-2">{sendError}</div>}
