@@ -68,7 +68,7 @@ export default async function ManagementPage() {
     revalidatePath("/management");
   }
   return (
-    <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
+    <main className="p-6 w-full min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
       <div className="flex justify-between items-center mb-6 border-b border-[#9C7A3D]/20 pb-4 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-black bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase tracking-wider">Management Control</h1>
