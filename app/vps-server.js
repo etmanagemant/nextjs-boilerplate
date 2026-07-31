@@ -2963,19 +2963,39 @@ app.post('/sync-live', async (req, res) => {
 // Reads/writes OnlyFans' own real inbox directly via signed /api2/ calls
 // (see callOnlyFansApi) instead of screen-streaming the page over VNC -
 // CONFIRMED LIVE end-to-end (both a chat list read and a real message send)
-// against the disposable test model before these routes were written. Each
-// still needs the model's session to already be open (modelSessions[modelId]
-// - same live browser VNC itself would use, just not rendering the screen).
+// against the disposable test model before these routes were written.
 // ============================================================================
+
+// CONFIRMED LIVE (2026-07-31): every /of-* route below used to do a bare
+// modelSessions[modelId] lookup and 404 immediately if missing - but a
+// model idle for CHATTER_IDLE_PAUSE_MS (30 min) with nobody on VNC gets its
+// browser PAUSED (profile kept on disk, not truly disconnected - see
+// assignSlot's own comment on this). Only the VNC connection path
+// (assignSlot) knew how to resume that; OF Inbox (Beta) never touches
+// assignSlot at all (it doesn't need a VNC display/slot), so it just
+// stayed 404ing until someone happened to open VNC first - exactly
+// backwards from "always accessible". This is assignSlot's own resume
+// logic, minus everything display/mainViewer-specific that a pure API
+// caller has no use for.
+async function ensureModelSessionForApi(modelId) {
+  await waitForModelLock(modelId);
+  if (!modelSessions[modelId]) {
+    const hasProfile = await fs.access(profileDir(modelId)).then(() => true).catch(() => false);
+    if (!hasProfile) return null; // never connected at all - nothing to resume
+    await withModelLock(modelId, () => getOrCreateSession(modelId, true));
+  }
+  const session = modelSessions[modelId];
+  if (session) session.lastActivity = Date.now();
+  return session || null;
+}
 
 // GET /of-chats?modelId=X&offset=0 - the real "list every conversation"
 // endpoint (found via /sync-live's own discover mode, not guessed).
 app.get('/of-chats', async (req, res) => {
   const { modelId, offset } = req.query;
   if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
-  const session = modelSessions[modelId];
+  const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
-  session.lastActivity = Date.now();
 
   try {
     const url = `https://onlyfans.com/api2/v2/chats?limit=20&offset=${Number(offset) || 0}&skip_users=all&order=recent`;
@@ -2993,9 +3013,8 @@ app.get('/of-chats', async (req, res) => {
 app.get('/of-messages', async (req, res) => {
   const { modelId, fanId, offset } = req.query;
   if (!modelId || !fanId) return res.status(400).json({ error: 'Missing modelId or fanId' });
-  const session = modelSessions[modelId];
+  const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
-  session.lastActivity = Date.now();
 
   try {
     const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}/messages?limit=20&order=desc&skip_users=all${offset ? `&offset=${Number(offset)}` : ''}`;
@@ -3014,9 +3033,8 @@ app.get('/of-messages', async (req, res) => {
 app.post('/of-send', async (req, res) => {
   const { modelId, fanId, text } = req.body || {};
   if (!modelId || !fanId || !text) return res.status(400).json({ error: 'Missing modelId, fanId, or text' });
-  const session = modelSessions[modelId];
+  const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
-  session.lastActivity = Date.now();
 
   try {
     const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}/messages`;
@@ -3046,9 +3064,8 @@ app.post('/of-send', async (req, res) => {
 app.get('/of-user-details', async (req, res) => {
   const { modelId, ids } = req.query;
   if (!modelId || !ids) return res.status(400).json({ error: 'Missing modelId or ids' });
-  const session = modelSessions[modelId];
+  const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
-  session.lastActivity = Date.now();
 
   try {
     const idList = String(ids).split(',').map((s) => s.trim()).filter(Boolean);
@@ -3070,9 +3087,8 @@ app.get('/of-user-details', async (req, res) => {
 app.get('/of-notifications', async (req, res) => {
   const { modelId, offset } = req.query;
   if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
-  const session = modelSessions[modelId];
+  const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
-  session.lastActivity = Date.now();
 
   try {
     const url = `https://onlyfans.com/api2/v2/users/notifications?limit=20&offset=${Number(offset) || 0}&types[]=all`;
