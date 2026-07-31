@@ -502,11 +502,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   // sichtbarem Namen/Label gematcht, nicht nach der echten Tresor-ID, die
   // unser neuer API-Weg braucht - kein sauberer Weg, das automatisch mit
   // zu übernehmen. Medien werden separat über den Tresor-Button ausgewählt.
-  async function toggleScriptPanel() {
-    if (scriptPanelOpen) { setScriptPanelOpen(false); return; }
-    setScriptPanelOpen(true);
-    setVaultModalMode(null);
-    if (!modelId || scripts.length > 0) return;
+  async function loadScripts() {
+    if (!modelId) return;
     setScriptsLoading(true);
     try {
       const res = await fetch(`/api/crm/of-inbox/scripts?modelId=${encodeURIComponent(modelId)}`);
@@ -519,12 +516,44 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     }
   }
 
+  function toggleScriptPanel() {
+    if (scriptPanelOpen) { setScriptPanelOpen(false); return; }
+    setScriptPanelOpen(true);
+    setVaultModalMode(null);
+    // Fix: lud vorher nur beim allerersten Öffnen (scripts.length>0-Check),
+    // ein danach gespeicherter neuer Schritt tauchte deshalb nie auf ohne
+    // Seiten-Neuladen. Jetzt bei jedem Öffnen frisch.
+    loadScripts();
+  }
+
+  // Fix: media_refs eines Scripts trägt doch eine echte Tresor-Medien-ID
+  // (media_refs[].id, gefüllt von VaultGalleryPicker im Script Vault -
+  // dasselbe echte OnlyFans-Vault, nur über einen älteren Sniff-Weg statt
+  // unserer neuen signierten Route) - vorher fälschlich angenommen, das
+  // wäre nur ein VNC-Label ohne echte ID. Jetzt an den Tresor angebunden:
+  // Medien werden mit übernommen, Preis vom ersten PPV-Schritt auch.
   function insertScript(script: any) {
     const text = (script.steps || [])
       .filter((s: any) => s.message_text)
       .map((s: any) => s.message_text)
       .join("\n\n");
     if (text) setDraft((d) => (d ? `${d}\n${text}` : text));
+
+    const mediaWithId = (script.steps || [])
+      .flatMap((s: any) => s.media_refs || [])
+      .filter((m: any) => m.id != null && !Number.isNaN(Number(m.id)));
+    if (mediaWithId.length > 0) {
+      setAttachedMedia((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const toAdd = mediaWithId
+          .map((m: any) => ({ id: Number(m.id), type: m.thumbnailUrl ? "photo" : "audio", files: { thumb: { url: m.thumbnailUrl } } }))
+          .filter((m: any) => !existingIds.has(m.id));
+        return [...prev, ...toAdd];
+      });
+    }
+    const priceStep = (script.steps || []).find((s: any) => s.price);
+    if (priceStep?.price) setAttachPrice(String(priceStep.price));
+
     setScriptPanelOpen(false);
   }
 
@@ -1400,15 +1429,28 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                       </button>
                       {scriptPanelOpen && (
                         <div className="absolute bottom-full left-0 mb-2 w-72 max-h-72 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
-                          <div className="p-2.5 border-b border-[#9C7A3D]/20 text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Script Vault</div>
+                          <div className="p-2.5 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Script Vault</span>
+                            <button onClick={loadScripts} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
+                          </div>
                           {scriptsLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
                           {!scriptsLoading && scripts.length === 0 && <div className="p-3 text-xs text-slate-500">Keine Scripts für dieses Model</div>}
                           <div className="divide-y divide-[#9C7A3D]/10">
-                            {scripts.map((s) => (
-                              <button key={s.id} onClick={() => insertScript(s)} className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-[#C9A86A]/10">
-                                {s.title}
-                              </button>
-                            ))}
+                            {scripts.map((s) => {
+                              const mediaCount = (s.steps || []).flatMap((st: any) => st.media_refs || []).length;
+                              const price = (s.steps || []).find((st: any) => st.price)?.price;
+                              return (
+                                <button key={s.id} onClick={() => insertScript(s)} className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-[#C9A86A]/10 flex items-center justify-between">
+                                  <span>{s.title}</span>
+                                  <span className="text-[10px] text-slate-500 flex-shrink-0 ml-2 flex items-center gap-1.5">
+                                    {mediaCount > 0 && (
+                                      <span className="flex items-center gap-0.5"><ImageIcon size={10} />{mediaCount}</span>
+                                    )}
+                                    {price ? <span className="text-[#C9A86A] font-bold">${price}</span> : null}
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
