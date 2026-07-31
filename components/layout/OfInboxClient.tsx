@@ -8,7 +8,7 @@ import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
 import {
   HomeIcon, BellIcon, ChatIcon, FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon, ListIcon,
-  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon, CloseIcon,
+  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon, CloseIcon, HeartIcon,
 } from "@/components/layout/GoldIcons";
 
 type ConnectedModel = { id: string; name: string; avatar_url?: string | null };
@@ -179,6 +179,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [messageSearch, setMessageSearch] = useState<string | null>(null);
   const [chatSearchResults, setChatSearchResults] = useState<Message[] | null>(null);
   const [pinnedIds, setPinnedIds] = useState<Set<number>>(new Set());
+  const [likedIds, setLikedIds] = useState<Set<number>>(new Set());
+  const [listsPanelOpen, setListsPanelOpen] = useState(false);
+  const [availableLists, setAvailableLists] = useState<{ id: string; type: string; name: string }[]>([]);
+  const [addedToList, setAddedToList] = useState<Set<string>>(new Set());
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryMedia, setGalleryMedia] = useState<any[]>([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
@@ -380,6 +384,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setSendError("");
     setMessageSearch(null);
     setPinnedIds(new Set());
+    setLikedIds(new Set());
+    setListsPanelOpen(false);
+    setAddedToList(new Set());
     setGalleryOpen(false);
     setGalleryMedia([]);
     loadMessages(fanId);
@@ -488,6 +495,75 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     }, 350);
     return () => clearTimeout(handle);
   }, [messageSearch, modelId, activeFanId]);
+
+  // Task #54: CONFIRMED LIVE 2026-07-31 - only exists on FAN-sent
+  // messages, not the model's own (no "Gefällt mir" on own bubbles).
+  async function toggleLike(messageId: number, currentlyLiked: boolean) {
+    if (!modelId || !activeFanId) return;
+    setLikedIds((prev) => {
+      const next = new Set(prev);
+      if (currentlyLiked) next.delete(messageId); else next.add(messageId);
+      return next;
+    });
+    try {
+      await fetch("/api/crm/of-inbox/message-like", {
+        method: currentlyLiked ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, fanId: activeFanId, messageId }),
+      });
+    } catch {}
+  }
+
+  // Task: "Stummschalten" ist keine eigene Funktion, sondern nur
+  // Mitgliedschaft in der eingebauten Liste "muted" (CONFIRMED LIVE
+  // 2026-07-31) - isMutedNotifications kommt schon aus der Chat-Liste
+  // (Task #24), hier nur der Schreibvorgang dazu.
+  async function toggleMute() {
+    if (!modelId || !activeFanId) return;
+    const chat = chats.find((c) => c.withUser.id === activeFanId);
+    const currentlyMuted = !!chat?.isMutedNotifications;
+    setChats((prev) => prev.map((c) => (c.withUser.id === activeFanId ? { ...c, isMutedNotifications: !currentlyMuted } : c)));
+    try {
+      await fetch("/api/crm/of-inbox/list-membership", {
+        method: currentlyMuted ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, fanId: activeFanId, listId: "muted" }),
+      });
+    } catch {}
+  }
+
+  // Task: der Stern-Button ("Zu Favoriten und anderen Listen hinzufügen")
+  // - CONFIRMED LIVE 2026-07-31: POST/DELETE /lists/{listId}/users/{fanId}.
+  // OnlyFans' eigener Dialog zeigt den aktuellen Mitglied-Status pro Liste
+  // an, aber /lists liefert dafür nur eine ungefähre Vorschau der
+  // Mitglieder (nicht zuverlässig pro Fan prüfbar) - deshalb bewusst nur
+  // "hinzufügen" statt eines vollen Toggle-mit-Status.
+  async function openListsPanel() {
+    if (listsPanelOpen) { setListsPanelOpen(false); return; }
+    setListsPanelOpen(true);
+    setAddedToList(new Set());
+    if (!modelId) return;
+    try {
+      const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}`);
+      const data = await res.json();
+      const list = Array.isArray(data.data) ? data.data : [];
+      setAvailableLists(list.filter((l: any) => l.type === "custom" || l.id === "friends"));
+    } catch {
+      setAvailableLists([]);
+    }
+  }
+
+  async function addFanToList(listId: string) {
+    if (!modelId || !activeFanId) return;
+    setAddedToList((prev) => new Set(prev).add(listId));
+    try {
+      await fetch("/api/crm/of-inbox/list-membership", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, fanId: activeFanId, listId }),
+      });
+    } catch {}
+  }
 
   // Task #57: CONFIRMED LIVE 2026-07-31 - the real Galerie button in a
   // chat's header (all media ever sent in this specific chat).
@@ -673,13 +749,13 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             <button title="Nachrichten (aktiv)" className="text-[#C9A86A]"><ChatIcon size={30} /></button>
             {/* Task: chatter role only ever needs Messages/Bell (above) +
                 Tresor/Listen - Kalender/Statistik/Auszahlungen bleiben
-                admin/content-manager only. Galerie hat noch keinen
-                bestätigten eigenen Endpunkt (nur der Tresor selbst), daher
-                weiter ausgegraut statt vorgetäuscht funktionsfähig. */}
+                admin/content-manager only. Die Galerie gibt's pro Chat im
+                Header (Task #57, echter Endpunkt) - kein eigenes Icon hier
+                mehr nötig/sinnvoll, OnlyFans hat auch keins in der
+                Leiste. */}
             {(isAdmin
               ? [
                   { Icon: FolderIcon, key: "vault" as const, label: "Tresor" },
-                  { Icon: ImageIcon, key: null, label: "Galerie" },
                   { Icon: CalendarIcon, key: "schedules" as const, label: "Kalender" },
                   { Icon: ChartIcon, key: "stats" as const, label: "Statistik" },
                   { Icon: ReceiptIcon, key: "earnings" as const, label: "Auszahlungen" },
@@ -689,8 +765,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   { Icon: FolderIcon, key: "vault" as const, label: "Tresor" },
                   { Icon: ListIcon, key: "lists" as const, label: "Listen" },
                 ]
-            ).map(({ Icon, key, label }, i) =>
-              key ? (
+            ).map(({ Icon, key, label }) => (
                 <div className="relative" key={key}>
                   <button
                     onClick={() => openPanel(key)}
@@ -805,12 +880,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     </div>
                   )}
                 </div>
-              ) : (
-                <button key={i} disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">
-                  <Icon size={30} />
-                </button>
-              )
-            )}
+            ))}
           </div>
 
           <div className="w-[380px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden flex flex-col h-full">
@@ -873,12 +943,40 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     >
                       <SearchIcon size={18} />
                     </button>
-                    {/* Noch nicht an echte OnlyFans-Endpunkte angebunden (der
-                        genaue API-Aufruf dafür wurde noch nicht live
-                        gefunden) - bewusst ausgegraut statt so zu tun als
-                        würden sie funktionieren. */}
-                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><StarIcon size={18} /></button>
-                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><BellIcon size={18} /></button>
+                    <div className="relative">
+                      <button
+                        onClick={openListsPanel}
+                        className={listsPanelOpen ? "text-[#C9A86A]" : "hover:text-[#E2C48A]"}
+                        title="Zu Favoriten und anderen Listen hinzufügen"
+                      >
+                        <StarIcon size={18} />
+                      </button>
+                      {listsPanelOpen && (
+                        <div className="absolute top-full right-0 mt-2 w-56 bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 overflow-hidden">
+                          {availableLists.length === 0 && (
+                            <div className="p-3 text-xs text-slate-500">Keine Listen</div>
+                          )}
+                          {availableLists.map((l) => (
+                            <button
+                              key={l.id}
+                              onClick={() => addFanToList(l.id)}
+                              disabled={addedToList.has(l.id)}
+                              className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-[#C9A86A]/10 flex items-center justify-between disabled:opacity-50"
+                            >
+                              <span>{l.name}</span>
+                              {addedToList.has(l.id) && <CheckIcon size={12} />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={toggleMute}
+                      className={chats.find((c) => c.withUser.id === activeFanId)?.isMutedNotifications ? "text-[#C9A86A]" : "hover:text-[#E2C48A]"}
+                      title="Benachrichtigungen stumm schalten"
+                    >
+                      <BellIcon size={18} />
+                    </button>
                     <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><PinIcon size={18} /></button>
                     <button
                       onClick={toggleGallery}
@@ -967,6 +1065,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     const dividerLabel = !msgDate ? "" : dateKey === today ? "Heute" : dateKey === yesterday ? "Gestern" : msgDate.toLocaleDateString("de-DE", { day: "numeric", month: "long" });
                     const time = msgDate ? msgDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
                     const isPinned = pinnedIds.has(m.id);
+                    const isLiked = likedIds.has(m.id);
                     const canDelete = isOwn && msgDate && Date.now() - msgDate.getTime() < 24 * 3600 * 1000;
                     return (
                       <Fragment key={m.id}>
@@ -1002,7 +1101,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                             )}
                           </div>
                           {!isOwn && (
-                            <div className="opacity-0 group-hover:opacity-100 transition text-slate-500">
+                            <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1 text-slate-500">
+                              <button onClick={() => toggleLike(m.id, isLiked)} title={isLiked ? "Gefällt mir nicht mehr" : "Gefällt mir"} className={isLiked ? "text-[#C9A86A]" : "hover:text-[#E2C48A]"}>
+                                <HeartIcon size={14} filled={isLiked} />
+                              </button>
                               <button onClick={() => togglePin(m.id, isPinned)} title={isPinned ? "Entpinnen" : "Anheften"} className={isPinned ? "text-[#C9A86A]" : "hover:text-[#E2C48A]"}>
                                 <PinIcon size={14} />
                               </button>

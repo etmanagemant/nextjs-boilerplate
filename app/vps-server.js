@@ -3099,6 +3099,77 @@ app.delete('/of-message-pin', async (req, res) => {
   }
 });
 
+// POST/DELETE /of-message-like { modelId, fanId, messageId } - CONFIRMED
+// LIVE 2026-07-31: only appears in a FAN-sent message's context menu (not
+// on the model's own messages) - "Gefällt mir"/"Gefällt mir nicht mehr",
+// same URL, POST to like, DELETE to unlike. Task #54.
+app.post('/of-message-like', async (req, res) => {
+  const { modelId, fanId, messageId } = req.body || {};
+  if (!modelId || !fanId || !messageId) return res.status(400).json({ error: 'Missing modelId, fanId, or messageId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/messages/${encodeURIComponent(messageId)}/like`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'POST', body: { withUserId: Number(fanId) } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-MESSAGE-LIKE] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+app.delete('/of-message-like', async (req, res) => {
+  const { modelId, fanId, messageId } = req.body || {};
+  if (!modelId || !fanId || !messageId) return res.status(400).json({ error: 'Missing modelId, fanId, or messageId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/messages/${encodeURIComponent(messageId)}/like`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'DELETE', body: { withUserId: Number(fanId) } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-MESSAGE-LIKE] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST/DELETE /of-list-membership { modelId, fanId, listId } - CONFIRMED
+// LIVE 2026-07-31: generic "add/remove fan from a list" endpoint - covers
+// BOTH the star ("Zu Favoriten und anderen Listen hinzufügen") AND muting
+// a chat, since "Stummgeschaltet" is just a built-in list (listId=
+// 'muted'). Same mechanism, no separate mute endpoint exists.
+app.post('/of-list-membership', async (req, res) => {
+  const { modelId, fanId, listId } = req.body || {};
+  if (!modelId || !fanId || !listId) return res.status(400).json({ error: 'Missing modelId, fanId, or listId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/lists/${encodeURIComponent(listId)}/users/${encodeURIComponent(fanId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'POST' });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-LIST-MEMBERSHIP] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+app.delete('/of-list-membership', async (req, res) => {
+  const { modelId, fanId, listId } = req.body || {};
+  if (!modelId || !fanId || !listId) return res.status(400).json({ error: 'Missing modelId, fanId, or listId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/lists/${encodeURIComponent(listId)}/users/${encodeURIComponent(fanId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'DELETE' });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-LIST-MEMBERSHIP] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // DELETE /of-message { modelId, fanId, messageId } - CONFIRMED LIVE
 // 2026-07-31 via the real "Senden rückgängig machen" flow (OnlyFans' own
 // 24h-window delete-own-message feature, Task #56). Body shape
