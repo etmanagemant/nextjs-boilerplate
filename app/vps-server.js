@@ -2709,14 +2709,20 @@ app.get('/inbox-fingerprint', async (req, res) => {
     const session = modelSessions[modelId];
     if (!session) return res.json({ status: 'no_session' });
 
-    const fingerprint = await session.page.evaluate(() => {
-      var item = document.querySelector('.b-chats__item');
-      if (!item) return null;
-      var preview = item.querySelector('.b-chats__item__last-message__content');
-      return { id: item.id || '', preview: preview ? (preview.textContent || '').trim().slice(0, 80) : '' };
-    });
-    if (!fingerprint) return res.json({ status: 'success', fingerprint: null });
-    res.json({ status: 'success', fingerprint: `${fingerprint.id}|${fingerprint.preview}` });
+    // CONFIRMED (2026-07-31, Task #30): this used to grab the DOM's first
+    // .b-chats__item regardless of mute state, so a stummgeschalteter Chat
+    // that got a new message still lit up the model-tab's red unread dot.
+    // Switched to the same signed chats-list call OF Inbox Beta already
+    // uses (isMutedNotifications field CONFIRMED working there) so muted
+    // chats are skipped entirely when picking the "top" chat to fingerprint.
+    const url = 'https://onlyfans.com/api2/v2/chats?limit=10&offset=0&skip_users=all&order=recent';
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.json({ status: 'success', fingerprint: null });
+    const list = (result.json && result.json.list) || [];
+    const top = list.find((c) => !c.isMutedNotifications);
+    if (!top) return res.json({ status: 'success', fingerprint: null });
+    const preview = (top.lastMessage && top.lastMessage.text || '').replace(/<[^>]*>/g, '').trim().slice(0, 80);
+    res.json({ status: 'success', fingerprint: `${top.withUser.id}|${preview}` });
   } catch (error) {
     res.status(200).json({ status: 'error', error: error.message });
   }
@@ -3098,6 +3104,47 @@ app.get('/of-notifications', async (req, res) => {
   } catch (error) {
     console.error(`[OF-NOTIFICATIONS] Error for ${modelId}:`, error.message);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-media-proxy?url=<encoded CDN url> - CONFIRMED LIVE (2026-07-31,
+// Task #44): OnlyFans' signed CloudFront media URLs carry an IpAddress
+// condition locked to the IP that requested them - since the /of-chats etc.
+// signed requests run from inside this VPS's Puppeteer page, every media
+// URL comes back locked to THIS server's IP, not the CRM user's browser.
+// Serving the raw url straight to the browser (the old approach) got a
+// plain 403 from CloudFront - looked exactly like the reported bug ("video
+// player shows but no content loads"), same root cause for photos too,
+// just less obviously broken visually. Fetching it here (same IP the
+// policy allows) and streaming it through fixes both.
+app.get('/of-media-proxy', async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url' });
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Invalid url' });
+  }
+  if (!/(^|\.)onlyfans\.com$/.test(parsed.hostname)) {
+    return res.status(400).json({ error: 'Host not allowed' });
+  }
+  try {
+    const upstream = await fetch(url, req.headers.range ? { headers: { Range: req.headers.range } } : undefined);
+    res.status(upstream.status);
+    for (const h of ['content-type', 'content-length', 'accept-ranges', 'content-range']) {
+      const v = upstream.headers.get(h);
+      if (v) res.setHeader(h, v);
+    }
+    if (!upstream.body) return res.end();
+    for await (const chunk of upstream.body) {
+      res.write(chunk);
+    }
+    res.end();
+  } catch (error) {
+    console.error('[OF-MEDIA-PROXY] Error:', error.message);
+    if (!res.headersSent) res.status(502).json({ error: error.message });
+    else res.end();
   }
 });
 

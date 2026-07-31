@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { useSearchParams } from "next/navigation";
 import { FanCrmPanel } from "@/components/FanCrmPanel";
 import EmojiBar from "@/components/layout/EmojiBar";
+import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
 import {
   HomeIcon, BellIcon, ChatIcon, FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon, ListIcon,
@@ -57,7 +58,9 @@ type UserDetail = {
 // script already used) are wired in. NOT yet ported: dark mode toggle,
 // sent-by overlay, script-vault button, PPV purchase detector, multi-
 // model tab bar, new-tab/refresh chrome - still VNC-only for now.
-export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: { connectedModels: ConnectedModel[]; isAdmin: boolean; chatterId: string }) {
+type Shift = { id: number; shift_date: string; notes: string };
+
+export default function OfInboxClient({ connectedModels, isAdmin, chatterId, userEmail = "", allShifts = [] }: { connectedModels: ConnectedModel[]; isAdmin: boolean; chatterId: string; userEmail?: string; allShifts?: Shift[] }) {
   const searchParams = useSearchParams();
   const modelFromUrl = searchParams.get("model");
   const [modelId, setModelId] = useState(modelFromUrl || connectedModels[0]?.id || "");
@@ -78,6 +81,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
   const [activeFanId, setActiveFanId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  // Task #33/#37: same crm_onlyfans_sent_log VNC's overlay reads from -
+  // /api/crm/of-inbox/send now writes an entry there itself (it already
+  // knows the sender), this just reads it back for display.
+  const [sentLog, setSentLog] = useState<{ chatter_name: string; message_text: string | null; media_key: string | null }[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
@@ -235,7 +242,13 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
     if (!modelId) return;
     const offset = opts.more ? messagesOffsetRef.current : 0;
     if (opts.more) setMessagesLoadingMore(true);
-    else { setMessagesLoading(true); messagesOffsetRef.current = 0; setMessagesHasMore(true); }
+    else {
+      setMessagesLoading(true); messagesOffsetRef.current = 0; setMessagesHasMore(true);
+      fetch(`/api/crm/log-sent-message?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}`)
+        .then((r) => r.json())
+        .then((d) => setSentLog(d.entries || []))
+        .catch(() => setSentLog([]));
+    }
     try {
       const res = await fetch(`/api/crm/of-inbox/messages?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}&offset=${offset}`);
       const data = await res.json();
@@ -380,9 +393,11 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
     );
   }
 
-  // Direct CDN URLs (signed, no auth of ours needed) - real media, real
-  // audio, no VNC frame relay involved, so none of the earlier VNC audio-
-  // latency problems apply here at all.
+  // Task #44: OnlyFans' signed CDN urls are IP-locked to the VPS that
+  // requested them, not the CRM user's browser - a raw <img src> 403'd
+  // (most visibly for video, since a blocked byte-range request leaves
+  // just the player chrome with no content). Routed through our own
+  // media-proxy, which re-fetches from the VPS's IP and streams it.
   function MessageMedia({ media }: { media?: MediaItem[] }) {
     if (!media || media.length === 0) return null;
     return (
@@ -390,15 +405,16 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
         {media.map((m, i) => {
           const url = m.files?.full?.url || m.files?.preview?.url;
           if (!url) return null;
+          const proxied = `/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`;
           if (m.type === "photo" || m.type === "gif") {
             // eslint-disable-next-line @next/next/no-img-element
-            return <img key={i} src={url} alt="" className="max-w-full rounded-lg max-h-80 object-contain" />;
+            return <img key={i} src={proxied} alt="" className="max-w-full rounded-lg max-h-80 object-contain" />;
           }
           if (m.type === "video") {
-            return <video key={i} src={url} controls className="max-w-full rounded-lg max-h-80" />;
+            return <video key={i} src={proxied} controls className="max-w-full rounded-lg max-h-80" />;
           }
           if (m.type === "audio") {
-            return <audio key={i} src={url} controls className="max-w-full" />;
+            return <audio key={i} src={proxied} controls className="max-w-full" />;
           }
           return null;
         })}
@@ -412,14 +428,27 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
           usePublishModelTabs oben), genau wie bei /crm-inbox - kein
           eigenes Dropdown mehr nötig. */}
       {!modelId ? (
-        <div className="text-sm text-slate-400">Kein verbundenes Model gefunden.</div>
+        <div className="w-full flex flex-col items-center justify-center overflow-y-auto scrollbar-hide py-8">
+          <NextShiftsWidget
+            allShifts={allShifts}
+            userEmail={userEmail}
+            userId={chatterId}
+            userFullName={undefined}
+            isAdmin={isAdmin}
+          />
+        </div>
       ) : (
         <div className="flex gap-4 flex-1 min-h-0">
           {/* Icon-Leiste, in der Reihenfolge wie bei OnlyFans selbst - nur
               Glocke und Nachrichten sind bisher an echte Endpunkte
               angebunden, der Rest ist bewusst ausgegraut statt vorgetäuscht
               funktionsfähig zu sein. */}
-          <div className="w-12 flex-shrink-0 flex flex-col items-center gap-3 pt-1">
+          <div className="w-16 flex-shrink-0 flex flex-col items-center gap-5 pt-2">
+            {/* Task #53: Icons waren mit dem geteilten 22px-Default winzig
+                gegen das echte OnlyFans (Vergleichsscreenshot) - hier
+                explizit größer statt den globalen Default in GoldIcons.tsx
+                zu ändern, da BellIcon/etc. an anderer Stelle (Notification-
+                Liste) bewusst klein bleiben sollen. */}
             {/* Home zeigt nur Werbe-Feed anderer Creator - für Chatter
                 komplett raus, für Admin/Content-Manager als ausgegrauter
                 Platzhalter belassen. */}
@@ -429,7 +458,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
                 title="Zeigt nur Werbe-/Entdecken-Beiträge anderer Creator - für uns nicht relevant"
                 className="opacity-30 cursor-not-allowed"
               >
-                <HomeIcon />
+                <HomeIcon size={30} />
               </button>
             )}
             <div className="relative">
@@ -438,7 +467,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
                 className={`hover:scale-110 transition ${notifPanelOpen ? "scale-110" : ""}`}
                 title="Benachrichtigungen"
               >
-                <BellIcon />
+                <BellIcon size={30} />
               </button>
               {notifPanelOpen && (
                 <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30" onScroll={handleNotifScroll}>
@@ -482,13 +511,13 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
                 </div>
               )}
             </div>
-            <button title="Nachrichten (aktiv)" className="text-[#C9A86A]"><ChatIcon /></button>
+            <button title="Nachrichten (aktiv)" className="text-[#C9A86A]"><ChatIcon size={30} /></button>
             {/* Task: chatter role only ever needs Messages/Bell (above) +
                 Tresor/Listen - the rest (Galerie/Kalender/Statistik/
                 Warteschlange) is admin/content-manager only. */}
             {(isAdmin ? [FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon] : [FolderIcon, ListIcon]).map((IconComp, i) => (
               <button key={i} disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">
-                <IconComp />
+                <IconComp size={30} />
               </button>
             ))}
           </div>
@@ -589,9 +618,27 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
                     let lastDateKey = "";
                     const today = new Date().toDateString();
                     const yesterday = new Date(Date.now() - 86400000).toDateString();
+                    // Same left-to-right, never-search-ahead matching as
+                    // VNC's overlay (app/vps-server.js applyLabelsFromLog) -
+                    // walks own messages oldest-first against the log
+                    // oldest-first, so unlogged old bubbles just get
+                    // skipped instead of stealing a later duplicate-text
+                    // entry.
+                    let logIdx = 0;
+                    const attribution = new Map<number, string>();
+                    for (const m of messages) {
+                      if (String(m.fromUser?.id) === String(activeFanId)) continue;
+                      if (logIdx >= sentLog.length) break;
+                      const entry = sentLog[logIdx];
+                      const matched = entry.message_text && m.text && stripHtmlPreview(m.text) === entry.message_text;
+                      if (!matched) continue;
+                      attribution.set(m.id, entry.chatter_name);
+                      logIdx++;
+                    }
                     return filtered.map((m) => {
                     const isOwn = String(m.fromUser?.id) !== String(activeFanId);
                     const isRead = isOwn && Number(m.id) <= lastRead;
+                    const sentBy = attribution.get(m.id);
                     const msgDate = m.createdAt ? new Date(m.createdAt) : null;
                     const dateKey = msgDate ? msgDate.toDateString() : "";
                     const showDivider = dateKey && dateKey !== lastDateKey;
@@ -609,6 +656,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
                             {m.text && <div dangerouslySetInnerHTML={{ __html: m.text }} />}
                             {isOwn && (
                               <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-400">
+                                {sentBy && <span className="opacity-60">gesendet von {sentBy}</span>}
                                 <span>{time}</span>
                                 {isRead ? <DoubleCheckIcon size={13} /> : <CheckIcon size={11} />}
                               </div>

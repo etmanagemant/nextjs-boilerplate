@@ -30,11 +30,14 @@ export default async function OfInboxPage() {
   }
 
   const adminSupabase = createSupabaseAdminClient();
-  const { data: crm_models } = await adminSupabase
-    .from("crm_model_sessions")
-    .select("model_id")
-    .eq("is_active", true)
-    .order("model_id", { ascending: true });
+  const [{ data: crm_models }, { data: allShifts }] = await Promise.all([
+    adminSupabase
+      .from("crm_model_sessions")
+      .select("model_id")
+      .eq("is_active", true)
+      .order("model_id", { ascending: true }),
+    adminSupabase.from("shifts").select("*"),
+  ]);
 
   const modelIds = (crm_models || []).map((m: any) => m.model_id);
   let connectedModels: { id: string; name: string; avatar_url?: string | null }[] = [];
@@ -56,6 +59,8 @@ export default async function OfInboxPage() {
       connectedModels={connectedModels}
       isAdmin={isAdminTierRole(profile?.role) || user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4"}
       chatterId={user.id}
+      userEmail={user.email || ""}
+      allShifts={allShifts || []}
     />
   );
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { hasRole, isAdminTierRole } from "@/lib/roles";
 import { vpsFetch } from "@/lib/vpsClient";
+import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,6 +40,26 @@ export async function POST(req: NextRequest) {
     if (!vpsRes.ok) {
       return NextResponse.json({ error: data.error || "VPS error" }, { status: vpsRes.status });
     }
+
+    // Task #33/#37: unlike the VNC path (an injected script hooks the real
+    // compose box, since it can't know who's driving the shared browser),
+    // we already know exactly who sent this - we ARE the sender. Logs into
+    // the same crm_onlyfans_sent_log table VNC's "gesendet von X" overlay
+    // reads from, so both views share one attribution source. Best-effort:
+    // a logging failure shouldn't fail a message that already sent fine.
+    try {
+      const chatterName = profile?.full_name || user.email || "Chatter";
+      const adminSupabase = createSupabaseAdminClient();
+      await adminSupabase.from("crm_onlyfans_sent_log").insert({
+        model_id: modelId,
+        fan_id: String(fanId),
+        chatter_name: chatterName,
+        message_text: text,
+      });
+    } catch (logError: any) {
+      console.error("[OF-INBOX-SEND] Sent-log insert failed:", logError.message);
+    }
+
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("[OF-INBOX-SEND] Error:", error.message);
