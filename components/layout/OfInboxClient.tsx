@@ -91,17 +91,36 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [vaultLists, setVaultLists] = useState<any[]>([]);
   const [vaultMedia, setVaultMedia] = useState<any[]>([]);
   const [vaultActiveListId, setVaultActiveListId] = useState<string | null>(null);
+  const [vaultTypeFilter, setVaultTypeFilter] = useState<string | null>(null);
+  const [vaultMediaHasMore, setVaultMediaHasMore] = useState(true);
+  const [vaultMediaLoadingMore, setVaultMediaLoadingMore] = useState(false);
+  const vaultMediaOffsetRef = useRef(0);
   const [fanLists, setFanLists] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [earnings, setEarnings] = useState<any>(null);
 
-  async function loadVaultMedia(listId: string | null) {
+  const VAULT_PAGE_SIZE = 40;
+
+  async function loadVaultMedia(listId: string | null, opts: { more?: boolean } = {}) {
     if (!modelId) return;
-    const res = await fetch(`/api/crm/of-inbox/vault-media?modelId=${encodeURIComponent(modelId)}${listId ? `&listId=${encodeURIComponent(listId)}` : ""}`);
+    const offset = opts.more ? vaultMediaOffsetRef.current : 0;
+    const res = await fetch(`/api/crm/of-inbox/vault-media?modelId=${encodeURIComponent(modelId)}&offset=${offset}${listId ? `&listId=${encodeURIComponent(listId)}` : ""}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
-    setVaultMedia(data.data?.list || []);
+    const list = data.data?.list || [];
+    setVaultMediaHasMore(list.length >= VAULT_PAGE_SIZE);
+    vaultMediaOffsetRef.current = offset + list.length;
+    setVaultMedia((prev) => (opts.more ? [...prev, ...list] : list));
+  }
+
+  function handleVaultMediaScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    if (vaultMediaLoadingMore || panelLoading || !vaultMediaHasMore) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
+      setVaultMediaLoadingMore(true);
+      loadVaultMedia(vaultActiveListId, { more: true }).finally(() => setVaultMediaLoadingMore(false));
+    }
   }
 
   async function openPanel(panel: NonNullable<typeof activePanel>) {
@@ -112,12 +131,18 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setPanelError("");
     try {
       if (panel === "vault") {
-        const res = await fetch(`/api/crm/of-inbox/vault-lists?modelId=${encodeURIComponent(modelId)}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
-        setVaultLists(data.data?.list || []);
         setVaultActiveListId(null);
-        await loadVaultMedia(null);
+        setVaultTypeFilter(null);
+        vaultMediaOffsetRef.current = 0;
+        setVaultMediaHasMore(true);
+        // Task #58: die zwei Requests liefen vorher nacheinander, jetzt
+        // parallel - spürbar schnelleres erstes Laden.
+        const [listsRes] = await Promise.all([
+          fetch(`/api/crm/of-inbox/vault-lists?modelId=${encodeURIComponent(modelId)}`).then((r) => r.json()),
+          loadVaultMedia(null),
+        ]);
+        if (listsRes.error) throw new Error(listsRes.error);
+        setVaultLists(listsRes.data?.list || []);
       } else if (panel === "lists") {
         const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}`);
         const data = await res.json();
@@ -148,6 +173,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
 
   async function selectVaultList(listId: string | null) {
     setVaultActiveListId(listId);
+    vaultMediaOffsetRef.current = 0;
+    setVaultMediaHasMore(true);
     setPanelLoading(true);
     setPanelError("");
     try {
@@ -775,7 +802,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     <Icon size={30} />
                   </button>
                   {activePanel === key && (
-                    <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
+                    <div
+                      onScroll={key === "vault" ? handleVaultMediaScroll : undefined}
+                      className={`absolute top-full left-0 mt-2 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 ${key === "vault" ? "w-[560px] max-h-[640px]" : "w-96 max-h-[500px]"}`}
+                    >
                       <div className="p-3 border-b border-[#9C7A3D]/20 sticky top-0 bg-[#0A0A0A]">
                         <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">{label}</span>
                       </div>
@@ -801,8 +831,27 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               </button>
                             ))}
                           </div>
-                          <div className="grid grid-cols-3 gap-1 p-2">
-                            {vaultMedia.map((m) => {
+                          {/* Task #58: Typ-Filter - rein client-seitig über die schon
+                              geladenen Medien, kein zusätzlicher Request nötig. */}
+                          <div className="flex gap-1.5 p-2 border-b border-[#9C7A3D]/10">
+                            {[
+                              { id: null, label: "Alle" },
+                              { id: "photo", label: "Fotos" },
+                              { id: "video", label: "Videos" },
+                              { id: "audio", label: "Audio" },
+                              { id: "gif", label: "GIFs" },
+                            ].map((f) => (
+                              <button
+                                key={f.label}
+                                onClick={() => setVaultTypeFilter(f.id)}
+                                className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase ${vaultTypeFilter === f.id ? "bg-[#C9A86A] text-black" : "bg-black/30 text-slate-400 hover:text-[#E2C48A]"}`}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-4 gap-1.5 p-2">
+                            {vaultMedia.filter((m) => !vaultTypeFilter || m.type === vaultTypeFilter).map((m) => {
                               const url = m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url;
                               if (!url) return null;
                               return (
@@ -810,8 +859,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                                 <img key={m.id} src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
                               );
                             })}
-                            {vaultMedia.length === 0 && <div className="col-span-3 p-3 text-xs text-slate-500 text-center">Keine Medien in diesem Ordner</div>}
+                            {vaultMedia.length === 0 && <div className="col-span-4 p-3 text-xs text-slate-500 text-center">Keine Medien in diesem Ordner</div>}
                           </div>
+                          {vaultMediaLoadingMore && <div className="p-2 text-xs text-slate-500 italic text-center">Lade weitere…</div>}
                         </>
                       )}
 
