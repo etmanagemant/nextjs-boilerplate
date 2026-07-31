@@ -7,8 +7,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Proxies to the VPS's /of-lists - Fan-Listen/Segmente.
- * GET /api/crm/of-inbox/lists?modelId=X
+ * Proxies to the VPS's /of-lists - Fan-Listen/Segmente. Optional
+ * relatedUserId scopes it to one fan's membership status per list (the
+ * real star-dialog behavior, CONFIRMED LIVE 2026-07-31).
+ * GET /api/crm/of-inbox/lists?modelId=X&relatedUserId=Y
  */
 export async function GET(req: NextRequest) {
   try {
@@ -22,9 +24,10 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const modelId = searchParams.get("modelId");
+    const relatedUserId = searchParams.get("relatedUserId") || "";
     if (!modelId) return NextResponse.json({ error: "Missing modelId" }, { status: 400 });
 
-    const vpsRes = await vpsFetch(`/of-lists?modelId=${encodeURIComponent(modelId)}`);
+    const vpsRes = await vpsFetch(`/of-lists?modelId=${encodeURIComponent(modelId)}${relatedUserId ? `&relatedUserId=${encodeURIComponent(relatedUserId)}` : ""}`);
     const data = await vpsRes.json();
     if (!vpsRes.ok) return NextResponse.json({ error: data.error || "VPS error" }, { status: vpsRes.status });
     return NextResponse.json(data);

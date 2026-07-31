@@ -3016,14 +3016,17 @@ app.get('/of-chats', async (req, res) => {
 
 // GET /of-messages?modelId=X&fanId=Y&offset=0 - message history for one
 // conversation.
+// pinned=1 (optional) - CONFIRMED LIVE 2026-07-31: the chat header's pin
+// icon links to a view that's this same endpoint with &filter=pinned
+// added, not a separate route.
 app.get('/of-messages', async (req, res) => {
-  const { modelId, fanId, offset } = req.query;
+  const { modelId, fanId, offset, pinned } = req.query;
   if (!modelId || !fanId) return res.status(400).json({ error: 'Missing modelId or fanId' });
   const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
 
   try {
-    const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}/messages?limit=20&order=desc&skip_users=all${offset ? `&offset=${Number(offset)}` : ''}`;
+    const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}/messages?limit=20&order=desc&skip_users=all${offset ? `&offset=${Number(offset)}` : ''}${pinned ? '&filter=pinned' : ''}`;
     const result = await callOnlyFansApi(session.page, url);
     if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
     res.json({ status: 'success', data: result.json });
@@ -3330,13 +3333,19 @@ app.get('/of-vault-media', async (req, res) => {
 });
 
 // GET /of-lists?modelId=X - Fan-Listen/Segmente (⭐ "zu Liste hinzufügen").
+// relatedUserId=X (optional) - CONFIRMED LIVE 2026-07-31: OnlyFans' own
+// star/"zu Liste hinzufügen" dialog calls /lists?related_user={fanId} to
+// know which lists that specific fan is already a member of (Task: Stern-
+// Dropdown mit echtem Mitglied-Status).
 app.get('/of-lists', async (req, res) => {
-  const { modelId } = req.query;
+  const { modelId, relatedUserId } = req.query;
   if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
   const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
   try {
-    const url = 'https://onlyfans.com/api2/v2/lists?limit=50&offset=0';
+    const url = relatedUserId
+      ? `https://onlyfans.com/api2/v2/lists?offset=0&related_user=${encodeURIComponent(relatedUserId)}&skip_users=all&limit=50&format=infinite`
+      : 'https://onlyfans.com/api2/v2/lists?limit=50&offset=0';
     const result = await callOnlyFansApi(session.page, url);
     if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
     res.json({ status: 'success', data: result.json });

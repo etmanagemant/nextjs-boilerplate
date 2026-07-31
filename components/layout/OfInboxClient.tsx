@@ -95,6 +95,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [vaultMediaHasMore, setVaultMediaHasMore] = useState(true);
   const [vaultMediaLoadingMore, setVaultMediaLoadingMore] = useState(false);
   const vaultMediaOffsetRef = useRef(0);
+  const [lightboxMedia, setLightboxMedia] = useState<any | null>(null);
+  const [pinnedPanelOpen, setPinnedPanelOpen] = useState(false);
+  const [pinnedMessages, setPinnedMessages] = useState<any[]>([]);
+  const [pinnedLoading, setPinnedLoading] = useState(false);
   const [fanLists, setFanLists] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [schedules, setSchedules] = useState<any[]>([]);
@@ -414,6 +418,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setLikedIds(new Set());
     setListsPanelOpen(false);
     setAddedToList(new Set());
+    setPinnedPanelOpen(false);
+    setPinnedMessages([]);
     setGalleryOpen(false);
     setGalleryMedia([]);
     loadMessages(fanId);
@@ -560,21 +566,24 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   }
 
   // Task: der Stern-Button ("Zu Favoriten und anderen Listen hinzufügen")
-  // - CONFIRMED LIVE 2026-07-31: POST/DELETE /lists/{listId}/users/{fanId}.
-  // OnlyFans' eigener Dialog zeigt den aktuellen Mitglied-Status pro Liste
-  // an, aber /lists liefert dafür nur eine ungefähre Vorschau der
-  // Mitglieder (nicht zuverlässig pro Fan prüfbar) - deshalb bewusst nur
-  // "hinzufügen" statt eines vollen Toggle-mit-Status.
+  // - CONFIRMED LIVE 2026-07-31: POST/DELETE /lists/{listId}/users/{fanId}
+  // zum Ändern, GET /lists?related_user={fanId} zum Anzeigen (genau das
+  // ruft OnlyFans' eigener Dialog auf, siehe Screenshot vom User mit
+  // Häkchen pro Liste). Welches Feld genau "ist Mitglied" markiert, ist
+  // NICHT live bestätigt (Testmodel-Session ist beim Testen ausgeloggt) -
+  // hier über die schon bekannte users[]-Vorschau angenähert, sollte
+  // nochmal live geprüft werden sobald das Testmodel wieder eingeloggt ist.
   async function openListsPanel() {
     if (listsPanelOpen) { setListsPanelOpen(false); return; }
     setListsPanelOpen(true);
-    setAddedToList(new Set());
-    if (!modelId) return;
+    if (!modelId || !activeFanId) return;
     try {
-      const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}`);
+      const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}&relatedUserId=${activeFanId}`);
       const data = await res.json();
       const list = Array.isArray(data.data) ? data.data : [];
-      setAvailableLists(list.filter((l: any) => l.type === "custom" || l.id === "friends"));
+      const relevant = list.filter((l: any) => l.type === "custom" || l.id === "friends");
+      setAvailableLists(relevant);
+      setAddedToList(new Set(relevant.filter((l: any) => l.users?.some((u: any) => String(u.id) === String(activeFanId))).map((l: any) => l.id)));
     } catch {
       setAvailableLists([]);
     }
@@ -582,14 +591,39 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
 
   async function addFanToList(listId: string) {
     if (!modelId || !activeFanId) return;
-    setAddedToList((prev) => new Set(prev).add(listId));
+    const currentlyIn = addedToList.has(listId);
+    setAddedToList((prev) => {
+      const next = new Set(prev);
+      if (currentlyIn) next.delete(listId); else next.add(listId);
+      return next;
+    });
     try {
       await fetch("/api/crm/of-inbox/list-membership", {
-        method: "POST",
+        method: currentlyIn ? "DELETE" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modelId, fanId: activeFanId, listId }),
       });
     } catch {}
+  }
+
+  // Task: der Pin-Button im Chat-Header ist nur eine Ansicht aller
+  // angehefteten Nachrichten dieses Chats (CONFIRMED LIVE 2026-07-31:
+  // gleicher /messages-Endpunkt, nur mit &filter=pinned) - kein Toggle.
+  async function togglePinnedPanel() {
+    if (pinnedPanelOpen) { setPinnedPanelOpen(false); return; }
+    setPinnedPanelOpen(true);
+    if (!modelId || !activeFanId) return;
+    setPinnedLoading(true);
+    try {
+      const res = await fetch(`/api/crm/of-inbox/messages?modelId=${encodeURIComponent(modelId)}&fanId=${activeFanId}&pinned=1`);
+      const data = await res.json();
+      const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
+      setPinnedMessages(list);
+    } catch {
+      setPinnedMessages([]);
+    } finally {
+      setPinnedLoading(false);
+    }
   }
 
   // Task #57: CONFIRMED LIVE 2026-07-31 - the real Galerie button in a
@@ -852,11 +886,32 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                           </div>
                           <div className="grid grid-cols-4 gap-1.5 p-2">
                             {vaultMedia.filter((m) => !vaultTypeFilter || m.type === vaultTypeFilter).map((m) => {
+                              // Task #58: Audios haben kein Bild-Thumbnail wie
+                              // Fotos/Videos - eigene Kachel statt eines
+                              // leeren/kaputten <img>. Klick öffnet jetzt bei
+                              // jedem Typ eine große Vorschau.
+                              if (m.type === "audio") {
+                                return (
+                                  <button
+                                    key={m.id}
+                                    onClick={() => setLightboxMedia(m)}
+                                    className="w-full aspect-square rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex flex-col items-center justify-center gap-1 hover:bg-[#C9A86A]/20"
+                                  >
+                                    <TipIcon size={22} />
+                                    <span className="text-[9px] text-slate-400 uppercase">Audio</span>
+                                  </button>
+                                );
+                              }
                               const url = m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url;
                               if (!url) return null;
                               return (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img key={m.id} src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
+                                <button key={m.id} onClick={() => setLightboxMedia(m)} className="relative">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
+                                  {m.type === "video" && (
+                                    <span className="absolute bottom-1 right-1 text-[8px] font-bold bg-black/70 text-white px-1 rounded">▶</span>
+                                  )}
+                                </button>
                               );
                             })}
                             {vaultMedia.length === 0 && <div className="col-span-4 p-3 text-xs text-slate-500 text-center">Keine Medien in diesem Ordner</div>}
@@ -1010,8 +1065,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                             <button
                               key={l.id}
                               onClick={() => addFanToList(l.id)}
-                              disabled={addedToList.has(l.id)}
-                              className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-[#C9A86A]/10 flex items-center justify-between disabled:opacity-50"
+                              className={`w-full text-left px-3 py-2 text-xs hover:bg-[#C9A86A]/10 flex items-center justify-between ${addedToList.has(l.id) ? "text-[#C9A86A]" : "text-slate-300"}`}
                             >
                               <span>{l.name}</span>
                               {addedToList.has(l.id) && <CheckIcon size={12} />}
@@ -1027,7 +1081,28 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     >
                       <BellIcon size={18} />
                     </button>
-                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><PinIcon size={18} /></button>
+                    <div className="relative">
+                      <button
+                        onClick={togglePinnedPanel}
+                        className={pinnedPanelOpen ? "text-[#C9A86A]" : "hover:text-[#E2C48A]"}
+                        title="Angeheftete Nachrichten"
+                      >
+                        <PinIcon size={18} />
+                      </button>
+                      {pinnedPanelOpen && (
+                        <div className="absolute top-full right-0 mt-2 w-72 max-h-72 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
+                          {pinnedLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
+                          {!pinnedLoading && pinnedMessages.length === 0 && (
+                            <div className="p-3 text-xs text-slate-500">Keine angehefteten Nachrichten</div>
+                          )}
+                          <div className="divide-y divide-[#9C7A3D]/10">
+                            {pinnedMessages.map((m: any, i: number) => (
+                              <div key={m.id ?? i} className="p-2.5 text-xs text-slate-300">{stripHtmlPreview(m.text || "")}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     <button
                       onClick={toggleGallery}
                       className={galleryOpen ? "text-[#C9A86A]" : "hover:text-[#E2C48A]"}
@@ -1218,8 +1293,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             className="w-full max-w-sm bg-[#0A0A0A] border border-[#C9A86A]/30 rounded-xl shadow-2xl p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-sm font-bold text-[#C9A86A] uppercase tracking-wider mb-3">Eigener Name für diesen Fan</h3>
-            <p className="text-xs text-slate-400 mb-3">Nur im CRM sichtbar, OnlyFans bleibt unverändert.</p>
+            <h3 className="text-sm font-bold text-[#C9A86A] uppercase tracking-wider mb-3">Fan umbenennen</h3>
+            <p className="text-xs text-slate-400 mb-3">Schreibt direkt in OnlyFans' eigenes Namensfeld - überall sichtbar, nicht nur hier.</p>
             <input
               autoFocus
               value={nicknameDraft}
@@ -1242,6 +1317,22 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 Speichern
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {lightboxMedia && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4" onClick={() => setLightboxMedia(null)}>
+          <div className="max-w-3xl max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            {(() => {
+              const url = lightboxMedia.files?.full?.url || lightboxMedia.files?.preview?.url || lightboxMedia.files?.thumb?.url;
+              if (!url) return null;
+              const proxied = `/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`;
+              if (lightboxMedia.type === "video") return <video src={proxied} controls autoPlay className="max-w-full max-h-[85vh] rounded-lg" />;
+              if (lightboxMedia.type === "audio") return <audio src={proxied} controls autoPlay className="w-96" />;
+              // eslint-disable-next-line @next/next/no-img-element
+              return <img src={proxied} className="max-w-full max-h-[85vh] rounded-lg object-contain" alt="" />;
+            })()}
           </div>
         </div>
       )}

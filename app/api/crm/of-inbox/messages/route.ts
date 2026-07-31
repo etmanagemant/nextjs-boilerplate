@@ -29,11 +29,12 @@ export async function GET(req: NextRequest) {
     const modelId = searchParams.get("modelId");
     const fanId = searchParams.get("fanId");
     const offset = searchParams.get("offset") || "";
+    const pinned = searchParams.get("pinned") || "";
     if (!modelId || !fanId) {
       return NextResponse.json({ error: "Missing modelId or fanId" }, { status: 400 });
     }
 
-    const vpsRes = await vpsFetch(`/of-messages?modelId=${encodeURIComponent(modelId)}&fanId=${encodeURIComponent(fanId)}${offset ? `&offset=${encodeURIComponent(offset)}` : ""}`);
+    const vpsRes = await vpsFetch(`/of-messages?modelId=${encodeURIComponent(modelId)}&fanId=${encodeURIComponent(fanId)}${offset ? `&offset=${encodeURIComponent(offset)}` : ""}${pinned ? "&pinned=1" : ""}`);
     const data = await vpsRes.json();
     if (!vpsRes.ok) {
       return NextResponse.json({ error: data.error || "VPS error" }, { status: vpsRes.status });
