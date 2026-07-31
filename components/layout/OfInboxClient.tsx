@@ -98,7 +98,13 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   // direkt das Array (kein data.list!); stats: data.overview.massMessages
   // + data.top.purchases; schedules: data.list[]; earnings: data ist ein
   // flaches Objekt.
-  const [activePanel, setActivePanel] = useState<null | "vault" | "lists" | "stats" | "schedules" | "earnings">(null);
+  const [activePanel, setActivePanel] = useState<null | "lists" | "stats" | "schedules" | "earnings">(null);
+  // Task: Tresor bekommt ein echtes Popup (zwei Spalten wie im echten
+  // OnlyFans-Screenshot) statt der kleinen Dropdown-Leiste, gleiches
+  // Popup egal ob über das Sidebar-Icon oder den Anhängen-Button in der
+  // Compose-Leiste geöffnet. "view" = nur ansehen (Lightbox bei Klick),
+  // "attach" = Mehrfachauswahl für eine Nachricht.
+  const [vaultModalMode, setVaultModalMode] = useState<null | "view" | "attach">(null);
   const [panelLoading, setPanelLoading] = useState(false);
   const [panelError, setPanelError] = useState("");
   const [vaultLists, setVaultLists] = useState<any[]>([]);
@@ -140,6 +146,33 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     }
   }
 
+  async function openVaultModal(mode: "view" | "attach") {
+    if (vaultModalMode === mode) { setVaultModalMode(null); return; }
+    setVaultModalMode(mode);
+    setScriptPanelOpen(false);
+    if (!modelId) return;
+    setPanelLoading(true);
+    setPanelError("");
+    try {
+      setVaultActiveListId(null);
+      setVaultTypeFilter(null);
+      vaultMediaOffsetRef.current = 0;
+      setVaultMediaHasMore(true);
+      // Task #58: die zwei Requests liefen vorher nacheinander, jetzt
+      // parallel - spürbar schnelleres erstes Laden.
+      const [listsRes] = await Promise.all([
+        fetch(`/api/crm/of-inbox/vault-lists?modelId=${encodeURIComponent(modelId)}`).then((r) => r.json()),
+        loadVaultMedia(null),
+      ]);
+      if (listsRes.error) throw new Error(listsRes.error);
+      setVaultLists(listsRes.data?.list || []);
+    } catch (e: any) {
+      setPanelError(e.message || "Fehler beim Laden");
+    } finally {
+      setPanelLoading(false);
+    }
+  }
+
   async function openPanel(panel: NonNullable<typeof activePanel>) {
     if (activePanel === panel) { setActivePanel(null); return; }
     setActivePanel(panel);
@@ -147,20 +180,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setPanelLoading(true);
     setPanelError("");
     try {
-      if (panel === "vault") {
-        setVaultActiveListId(null);
-        setVaultTypeFilter(null);
-        vaultMediaOffsetRef.current = 0;
-        setVaultMediaHasMore(true);
-        // Task #58: die zwei Requests liefen vorher nacheinander, jetzt
-        // parallel - spürbar schnelleres erstes Laden.
-        const [listsRes] = await Promise.all([
-          fetch(`/api/crm/of-inbox/vault-lists?modelId=${encodeURIComponent(modelId)}`).then((r) => r.json()),
-          loadVaultMedia(null),
-        ]);
-        if (listsRes.error) throw new Error(listsRes.error);
-        setVaultLists(listsRes.data?.list || []);
-      } else if (panel === "lists") {
+      if (panel === "lists") {
         const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
@@ -219,9 +239,6 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
   const [scripts, setScripts] = useState<any[]>([]);
   const [scriptsLoading, setScriptsLoading] = useState(false);
-  const [attachPanelOpen, setAttachPanelOpen] = useState(false);
-  const [attachVaultMedia, setAttachVaultMedia] = useState<any[]>([]);
-  const [attachLoading, setAttachLoading] = useState(false);
   const [attachedMedia, setAttachedMedia] = useState<any[]>([]);
   const [attachPrice, setAttachPrice] = useState("");
   const [sending, setSending] = useState(false);
@@ -442,7 +459,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setGalleryOpen(false);
     setGalleryMedia([]);
     setScriptPanelOpen(false);
-    setAttachPanelOpen(false);
+    setVaultModalMode(null);
     setAttachedMedia([]);
     setAttachPrice("");
     loadMessages(fanId);
@@ -489,7 +506,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   async function toggleScriptPanel() {
     if (scriptPanelOpen) { setScriptPanelOpen(false); return; }
     setScriptPanelOpen(true);
-    setAttachPanelOpen(false);
+    setVaultModalMode(null);
     if (!modelId || scripts.length > 0) return;
     setScriptsLoading(true);
     try {
@@ -510,23 +527,6 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
       .join("\n\n");
     if (text) setDraft((d) => (d ? `${d}\n${text}` : text));
     setScriptPanelOpen(false);
-  }
-
-  async function toggleAttachPanel() {
-    if (attachPanelOpen) { setAttachPanelOpen(false); return; }
-    setAttachPanelOpen(true);
-    setScriptPanelOpen(false);
-    if (!modelId) return;
-    setAttachLoading(true);
-    try {
-      const res = await fetch(`/api/crm/of-inbox/vault-media?modelId=${encodeURIComponent(modelId)}`);
-      const data = await res.json();
-      setAttachVaultMedia(data.data?.list || []);
-    } catch {
-      setAttachVaultMedia([]);
-    } finally {
-      setAttachLoading(false);
-    }
   }
 
   function toggleAttachMedia(m: any) {
@@ -893,17 +893,24 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 Header (Task #57, echter Endpunkt) - kein eigenes Icon hier
                 mehr nötig/sinnvoll, OnlyFans hat auch keins in der
                 Leiste. */}
+            <div className="relative">
+              <button
+                onClick={() => openVaultModal("view")}
+                title="Tresor"
+                className={`hover:scale-110 transition ${vaultModalMode === "view" ? "scale-110 text-[#C9A86A]" : ""}`}
+              >
+                <ImageIcon size={30} />
+              </button>
+            </div>
             {(isAdmin
               ? [
                   { Icon: BookmarkIcon, key: "lists" as const, label: "Listen" },
-                  { Icon: ImageIcon, key: "vault" as const, label: "Tresor" },
                   { Icon: CalendarIcon, key: "schedules" as const, label: "Kalender" },
                   { Icon: ChartIcon, key: "stats" as const, label: "Statistik" },
                   { Icon: ReceiptIcon, key: "earnings" as const, label: "Auszahlungen" },
                 ]
               : [
                   { Icon: BookmarkIcon, key: "lists" as const, label: "Listen" },
-                  { Icon: ImageIcon, key: "vault" as const, label: "Tresor" },
                 ]
             ).map(({ Icon, key, label }) => (
                 <div className="relative" key={key}>
@@ -915,89 +922,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     <Icon size={30} />
                   </button>
                   {activePanel === key && (
-                    <div
-                      onScroll={key === "vault" ? handleVaultMediaScroll : undefined}
-                      className={`absolute top-full left-0 mt-2 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 ${key === "vault" ? "w-[560px] max-h-[640px]" : "w-96 max-h-[500px]"}`}
-                    >
+                    <div className="absolute top-full left-0 mt-2 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 w-96 max-h-[500px]">
                       <div className="p-3 border-b border-[#9C7A3D]/20 sticky top-0 bg-[#0A0A0A]">
                         <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">{label}</span>
                       </div>
                       {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
                       {panelError && <div className="p-3 text-xs text-red-400">{panelError}</div>}
-
-                      {key === "vault" && !panelLoading && (
-                        <>
-                          <div className="flex gap-1.5 flex-wrap p-2 border-b border-[#9C7A3D]/10">
-                            <button
-                              onClick={() => selectVaultList(null)}
-                              className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase ${!vaultActiveListId ? "bg-[#C9A86A] text-black" : "bg-[#C9A86A]/10 text-[#E2C48A]"}`}
-                            >
-                              Alle
-                            </button>
-                            {vaultLists.map((l) => (
-                              <button
-                                key={l.id}
-                                onClick={() => selectVaultList(String(l.id))}
-                                className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase truncate max-w-[120px] ${vaultActiveListId === String(l.id) ? "bg-[#C9A86A] text-black" : "bg-[#C9A86A]/10 text-[#E2C48A]"}`}
-                              >
-                                {l.name} ({(l.videosCount || 0) + (l.photosCount || 0) + (l.gifsCount || 0) + (l.audiosCount || 0)})
-                              </button>
-                            ))}
-                          </div>
-                          {/* Task #58: Typ-Filter - rein client-seitig über die schon
-                              geladenen Medien, kein zusätzlicher Request nötig. */}
-                          <div className="flex gap-1.5 p-2 border-b border-[#9C7A3D]/10">
-                            {[
-                              { id: null, label: "Alle" },
-                              { id: "photo", label: "Fotos" },
-                              { id: "video", label: "Videos" },
-                              { id: "audio", label: "Audio" },
-                              { id: "gif", label: "GIFs" },
-                            ].map((f) => (
-                              <button
-                                key={f.label}
-                                onClick={() => setVaultTypeFilter(f.id)}
-                                className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase ${vaultTypeFilter === f.id ? "bg-[#C9A86A] text-black" : "bg-black/30 text-slate-400 hover:text-[#E2C48A]"}`}
-                              >
-                                {f.label}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="grid grid-cols-4 gap-1.5 p-2">
-                            {vaultMedia.filter((m) => !vaultTypeFilter || m.type === vaultTypeFilter).map((m) => {
-                              // Task #58: Audios haben kein Bild-Thumbnail wie
-                              // Fotos/Videos - eigene Kachel statt eines
-                              // leeren/kaputten <img>. Klick öffnet jetzt bei
-                              // jedem Typ eine große Vorschau.
-                              if (m.type === "audio") {
-                                return (
-                                  <button
-                                    key={m.id}
-                                    onClick={() => setLightboxMedia(m)}
-                                    className="w-full aspect-square rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex flex-col items-center justify-center gap-1 hover:bg-[#C9A86A]/20"
-                                  >
-                                    <TipIcon size={22} />
-                                    <span className="text-[9px] text-slate-400 uppercase">Audio</span>
-                                  </button>
-                                );
-                              }
-                              const url = m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url;
-                              if (!url) return null;
-                              return (
-                                <button key={m.id} onClick={() => setLightboxMedia(m)} className="relative">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
-                                  {m.type === "video" && (
-                                    <span className="absolute bottom-1 right-1 text-[8px] font-bold bg-black/70 text-white px-1 rounded">▶</span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                            {vaultMedia.length === 0 && <div className="col-span-4 p-3 text-xs text-slate-500 text-center">Keine Medien in diesem Ordner</div>}
-                          </div>
-                          {vaultMediaLoadingMore && <div className="p-2 text-xs text-slate-500 italic text-center">Lade weitere…</div>}
-                        </>
-                      )}
 
                       {key === "lists" && !panelLoading && (
                         <div className="divide-y divide-[#9C7A3D]/10">
@@ -1398,34 +1328,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                         </div>
                       )}
                     </div>
-                    <div className="relative">
-                      <button onClick={toggleAttachPanel} title="Aus dem Tresor anhängen" className={attachPanelOpen ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
-                        <ImageIcon size={20} />
-                      </button>
-                      {attachPanelOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 w-72 max-h-72 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
-                          <div className="p-2.5 border-b border-[#9C7A3D]/20 text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Aus dem Tresor</div>
-                          {attachLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
-                          {!attachLoading && attachVaultMedia.length === 0 && <div className="p-3 text-xs text-slate-500">Tresor ist leer</div>}
-                          <div className="grid grid-cols-4 gap-1.5 p-2">
-                            {attachVaultMedia.map((m) => {
-                              const url = m.files?.thumb?.url || m.files?.preview?.url;
-                              const selected = attachedMedia.some((x) => x.id === m.id);
-                              return (
-                                <button key={m.id} onClick={() => toggleAttachMedia(m)} className={`relative rounded ${selected ? "ring-2 ring-[#C9A86A]" : ""}`}>
-                                  {m.type === "audio" || !url ? (
-                                    <div className="w-full aspect-square rounded bg-[#C9A86A]/10 flex items-center justify-center"><TipIcon size={16} /></div>
-                                  ) : (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <button onClick={() => openVaultModal("attach")} title="Aus dem Tresor anhängen" className={vaultModalMode === "attach" ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
+                      <ImageIcon size={20} />
+                    </button>
                     <input
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
@@ -1497,6 +1402,113 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
               >
                 Speichern
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {vaultModalMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setVaultModalMode(null)}>
+          <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            {/* Linke Spalte: Ordner, wie im echten OnlyFans-Popup. */}
+            <div className="w-56 flex-shrink-0 border-r border-[#9C7A3D]/20 flex flex-col overflow-hidden">
+              <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Tresor</span>
+                <SearchIcon size={14} />
+              </div>
+              <div className="flex-1 overflow-y-auto scrollbar-hide">
+                <button
+                  onClick={() => selectVaultList(null)}
+                  className={`w-full text-left px-3 py-2.5 text-xs font-bold ${!vaultActiveListId ? "bg-[#C9A86A]/15 text-[#C9A86A]" : "text-slate-300 hover:bg-[#C9A86A]/10"}`}
+                >
+                  Alle Medien
+                </button>
+                {vaultLists.length > 0 && (
+                  <div className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Custom</div>
+                )}
+                {vaultLists.map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => selectVaultList(String(l.id))}
+                    className={`w-full text-left px-3 py-2.5 text-xs ${vaultActiveListId === String(l.id) ? "bg-[#C9A86A]/15 text-[#C9A86A] font-bold" : "text-slate-300 hover:bg-[#C9A86A]/10"}`}
+                  >
+                    <div className="truncate">{l.name}</div>
+                    <div className="text-[10px] text-slate-500">
+                      {((l.videosCount || 0) + (l.photosCount || 0) + (l.gifsCount || 0) + (l.audiosCount || 0)) || "leer"}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Rechte Spalte: Medien, nach Typ gefiltert + nach Datum gruppiert. */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Alle Medien</span>
+                <button onClick={() => setVaultModalMode(null)} className="text-slate-400 hover:text-[#E2C48A]"><CloseIcon size={16} /></button>
+              </div>
+              <div className="flex gap-1.5 p-3 border-b border-[#9C7A3D]/10">
+                {[
+                  { id: null, label: "Alle" },
+                  { id: "photo", label: "Fotos" },
+                  { id: "gif", label: "GIFs" },
+                  { id: "video", label: "Videos" },
+                  { id: "audio", label: "Audio" },
+                ].map((f) => (
+                  <button
+                    key={f.label}
+                    onClick={() => setVaultTypeFilter(f.id)}
+                    className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${vaultTypeFilter === f.id ? "bg-[#C9A86A] text-black" : "bg-black/30 text-slate-400 hover:text-[#E2C48A]"}`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 overflow-y-auto scrollbar-hide p-3" onScroll={handleVaultMediaScroll}>
+                {panelLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}
+                {panelError && <div className="text-xs text-red-400">{panelError}</div>}
+                {!panelLoading && (() => {
+                  const filtered = vaultMedia.filter((m) => !vaultTypeFilter || m.type === vaultTypeFilter);
+                  if (filtered.length === 0) return <div className="text-xs text-slate-500 text-center py-6">Keine Medien</div>;
+                  const today = new Date().toDateString();
+                  const yesterday = new Date(Date.now() - 86400000).toDateString();
+                  let lastDateKey = "";
+                  return filtered.map((m) => {
+                    const d = m.createdAt ? new Date(m.createdAt) : null;
+                    const dateKey = d ? d.toDateString() : "";
+                    const showHeader = dateKey && dateKey !== lastDateKey;
+                    lastDateKey = dateKey;
+                    const label = !d ? "" : dateKey === today ? "Heute" : dateKey === yesterday ? "Gestern" : d.toLocaleDateString("de-DE", { day: "numeric", month: "long" });
+                    const selected = attachedMedia.some((x) => x.id === m.id);
+                    const url = m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url;
+                    return (
+                      <Fragment key={m.id}>
+                        {showHeader && <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-3 mb-1.5 first:mt-0">{label}</div>}
+                        <div className="inline-block mr-1.5 mb-1.5 align-top">
+                          <button
+                            onClick={() => (vaultModalMode === "attach" ? toggleAttachMedia(m) : setLightboxMedia(m))}
+                            className={`relative w-24 h-24 rounded ${selected ? "ring-2 ring-[#C9A86A]" : ""}`}
+                          >
+                            {m.type === "audio" || !url ? (
+                              <div className="w-full h-full rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={20} /></div>
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full h-full object-cover rounded" alt="" />
+                            )}
+                            {m.type === "video" && <span className="absolute bottom-1 right-1 text-[8px] font-bold bg-black/70 text-white px-1 rounded">▶</span>}
+                            {selected && <span className="absolute top-1 right-1 bg-[#C9A86A] rounded-full p-0.5"><CheckIcon size={10} /></span>}
+                          </button>
+                        </div>
+                      </Fragment>
+                    );
+                  });
+                })()}
+                {vaultMediaLoadingMore && <div className="text-xs text-slate-500 italic text-center mt-2">Lade weitere…</div>}
+              </div>
+              <div className="p-3 border-t border-[#9C7A3D]/20 flex justify-end">
+                <button onClick={() => setVaultModalMode(null)} className="px-4 py-1.5 rounded text-xs font-bold uppercase bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black hover:from-[#E5C158]">
+                  Schließen
+                </button>
+              </div>
             </div>
           </div>
         </div>
