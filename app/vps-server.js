@@ -3064,6 +3064,122 @@ app.post('/of-send', async (req, res) => {
   }
 });
 
+// POST/DELETE /of-message-pin { modelId, fanId, messageId } - CONFIRMED LIVE
+// 2026-07-31 by clicking the real "Pin"/"Entpinnen" menu items on the test
+// model and watching the network: pin is POST, unpin is DELETE, same URL,
+// empty body either way (Task #55).
+app.post('/of-message-pin', async (req, res) => {
+  const { modelId, fanId, messageId } = req.body || {};
+  if (!modelId || !fanId || !messageId) return res.status(400).json({ error: 'Missing modelId, fanId, or messageId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/messages/${encodeURIComponent(messageId)}/pin/user/${encodeURIComponent(fanId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'POST' });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-MESSAGE-PIN] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+app.delete('/of-message-pin', async (req, res) => {
+  const { modelId, fanId, messageId } = req.body || {};
+  if (!modelId || !fanId || !messageId) return res.status(400).json({ error: 'Missing modelId, fanId, or messageId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/messages/${encodeURIComponent(messageId)}/pin/user/${encodeURIComponent(fanId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'DELETE' });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-MESSAGE-PIN] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /of-message { modelId, fanId, messageId } - CONFIRMED LIVE
+// 2026-07-31 via the real "Senden rückgängig machen" flow (OnlyFans' own
+// 24h-window delete-own-message feature, Task #56). Body shape
+// {"withUserId": fanId} confirmed exactly as OnlyFans' own frontend sends
+// it - OnlyFans itself enforces the 24h window server-side, no need to
+// duplicate that check here.
+app.delete('/of-message', async (req, res) => {
+  const { modelId, fanId, messageId } = req.body || {};
+  if (!modelId || !fanId || !messageId) return res.status(400).json({ error: 'Missing modelId, fanId, or messageId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/messages/${encodeURIComponent(messageId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'DELETE', body: { withUserId: Number(fanId) } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-MESSAGE-DELETE] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /of-fan-rename { modelId, fanId, displayName } - CONFIRMED LIVE
+// 2026-07-31: OnlyFans' own real "Benutzer umbenennen" dialog (the pencil
+// next to a fan's name) calls PUT /subscriptions/{fanId} with
+// {"displayName": "..."}. Replaces the old crm_fan_nicknames table (Task
+// #43) - this writes the SAME custom name OnlyFans itself shows everywhere
+// (VNC, the real site, everywhere), not a CRM-only label.
+app.put('/of-fan-rename', async (req, res) => {
+  const { modelId, fanId, displayName } = req.body || {};
+  if (!modelId || !fanId || typeof displayName !== 'string') return res.status(400).json({ error: 'Missing modelId, fanId, or displayName' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/subscriptions/${encodeURIComponent(fanId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'PUT', body: { displayName } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-FAN-RENAME] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-chat-search?modelId=&fanId=&query= - CONFIRMED LIVE 2026-07-31,
+// the real "FINDEN"-Tab search-within-a-chat feature (Task #52).
+app.get('/of-chat-search', async (req, res) => {
+  const { modelId, fanId, query } = req.query;
+  if (!modelId || !fanId || !query) return res.status(400).json({ error: 'Missing modelId, fanId, or query' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}/messages/search?query=${encodeURIComponent(query)}`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-CHAT-SEARCH] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-chat-gallery?modelId=&fanId=&offset= - CONFIRMED LIVE 2026-07-31,
+// the real Galerie button in a chat's header (Task #57) - all media ever
+// sent in this specific chat.
+app.get('/of-chat-gallery', async (req, res) => {
+  const { modelId, fanId, offset } = req.query;
+  if (!modelId || !fanId) return res.status(400).json({ error: 'Missing modelId or fanId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}/media/?limit=20&offset=${Number(offset) || 0}&skip_users=all`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-CHAT-GALLERY] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /of-user-details?modelId=X&ids=1,2,3 - batch fetch of name/username/
 // avatar for a list of fan ids (chat list only returns bare ids), via the
 // same 'cl[]=' batch endpoint OnlyFans' own /my/chats page uses.

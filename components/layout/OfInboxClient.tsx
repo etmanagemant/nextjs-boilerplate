@@ -8,7 +8,7 @@ import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
 import {
   HomeIcon, BellIcon, ChatIcon, FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon, ListIcon,
-  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon,
+  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon, CloseIcon,
 } from "@/components/layout/GoldIcons";
 
 type ConnectedModel = { id: string; name: string; avatar_url?: string | null };
@@ -52,10 +52,11 @@ type UserDetail = {
 
 // First-pass native inbox UI reading OnlyFans directly via our own signed
 // API calls (see app/of-inbox/page.tsx's comment). Fan names/avatars (via
-// /of-user-details), custom CRM-only nicknames (crm_fan_nicknames, purely
-// local, never touches OnlyFans), and the gold spend-ring (reusing the
-// same /api/crm/fan-spend-overlay + crm_fan_metadata the VNC overlay
-// script already used) are wired in. NOT yet ported: dark mode toggle,
+// /of-user-details), fan renaming (writes OnlyFans' own real "Benutzer
+// umbenennen" field, Task #43 - no separate CRM-only table anymore), and
+// the gold spend-ring (reusing the same /api/crm/fan-spend-overlay +
+// crm_fan_metadata the VNC overlay script already used) are wired in.
+// NOT yet ported: dark mode toggle,
 // sent-by overlay, script-vault button, PPV purchase detector, multi-
 // model tab bar, new-tab/refresh chrome - still VNC-only for now.
 type Shift = { id: number; shift_date: string; notes: string };
@@ -172,11 +173,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [userDetails, setUserDetails] = useState<Record<string, UserDetail>>({});
-  const [nicknames, setNicknames] = useState<Record<string, string>>({});
   const [spendDisplay, setSpendDisplay] = useState<Record<string, string>>({});
   const [fanMetadata, setFanMetadata] = useState<any | null>(null);
   const [fanMetaLastEditedBy, setFanMetaLastEditedBy] = useState<string | null>(null);
   const [messageSearch, setMessageSearch] = useState<string | null>(null);
+  const [chatSearchResults, setChatSearchResults] = useState<Message[] | null>(null);
+  const [pinnedIds, setPinnedIds] = useState<Set<number>>(new Set());
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryMedia, setGalleryMedia] = useState<any[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
   const [nicknameModalFanId, setNicknameModalFanId] = useState<number | null>(null);
   const [nicknameDraft, setNicknameDraft] = useState("");
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -287,12 +292,6 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
           .catch(() => {});
       }
 
-      if (!opts.more) {
-        fetch(`/api/crm/of-inbox/nickname?modelId=${encodeURIComponent(modelId)}`)
-          .then((r) => r.json())
-          .then((d) => setNicknames(d.nicknames || {}))
-          .catch(() => {});
-      }
     } catch (e: any) {
       setChatsError(e.message || "Fehler beim Laden der Chats");
     } finally {
@@ -380,6 +379,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setActiveFanId(fanId);
     setSendError("");
     setMessageSearch(null);
+    setPinnedIds(new Set());
+    setGalleryOpen(false);
+    setGalleryMedia([]);
     loadMessages(fanId);
     loadFanMetadata(fanId);
   }
@@ -408,20 +410,24 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
 
   function editNickname(fanId: number) {
     setNicknameModalFanId(fanId);
-    setNicknameDraft(nicknames[String(fanId)] || "");
+    setNicknameDraft(userDetails[String(fanId)]?.name || "");
   }
 
+  // Task #43: writes OnlyFans' own real "Benutzer umbenennen" field
+  // (CONFIRMED LIVE 2026-07-31: PUT /subscriptions/{fanId} {displayName}),
+  // replacing the old CRM-only crm_fan_nicknames table - this is the SAME
+  // name OnlyFans itself shows everywhere, not a separate local label.
   async function saveNickname() {
-    if (nicknameModalFanId == null) return;
+    if (nicknameModalFanId == null || !modelId) return;
     const fanId = nicknameModalFanId;
     const value = nicknameDraft.trim();
-    setNicknames((prev) => ({ ...prev, [String(fanId)]: value }));
+    setUserDetails((prev) => ({ ...prev, [String(fanId)]: { ...prev[String(fanId)], name: value } }));
     setNicknameModalFanId(null);
     try {
-      await fetch("/api/crm/of-inbox/nickname", {
-        method: "POST",
+      await fetch("/api/crm/of-inbox/fan-rename", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId, fanId, nickname: value }),
+        body: JSON.stringify({ modelId, fanId, displayName: value }),
       });
     } catch {}
   }
@@ -430,18 +436,88 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   // line promo spam) - CSS truncate alone can't collapse those explicit
   // breaks, which was blowing up individual chat-list rows to many lines
   // tall. Stripping tags entirely for the preview guarantees one line.
+  // Task #55: CONFIRMED LIVE 2026-07-31 - pin is POST, unpin is DELETE,
+  // same URL. No "already pinned" signal comes back from the messages
+  // list, so this is optimistic local state only (resets on reload).
+  async function togglePin(messageId: number, currentlyPinned: boolean) {
+    if (!modelId || !activeFanId) return;
+    setPinnedIds((prev) => {
+      const next = new Set(prev);
+      if (currentlyPinned) next.delete(messageId); else next.add(messageId);
+      return next;
+    });
+    try {
+      await fetch("/api/crm/of-inbox/message-pin", {
+        method: currentlyPinned ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, fanId: activeFanId, messageId }),
+      });
+    } catch {}
+  }
+
+  // Task #56: CONFIRMED LIVE 2026-07-31 - OnlyFans' own 24h "Senden
+  // rückgängig machen". OnlyFans enforces the 24h window server-side, the
+  // UI here just hides the button past that point too.
+  async function deleteOwnMessage(messageId: number) {
+    if (!modelId || !activeFanId) return;
+    if (!window.confirm("Diese gesendete Nachricht wirklich löschen?")) return;
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    try {
+      await fetch("/api/crm/of-inbox/message", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, fanId: activeFanId, messageId }),
+      });
+    } catch {}
+  }
+
+  // Task #52: real "FINDEN"-Tab search within one chat, debounced.
+  useEffect(() => {
+    if (messageSearch === null || messageSearch.trim() === "" || !modelId || !activeFanId) {
+      setChatSearchResults(null);
+      return;
+    }
+    const handle = setTimeout(() => {
+      fetch(`/api/crm/of-inbox/chat-search?modelId=${encodeURIComponent(modelId)}&fanId=${activeFanId}&query=${encodeURIComponent(messageSearch)}`)
+        .then((r) => r.json())
+        .then((d) => {
+          const list = Array.isArray(d.data) ? d.data : d.data?.list || [];
+          setChatSearchResults(list);
+        })
+        .catch(() => setChatSearchResults([]));
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [messageSearch, modelId, activeFanId]);
+
+  // Task #57: CONFIRMED LIVE 2026-07-31 - the real Galerie button in a
+  // chat's header (all media ever sent in this specific chat).
+  async function toggleGallery() {
+    if (galleryOpen) { setGalleryOpen(false); return; }
+    setGalleryOpen(true);
+    if (!modelId || !activeFanId) return;
+    setGalleryLoading(true);
+    try {
+      const res = await fetch(`/api/crm/of-inbox/chat-gallery?modelId=${encodeURIComponent(modelId)}&fanId=${activeFanId}`);
+      const data = await res.json();
+      const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
+      setGalleryMedia(list);
+    } catch {
+      setGalleryMedia([]);
+    } finally {
+      setGalleryLoading(false);
+    }
+  }
+
   function stripHtmlPreview(html: string): string {
     return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   }
 
   function displayName(fanId: number): string {
     const u = userDetails[String(fanId)];
-    const nick = nicknames[String(fanId)];
-    // The real OnlyFans display name (e.g. "Daniel Buda") is what a fan
-    // actually chose to be called - prefer it over the @username (often
-    // just an auto-generated "u12345678" if they never customized it).
-    const realName = u?.name || u?.username || `Fan #${fanId}`;
-    return nick ? `${nick} (${realName})` : realName;
+    // u.name IS the real OnlyFans display/custom name (editable via the
+    // rename modal, Task #43 - PUT /subscriptions/{fanId}) - prefer it over
+    // the @username (often just an auto-generated "u12345678").
+    return u?.name || u?.username || `Fan #${fanId}`;
   }
 
   function Avatar({ fanId, size }: { fanId: number; size: number }) {
@@ -804,9 +880,39 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><StarIcon size={18} /></button>
                     <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><BellIcon size={18} /></button>
                     <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><PinIcon size={18} /></button>
-                    <button disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed"><ImageIcon size={18} /></button>
+                    <button
+                      onClick={toggleGallery}
+                      className={galleryOpen ? "text-[#C9A86A]" : "hover:text-[#E2C48A]"}
+                      title="Galerie (bereits gesendete Medien)"
+                    >
+                      <ImageIcon size={18} />
+                    </button>
                   </div>
                 </div>
+                {galleryOpen && (
+                  <div className="p-3 border-b border-[#9C7A3D]/20 bg-black/20 max-h-56 overflow-y-auto scrollbar-hide">
+                    {galleryLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}
+                    {!galleryLoading && galleryMedia.length === 0 && (
+                      <div className="text-xs text-slate-500">Noch nichts in dieser Konversation gesendet</div>
+                    )}
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {galleryMedia.map((m, i) => {
+                        const url = m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url;
+                        if (!url) return null;
+                        const isPaid = !!(m.price && Number(m.price) > 0);
+                        return (
+                          <div key={m.id ?? i} className="relative">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
+                            {isPaid && (
+                              <span className="absolute bottom-0.5 right-0.5 text-[8px] font-bold bg-[#C9A86A] text-black px-1 rounded">PAID</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {messageSearch !== null && (
                   <div className="px-3 py-2 border-b border-[#9C7A3D]/20 bg-black/20">
                     <input
@@ -829,7 +935,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     // fan has actually seen).
                     const activeChat = chats.find((c) => c.withUser.id === activeFanId);
                     const lastRead = activeChat?.lastReadMessageId != null ? Number(activeChat.lastReadMessageId) : 0;
-                    const filtered = messages.filter((m) => !messageSearch || m.text.toLowerCase().includes(messageSearch.toLowerCase()));
+                    const filtered = messageSearch ? (chatSearchResults ?? []) : messages;
                     let lastDateKey = "";
                     const today = new Date().toDateString();
                     const yesterday = new Date(Date.now() - 86400000).toDateString();
@@ -860,13 +966,28 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     lastDateKey = dateKey;
                     const dividerLabel = !msgDate ? "" : dateKey === today ? "Heute" : dateKey === yesterday ? "Gestern" : msgDate.toLocaleDateString("de-DE", { day: "numeric", month: "long" });
                     const time = msgDate ? msgDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
+                    const isPinned = pinnedIds.has(m.id);
+                    const canDelete = isOwn && msgDate && Date.now() - msgDate.getTime() < 24 * 3600 * 1000;
                     return (
                       <Fragment key={m.id}>
                         {showDivider && (
                           <div className="text-center text-[11px] text-slate-500 font-bold uppercase tracking-wider my-3">{dividerLabel}</div>
                         )}
-                        <div className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                        <div className={`group flex items-center gap-1.5 ${isOwn ? "justify-end" : "justify-start"}`}>
+                          {isOwn && (
+                            <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1 text-slate-500">
+                              <button onClick={() => togglePin(m.id, isPinned)} title={isPinned ? "Entpinnen" : "Anheften"} className={isPinned ? "text-[#C9A86A]" : "hover:text-[#E2C48A]"}>
+                                <PinIcon size={14} />
+                              </button>
+                              {canDelete && (
+                                <button onClick={() => deleteOwnMessage(m.id)} title="Senden rückgängig machen (24h)" className="hover:text-red-400">
+                                  <CloseIcon size={14} />
+                                </button>
+                              )}
+                            </div>
+                          )}
                           <div className={`max-w-[70%] rounded-xl px-4 py-2.5 text-base ${isOwn ? "bg-[#C9A86A]/20 text-white" : "bg-black/30 text-slate-200"}`}>
+                            {isPinned && <div className="flex items-center gap-1 text-[10px] text-[#C9A86A] mb-1"><PinIcon size={11} /> Angeheftet</div>}
                             <MessageMedia media={m.media} />
                             {m.text && <div dangerouslySetInnerHTML={{ __html: m.text }} />}
                             {isOwn && (
@@ -880,6 +1001,13 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               <div className="text-[10px] text-slate-500 mt-1">{time}</div>
                             )}
                           </div>
+                          {!isOwn && (
+                            <div className="opacity-0 group-hover:opacity-100 transition text-slate-500">
+                              <button onClick={() => togglePin(m.id, isPinned)} title={isPinned ? "Entpinnen" : "Anheften"} className={isPinned ? "text-[#C9A86A]" : "hover:text-[#E2C48A]"}>
+                                <PinIcon size={14} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </Fragment>
                     );
