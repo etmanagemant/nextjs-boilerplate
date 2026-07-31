@@ -143,11 +143,12 @@ export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatu
   if (isAdminTier) {
     items.push({ href: "/crm-inbox", label: "OnlyFans", icon: "🔮" });
   }
-  // Experimental API-driven inbox (2026-07-30) - admin-tier only for now,
-  // not yet feature-complete vs the VNC-based /crm-inbox above (no custom
-  // fan nicknames/spend-ring yet). Placed right under OnlyFans per the
-  // user's explicit ask, above Stechuhr.
-  if (isAdminTier) items.push({ href: "/of-inbox", label: "OF Inbox (Beta)", icon: "📡" });
+  // API-driven inbox, now the intended day-to-day view for chatters (VNC
+  // above stays admin/content-manager only, see the /crm-inbox item's own
+  // comment) - opened up 2026-07-31 once the core gaps (media loading,
+  // sent-by attribution, unread dot) were fixed. Placed right under
+  // OnlyFans per the user's original ask, above Stechuhr.
+  if (isAdminTier || hasChatterAccess) items.push({ href: "/of-inbox", label: "OF Inbox (Beta)", icon: "📡" });
 
   if (!isAdminTier && hasModeratorAccess) {
     items.push({ href: "/stripchat", label: "Stripchat", icon: "🎬" });
