@@ -3039,19 +3039,31 @@ app.get('/of-messages', async (req, res) => {
 // POST /of-send { modelId, fanId, text } - sends a real chat message.
 // text is HTML-escaped and wrapped in <p> to match exactly what OnlyFans'
 // own compose box sends (CONFIRMED LIVE against the real endpoint).
+// mediaFiles/price (optional) - PPV support added 2026-07-31. NOT LIVE-
+// VERIFIED: the disposable test model has no Vault content to test an
+// actual attach+price send against, so the exact shape OnlyFans expects
+// for a populated mediaFiles array is a best-effort inference (plain
+// numeric Vault media ids, matching the id field every other endpoint
+// here already uses to reference a media item) - not a "CONFIRMED LIVE"
+// like the rest of this file. Test with real Vault content before
+// trusting this for an actual client send.
 app.post('/of-send', async (req, res) => {
-  const { modelId, fanId, text } = req.body || {};
-  if (!modelId || !fanId || !text) return res.status(400).json({ error: 'Missing modelId, fanId, or text' });
+  const { modelId, fanId, text, mediaFiles, price } = req.body || {};
+  const hasText = typeof text === 'string' && text.trim().length > 0;
+  const hasMedia = Array.isArray(mediaFiles) && mediaFiles.length > 0;
+  if (!modelId || !fanId || (!hasText && !hasMedia)) {
+    return res.status(400).json({ error: 'Missing modelId, fanId, or text/mediaFiles' });
+  }
   const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
 
   try {
     const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}/messages`;
     const body = {
-      text: `<p>${escapeOnlyFansHtml(text)}</p>`,
+      text: hasText ? `<p>${escapeOnlyFansHtml(text)}</p>` : '',
       lockedText: false,
-      mediaFiles: [],
-      price: 0,
+      mediaFiles: hasMedia ? mediaFiles : [],
+      price: hasMedia && price ? Number(price) : 0,
       previews: [],
       rfTag: [],
       rfGuest: [],

@@ -87,6 +87,10 @@ export const MuteIcon = (p: { size?: number }) => (
   <Icon {...p}><path d="M11 5 6 9H2v6h4l5 4V5Z" /><path d="m22 9-6 6M16 9l6 6" /></Icon>
 );
 
+export const ScriptIcon = (p: { size?: number }) => (
+  <Icon {...p}><path d="M8 3h8l4 4v14a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M16 3v4h4M9 12h6M9 16h6M9 8h2" /></Icon>
+);
+
 export const ArrowLeftIcon = (p: { size?: number }) => (
   <Icon {...p}><path d="M19 12H5M12 19l-7-7 7-7" /></Icon>
 );

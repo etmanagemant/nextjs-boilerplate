@@ -27,14 +27,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    const { modelId, fanId, text } = await req.json();
-    if (!modelId || !fanId || !text) {
-      return NextResponse.json({ error: "Missing modelId, fanId, or text" }, { status: 400 });
+    const { modelId, fanId, text, mediaFiles, price } = await req.json();
+    const hasText = typeof text === "string" && text.trim().length > 0;
+    const hasMedia = Array.isArray(mediaFiles) && mediaFiles.length > 0;
+    if (!modelId || !fanId || (!hasText && !hasMedia)) {
+      return NextResponse.json({ error: "Missing modelId, fanId, or text/mediaFiles" }, { status: 400 });
     }
 
     const vpsRes = await vpsFetch("/of-send", {
       method: "POST",
-      body: JSON.stringify({ modelId, fanId, text }),
+      body: JSON.stringify({ modelId, fanId, text, mediaFiles, price }),
     });
     const data = await vpsRes.json();
     if (!vpsRes.ok) {

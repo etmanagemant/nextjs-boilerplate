@@ -8,7 +8,7 @@ import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
 import {
   HomeIcon, BellIcon, ChatIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon,
-  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon, CloseIcon, HeartIcon, BookmarkIcon, ArrowLeftIcon,
+  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon, CloseIcon, HeartIcon, BookmarkIcon, ArrowLeftIcon, ScriptIcon,
 } from "@/components/layout/GoldIcons";
 
 type ConnectedModel = { id: string; name: string; avatar_url?: string | null };
@@ -214,6 +214,16 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   // knows the sender), this just reads it back for display.
   const [sentLog, setSentLog] = useState<{ chatter_name: string; message_text: string | null; media_key: string | null }[]>([]);
   const [draft, setDraft] = useState("");
+  // Task: Script Vault + Tresor direkt in der Compose-Leiste, API-
+  // getrieben statt wie bei VNC über sichtbare Klicks mit Verzögerung.
+  const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
+  const [scripts, setScripts] = useState<any[]>([]);
+  const [scriptsLoading, setScriptsLoading] = useState(false);
+  const [attachPanelOpen, setAttachPanelOpen] = useState(false);
+  const [attachVaultMedia, setAttachVaultMedia] = useState<any[]>([]);
+  const [attachLoading, setAttachLoading] = useState(false);
+  const [attachedMedia, setAttachedMedia] = useState<any[]>([]);
+  const [attachPrice, setAttachPrice] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [userDetails, setUserDetails] = useState<Record<string, UserDetail>>({});
@@ -431,23 +441,37 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setPinnedMessages([]);
     setGalleryOpen(false);
     setGalleryMedia([]);
+    setScriptPanelOpen(false);
+    setAttachPanelOpen(false);
+    setAttachedMedia([]);
+    setAttachPrice("");
     loadMessages(fanId);
     loadFanMetadata(fanId);
   }
 
   async function handleSend() {
-    if (!draft.trim() || !activeFanId || !modelId) return;
+    const hasText = !!draft.trim();
+    const hasMedia = attachedMedia.length > 0;
+    if ((!hasText && !hasMedia) || !activeFanId || !modelId) return;
     setSending(true);
     setSendError("");
     try {
       const res = await fetch("/api/crm/of-inbox/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId, fanId: activeFanId, text: draft.trim() }),
+        body: JSON.stringify({
+          modelId,
+          fanId: activeFanId,
+          text: draft.trim(),
+          mediaFiles: hasMedia ? attachedMedia.map((m) => m.id) : undefined,
+          price: hasMedia && attachPrice ? Number(attachPrice) : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Senden fehlgeschlagen");
       setDraft("");
+      setAttachedMedia([]);
+      setAttachPrice("");
       await loadMessages(activeFanId);
       await loadChats();
     } catch (e: any) {
@@ -455,6 +479,58 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     } finally {
       setSending(false);
     }
+  }
+
+  // Script Vault: nur der Text der Schritte wird eingefügt. Die in einem
+  // Script gespeicherten Medien (media_refs) sind aus der VNC-Ära nach
+  // sichtbarem Namen/Label gematcht, nicht nach der echten Tresor-ID, die
+  // unser neuer API-Weg braucht - kein sauberer Weg, das automatisch mit
+  // zu übernehmen. Medien werden separat über den Tresor-Button ausgewählt.
+  async function toggleScriptPanel() {
+    if (scriptPanelOpen) { setScriptPanelOpen(false); return; }
+    setScriptPanelOpen(true);
+    setAttachPanelOpen(false);
+    if (!modelId || scripts.length > 0) return;
+    setScriptsLoading(true);
+    try {
+      const res = await fetch(`/api/crm/of-inbox/scripts?modelId=${encodeURIComponent(modelId)}`);
+      const data = await res.json();
+      setScripts(data.scripts || []);
+    } catch {
+      setScripts([]);
+    } finally {
+      setScriptsLoading(false);
+    }
+  }
+
+  function insertScript(script: any) {
+    const text = (script.steps || [])
+      .filter((s: any) => s.message_text)
+      .map((s: any) => s.message_text)
+      .join("\n\n");
+    if (text) setDraft((d) => (d ? `${d}\n${text}` : text));
+    setScriptPanelOpen(false);
+  }
+
+  async function toggleAttachPanel() {
+    if (attachPanelOpen) { setAttachPanelOpen(false); return; }
+    setAttachPanelOpen(true);
+    setScriptPanelOpen(false);
+    if (!modelId) return;
+    setAttachLoading(true);
+    try {
+      const res = await fetch(`/api/crm/of-inbox/vault-media?modelId=${encodeURIComponent(modelId)}`);
+      const data = await res.json();
+      setAttachVaultMedia(data.data?.list || []);
+    } catch {
+      setAttachVaultMedia([]);
+    } finally {
+      setAttachLoading(false);
+    }
+  }
+
+  function toggleAttachMedia(m: any) {
+    setAttachedMedia((prev) => (prev.some((x) => x.id === m.id) ? prev.filter((x) => x.id !== m.id) : [...prev, m]));
   }
 
   function editNickname(fanId: number) {
@@ -1263,8 +1339,81 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 </div>
                 <div className="p-3 border-t border-[#9C7A3D]/20">
                   {sendError && <div className="text-xs text-red-400 mb-2">{sendError}</div>}
+                  {attachedMedia.length > 0 && (
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      {attachedMedia.map((m) => {
+                        const url = m.files?.thumb?.url || m.files?.preview?.url;
+                        return (
+                          <div key={m.id} className="relative">
+                            {m.type === "audio" ? (
+                              <div className="w-12 h-12 rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={16} /></div>
+                            ) : url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-12 h-12 object-cover rounded" alt="" />
+                            ) : (
+                              <div className="w-12 h-12 rounded bg-black/40" />
+                            )}
+                            <button onClick={() => toggleAttachMedia(m)} className="absolute -top-1.5 -right-1.5 bg-black rounded-full text-red-400"><CloseIcon size={14} /></button>
+                          </div>
+                        );
+                      })}
+                      <input
+                        value={attachPrice}
+                        onChange={(e) => setAttachPrice(e.target.value.replace(/[^0-9.]/g, ""))}
+                        placeholder="Preis $"
+                        className="w-20 bg-[#050505] border border-[#9C7A3D]/30 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-[#C9A86A]"
+                      />
+                    </div>
+                  )}
                   <EmojiBar onPick={(e) => setDraft((d) => d + e)} />
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
+                    <div className="relative">
+                      <button onClick={toggleScriptPanel} title="Script Vault" className={scriptPanelOpen ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
+                        <ScriptIcon size={20} />
+                      </button>
+                      {scriptPanelOpen && (
+                        <div className="absolute bottom-full left-0 mb-2 w-72 max-h-72 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
+                          <div className="p-2.5 border-b border-[#9C7A3D]/20 text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Script Vault</div>
+                          {scriptsLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
+                          {!scriptsLoading && scripts.length === 0 && <div className="p-3 text-xs text-slate-500">Keine Scripts für dieses Model</div>}
+                          <div className="divide-y divide-[#9C7A3D]/10">
+                            {scripts.map((s) => (
+                              <button key={s.id} onClick={() => insertScript(s)} className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-[#C9A86A]/10">
+                                {s.title}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <button onClick={toggleAttachPanel} title="Aus dem Tresor anhängen" className={attachPanelOpen ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
+                        <ImageIcon size={20} />
+                      </button>
+                      {attachPanelOpen && (
+                        <div className="absolute bottom-full left-0 mb-2 w-72 max-h-72 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
+                          <div className="p-2.5 border-b border-[#9C7A3D]/20 text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Aus dem Tresor</div>
+                          {attachLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
+                          {!attachLoading && attachVaultMedia.length === 0 && <div className="p-3 text-xs text-slate-500">Tresor ist leer</div>}
+                          <div className="grid grid-cols-4 gap-1.5 p-2">
+                            {attachVaultMedia.map((m) => {
+                              const url = m.files?.thumb?.url || m.files?.preview?.url;
+                              const selected = attachedMedia.some((x) => x.id === m.id);
+                              return (
+                                <button key={m.id} onClick={() => toggleAttachMedia(m)} className={`relative rounded ${selected ? "ring-2 ring-[#C9A86A]" : ""}`}>
+                                  {m.type === "audio" || !url ? (
+                                    <div className="w-full aspect-square rounded bg-[#C9A86A]/10 flex items-center justify-center"><TipIcon size={16} /></div>
+                                  ) : (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     <input
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
@@ -1274,7 +1423,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     />
                     <button
                       onClick={handleSend}
-                      disabled={sending || !draft.trim()}
+                      disabled={sending || (!draft.trim() && attachedMedia.length === 0)}
                       className="bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black font-bold px-5 py-2.5 rounded text-base disabled:opacity-50"
                     >
                       {sending ? "…" : "Senden"}
