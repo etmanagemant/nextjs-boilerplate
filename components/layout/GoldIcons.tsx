@@ -87,6 +87,14 @@ export const MuteIcon = (p: { size?: number }) => (
   <Icon {...p}><path d="M11 5 6 9H2v6h4l5 4V5Z" /><path d="m22 9-6 6M16 9l6 6" /></Icon>
 );
 
+export const ArrowLeftIcon = (p: { size?: number }) => (
+  <Icon {...p}><path d="M19 12H5M12 19l-7-7 7-7" /></Icon>
+);
+
+export const BookmarkIcon = (p: { size?: number }) => (
+  <Icon {...p}><path d="M7 3h10a1 1 0 0 1 1 1v17l-6-4-6 4V4a1 1 0 0 1 1-1Z" /></Icon>
+);
+
 export const HeartIcon = (p: { size?: number; filled?: boolean }) => (
   <svg width={p.size ?? 22} height={p.size ?? 22} viewBox="0 0 24 24" fill={p.filled ? stroke : "none"} stroke={stroke} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 21s-7.5-4.7-10-9.3C.4 8.4 2 4.5 5.6 4c2-.3 3.8.6 4.9 2.2C11.6 4.6 13.4 3.7 15.4 4c3.6.5 5.2 4.4 3.6 7.7C16.5 16.3 12 21 12 21Z" />

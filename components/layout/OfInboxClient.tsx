@@ -7,8 +7,8 @@ import EmojiBar from "@/components/layout/EmojiBar";
 import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
 import {
-  HomeIcon, BellIcon, ChatIcon, FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon, ListIcon,
-  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon, CloseIcon, HeartIcon,
+  HomeIcon, BellIcon, ChatIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon,
+  NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon, CloseIcon, HeartIcon, BookmarkIcon, ArrowLeftIcon,
 } from "@/components/layout/GoldIcons";
 
 type ConnectedModel = { id: string; name: string; avatar_url?: string | null };
@@ -37,6 +37,15 @@ type Message = {
   fromUser?: { id: number };
   isOpened?: boolean;
   media?: MediaItem[];
+  // CONFIRMED LIVE 2026-07-31 (echte Felder aus /of-messages): price=0 bei
+  // Gratis-Nachrichten, canPurchase=true wenn eine PPV noch nicht
+  // freigeschaltet ist. isLiked/isPinned kommen direkt von OnlyFans mit,
+  // kein eigener Zustand mehr nötig für den Erstladung-Status.
+  price?: number;
+  isFree?: boolean;
+  canPurchase?: boolean;
+  isLiked?: boolean;
+  isPinned?: boolean;
 };
 
 type UserDetail = {
@@ -64,13 +73,17 @@ type Shift = { id: number; shift_date: string; notes: string };
 export default function OfInboxClient({ connectedModels, isAdmin, chatterId, userEmail = "", allShifts = [] }: { connectedModels: ConnectedModel[]; isAdmin: boolean; chatterId: string; userEmail?: string; allShifts?: Shift[] }) {
   const searchParams = useSearchParams();
   const modelFromUrl = searchParams.get("model");
-  const [modelId, setModelId] = useState(modelFromUrl || connectedModels[0]?.id || "");
+  const [modelId, setModelId] = useState(modelFromUrl || "");
 
   // Follows the URL like /crm-inbox's tabs do - clicking a tab in the
   // header (a real navigation, not local state) updates ?model=, which
-  // this picks up. Falls back to the first connected model when there's
-  // no ?model= at all (unlike /crm-inbox, this page IS the tool - no
-  // separate landing state to preserve).
+  // this picks up. CONFIRMED intentional (2026-07-31, reversing an
+  // earlier choice): does NOT fall back to the first connected model
+  // without an explicit ?model= - landing on OF Inbox (Beta) directly
+  // should show the Stechuhr/Schichten start screen first (matches
+  // /crm-inbox), so a chatter only ever waits on a model's data loading
+  // right after they themselves clicked that model's tab, not silently
+  // in the background right after opening the page.
   useEffect(() => {
     if (modelFromUrl) setModelId(modelFromUrl);
   }, [modelFromUrl]);
@@ -209,8 +222,6 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [fanMetaLastEditedBy, setFanMetaLastEditedBy] = useState<string | null>(null);
   const [messageSearch, setMessageSearch] = useState<string | null>(null);
   const [chatSearchResults, setChatSearchResults] = useState<Message[] | null>(null);
-  const [pinnedIds, setPinnedIds] = useState<Set<number>>(new Set());
-  const [likedIds, setLikedIds] = useState<Set<number>>(new Set());
   const [listsPanelOpen, setListsPanelOpen] = useState(false);
   const [availableLists, setAvailableLists] = useState<{ id: string; type: string; name: string }[]>([]);
   const [addedToList, setAddedToList] = useState<Set<string>>(new Set());
@@ -414,8 +425,6 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setActiveFanId(fanId);
     setSendError("");
     setMessageSearch(null);
-    setPinnedIds(new Set());
-    setLikedIds(new Set());
     setListsPanelOpen(false);
     setAddedToList(new Set());
     setPinnedPanelOpen(false);
@@ -477,15 +486,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   // breaks, which was blowing up individual chat-list rows to many lines
   // tall. Stripping tags entirely for the preview guarantees one line.
   // Task #55: CONFIRMED LIVE 2026-07-31 - pin is POST, unpin is DELETE,
-  // same URL. No "already pinned" signal comes back from the messages
-  // list, so this is optimistic local state only (resets on reload).
+  // same URL. isPinned comes back on the message itself (real field,
+  // CONFIRMED LIVE) - updated directly on the message instead of separate
+  // local state, so it survives reloads correctly.
   async function togglePin(messageId: number, currentlyPinned: boolean) {
     if (!modelId || !activeFanId) return;
-    setPinnedIds((prev) => {
-      const next = new Set(prev);
-      if (currentlyPinned) next.delete(messageId); else next.add(messageId);
-      return next;
-    });
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, isPinned: !currentlyPinned } : m)));
     try {
       await fetch("/api/crm/of-inbox/message-pin", {
         method: currentlyPinned ? "DELETE" : "POST",
@@ -531,13 +537,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
 
   // Task #54: CONFIRMED LIVE 2026-07-31 - only exists on FAN-sent
   // messages, not the model's own (no "Gefällt mir" on own bubbles).
+  // isLiked is a real field on the message (CONFIRMED LIVE).
   async function toggleLike(messageId: number, currentlyLiked: boolean) {
     if (!modelId || !activeFanId) return;
-    setLikedIds((prev) => {
-      const next = new Set(prev);
-      if (currentlyLiked) next.delete(messageId); else next.add(messageId);
-      return next;
-    });
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, isLiked: !currentlyLiked } : m)));
     try {
       await fetch("/api/crm/of-inbox/message-like", {
         method: currentlyLiked ? "DELETE" : "POST",
@@ -816,15 +819,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 Leiste. */}
             {(isAdmin
               ? [
-                  { Icon: FolderIcon, key: "vault" as const, label: "Tresor" },
+                  { Icon: BookmarkIcon, key: "lists" as const, label: "Listen" },
+                  { Icon: ImageIcon, key: "vault" as const, label: "Tresor" },
                   { Icon: CalendarIcon, key: "schedules" as const, label: "Kalender" },
                   { Icon: ChartIcon, key: "stats" as const, label: "Statistik" },
                   { Icon: ReceiptIcon, key: "earnings" as const, label: "Auszahlungen" },
-                  { Icon: ListIcon, key: "lists" as const, label: "Listen" },
                 ]
               : [
-                  { Icon: FolderIcon, key: "vault" as const, label: "Tresor" },
-                  { Icon: ListIcon, key: "lists" as const, label: "Listen" },
+                  { Icon: BookmarkIcon, key: "lists" as const, label: "Listen" },
+                  { Icon: ImageIcon, key: "vault" as const, label: "Tresor" },
                 ]
             ).map(({ Icon, key, label }) => (
                 <div className="relative" key={key}>
@@ -1031,6 +1034,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             ) : (
               <>
                 <div className="p-4 border-b border-[#9C7A3D]/20 flex items-center gap-3">
+                  <button onClick={() => setActiveFanId(null)} title="Zurück zur Chat-Liste" className="text-slate-400 hover:text-[#E2C48A] mr-1">
+                    <ArrowLeftIcon size={20} />
+                  </button>
                   <Avatar fanId={activeFanId} size={44} />
                   <span className="text-base font-bold text-white">{displayName(activeFanId)}</span>
                   <button
@@ -1189,8 +1195,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     lastDateKey = dateKey;
                     const dividerLabel = !msgDate ? "" : dateKey === today ? "Heute" : dateKey === yesterday ? "Gestern" : msgDate.toLocaleDateString("de-DE", { day: "numeric", month: "long" });
                     const time = msgDate ? msgDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
-                    const isPinned = pinnedIds.has(m.id);
-                    const isLiked = likedIds.has(m.id);
+                    const isPinned = !!m.isPinned;
+                    const isLiked = !!m.isLiked;
                     const canDelete = isOwn && msgDate && Date.now() - msgDate.getTime() < 24 * 3600 * 1000;
                     return (
                       <Fragment key={m.id}>
@@ -1212,7 +1218,21 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                           )}
                           <div className={`max-w-[70%] rounded-xl px-4 py-2.5 text-base ${isOwn ? "bg-[#C9A86A]/20 text-white" : "bg-black/30 text-slate-200"}`}>
                             {isPinned && <div className="flex items-center gap-1 text-[10px] text-[#C9A86A] mb-1"><PinIcon size={11} /> Angeheftet</div>}
-                            <MessageMedia media={m.media} />
+                            {/* CONFIRMED LIVE 2026-07-31: price/canPurchase sind
+                                echte Felder - eine noch nicht freigeschaltete
+                                PPV zeigt statt der (eh nicht ladbaren) Medien
+                                einen Preis-Hinweis, wie im echten OnlyFans. */}
+                            {Number(m.price) > 0 && m.canPurchase ? (
+                              <div className="flex items-center gap-2 py-2 px-1 text-[#E2C48A]">
+                                <PriceTagIcon size={20} />
+                                <div>
+                                  <div className="text-sm font-bold">${m.price}</div>
+                                  <div className="text-[10px] text-slate-400">Noch nicht freigeschaltet</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <MessageMedia media={m.media} />
+                            )}
                             {m.text && <div dangerouslySetInnerHTML={{ __html: m.text }} />}
                             {isOwn && (
                               <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-400">
