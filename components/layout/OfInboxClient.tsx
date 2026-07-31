@@ -1297,8 +1297,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                             {/* CONFIRMED LIVE 2026-07-31: price/canPurchase sind
                                 echte Felder - eine noch nicht freigeschaltete
                                 PPV zeigt statt der (eh nicht ladbaren) Medien
-                                einen Preis-Hinweis, wie im echten OnlyFans. */}
-                            {Number(m.price) > 0 && m.canPurchase ? (
+                                einen Preis-Hinweis, wie im echten OnlyFans.
+                                CONFIRMED LIVE (zweiter Test, eigene gesendete
+                                PPV): canPurchase spiegelt den Fan-Status, ist
+                                bei einer PPV die WIR verschickt haben auch
+                                true (der Fan hat ja noch nicht bezahlt) -
+                                nur bei !isOwn sperren, sonst würde der
+                                Chatter seine eigene verschickte PPV auch nie
+                                zu sehen bekommen. */}
+                            {!isOwn && Number(m.price) > 0 && m.canPurchase ? (
                               <div className="flex items-center gap-2 py-2 px-1 text-[#E2C48A]">
                                 <PriceTagIcon size={20} />
                                 <div>
@@ -1307,7 +1314,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                                 </div>
                               </div>
                             ) : (
-                              <MessageMedia media={m.media} />
+                              <>
+                                {isOwn && Number(m.price) > 0 && (
+                                  <div className="flex items-center gap-1 text-[10px] text-[#C9A86A] mb-1"><PriceTagIcon size={12} /> PPV ${m.price}</div>
+                                )}
+                                <MessageMedia media={m.media} />
+                              </>
                             )}
                             {m.text && <div dangerouslySetInnerHTML={{ __html: m.text }} />}
                             {isOwn && (

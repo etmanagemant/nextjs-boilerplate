@@ -4691,14 +4691,16 @@ async function handleUploadToVaultFan(req, res) {
     }
     console.log(`[UPLOAD-TO-VAULT-FAN] Send confirmed after ${Date.now() - clickedAt}ms for ${filePaths.length} file(s).`);
 
-    // "Gesendet von" attribution - only when a real logged-in CRM user
-    // (chatter/admin) drove this send. Per the user's explicit ask, the
-    // model's OWN uploads never get labeled this way (nobody needs to be
-    // told a model sent her own content) - the model workspace's own
-    // caller simply never sends chatterName, so this whole block is
-    // skipped there. Best-effort: a logging failure must never affect the
-    // actual send result, which already succeeded by this point.
-    if (chatterName && vaultFanId) {
+    // "Gesendet von Upload Vault" - CHANGED 2026-07-31 per explicit ask:
+    // previously only logged the real chatterName, and only when a chatter
+    // (not the model herself) drove the send - the model's own uploads
+    // logged nothing at all, so those messages showed no attribution.
+    // Now always a fixed "Upload Vault" label regardless of who queued it
+    // (model or chatter) - the point is marking "this went out via the
+    // automated bulk-send tool", not who specifically triggered it.
+    // Best-effort: a logging failure must never affect the actual send
+    // result, which already succeeded by this point.
+    if (vaultFanId) {
       try {
         const mediaKeys = await page.evaluate((count) => {
           var mine = Array.from(document.querySelectorAll('.b-chat__message.m-from-me.m-has-media'));
@@ -4716,7 +4718,7 @@ async function handleUploadToVaultFan(req, res) {
             await fetch(`${appUrl}/api/crm/log-sent-message`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ modelId, fanId: vaultFanId, chatterName, mediaKey }),
+              body: JSON.stringify({ modelId, fanId: vaultFanId, chatterName: 'Upload Vault', mediaKey }),
             }).catch(() => {});
           }
         }
