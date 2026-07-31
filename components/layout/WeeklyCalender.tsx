@@ -104,7 +104,7 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
       {/* Kopfzeile im edlen Gold-Look */}
       <div className="flex items-center justify-between gap-4 mb-6 bg-[#0A0A0A] p-4 rounded-xl border border-[#9C7A3D]/20 shadow-lg">
         <div>
-          <h1 className="text-2xl font-black tracking-wide bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase">Weekly Schedule Calendar</h1>
+          <h1 className="text-2xl font-black tracking-wide bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase">Schichtplan</h1>
           <div className="mt-1 text-sm text-[#C9A86A]/80 font-mono font-semibold">{weekLabel}</div>
         </div>
         <div className="flex items-center gap-2">

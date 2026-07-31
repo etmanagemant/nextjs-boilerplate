@@ -98,7 +98,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   // direkt das Array (kein data.list!); stats: data.overview.massMessages
   // + data.top.purchases; schedules: data.list[]; earnings: data ist ein
   // flaches Objekt.
-  const [activePanel, setActivePanel] = useState<null | "lists" | "stats" | "schedules" | "earnings">(null);
+  const [activePanel, setActivePanel] = useState<null | "stats" | "schedules" | "earnings">(null);
   // Task: Tresor bekommt ein echtes Popup (zwei Spalten wie im echten
   // OnlyFans-Screenshot) statt der kleinen Dropdown-Leiste, gleiches
   // Popup egal ob über das Sidebar-Icon oder den Anhängen-Button in der
@@ -119,7 +119,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [pinnedMessages, setPinnedMessages] = useState<any[]>([]);
   const [pinnedLoading, setPinnedLoading] = useState(false);
   const [fanLists, setFanLists] = useState<any[]>([]);
-  const [expandedListId, setExpandedListId] = useState<string | null>(null);
+  const [listsModalOpen, setListsModalOpen] = useState(false);
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [listMembersLoading, setListMembersLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [earnings, setEarnings] = useState<any>(null);
@@ -181,12 +183,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setPanelLoading(true);
     setPanelError("");
     try {
-      if (panel === "lists") {
-        const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
-        setFanLists(Array.isArray(data.data) ? data.data : []);
-      } else if (panel === "stats") {
+      if (panel === "stats") {
         const res = await fetch(`/api/crm/of-inbox/stats?modelId=${encodeURIComponent(modelId)}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
@@ -259,6 +256,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [nicknameModalFanId, setNicknameModalFanId] = useState<number | null>(null);
   const [nicknameDraft, setNicknameDraft] = useState("");
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifCategoryFilter, setNotifCategoryFilter] = useState<string | null>(null);
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [notifError, setNotifError] = useState("");
@@ -680,6 +678,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     if (!modelId) return;
     if (!window.confirm("Diese Liste wirklich unwiderruflich löschen?")) return;
     setFanLists((prev) => prev.filter((l) => l.id !== listId));
+    if (selectedListId === listId) setSelectedListId(null);
     try {
       await fetch("/api/crm/of-inbox/list-delete", {
         method: "DELETE",
@@ -687,6 +686,51 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
         body: JSON.stringify({ modelId, listId }),
       });
     } catch {}
+  }
+
+  // Task: Listen-Icon bekommt ein echtes Popup (zwei Spalten, wie das
+  // OnlyFans-eigene SAMMLUNGEN-Fenster) statt der kleinen Dropdown-Leiste.
+  async function openListsModal() {
+    if (listsModalOpen) { setListsModalOpen(false); return; }
+    setListsModalOpen(true);
+    if (!modelId) return;
+    setPanelLoading(true);
+    try {
+      const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}`);
+      const data = await res.json();
+      const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
+      setFanLists(list);
+      if (list.length > 0) selectList(list[0].id, list);
+    } catch {
+      setFanLists([]);
+    } finally {
+      setPanelLoading(false);
+    }
+  }
+
+  // Mitglieder-Vorschau kommt schon mit der Liste (l.users, auf ein paar
+  // Einträge begrenzt) - hier nur Name/Avatar für die IDs nachladen, die
+  // wir noch nicht kennen.
+  async function selectList(listId: string, listsOverride?: any[]) {
+    setSelectedListId(listId);
+    const list = (listsOverride || fanLists).find((l) => l.id === listId);
+    const ids = (list?.users || []).map((u: any) => String(u.id)).filter((id: string) => !userDetails[id]);
+    if (ids.length === 0 || !modelId) return;
+    setListMembersLoading(true);
+    try {
+      const res = await fetch(`/api/crm/of-inbox/user-details?modelId=${encodeURIComponent(modelId)}&ids=${ids.join(",")}`);
+      const data = await res.json();
+      const raw = data.data;
+      const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
+      const map: Record<string, UserDetail> = {};
+      arr.forEach((u: any) => {
+        if (u && u.id != null) map[String(u.id)] = { name: u.name || u.displayName, username: u.username, avatar: u.avatar || null };
+      });
+      setUserDetails((prev) => ({ ...prev, ...map }));
+    } catch {
+    } finally {
+      setListMembersLoading(false);
+    }
   }
 
   async function addFanToList(listId: string) {
@@ -871,21 +915,38 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Benachrichtigungen</span>
                     <button onClick={() => loadNotifications()} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
                   </div>
+                  {/* Task: Kategorien nebeneinander als Tabs statt
+                      gestapelt untereinander (wie Alle/Priorität/
+                      Ungelesen an anderer Stelle in dieser App). */}
+                  <div className="flex gap-1.5 p-2 border-b border-[#9C7A3D]/10 flex-wrap sticky top-8 bg-[#0A0A0A]">
+                    <button
+                      onClick={() => setNotifCategoryFilter(null)}
+                      className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${!notifCategoryFilter ? "bg-[#C9A86A] text-black" : "bg-black/30 text-slate-400 hover:text-[#E2C48A]"}`}
+                    >
+                      Alle
+                    </button>
+                    {NOTIF_CATEGORY_ORDER.map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setNotifCategoryFilter(cat)}
+                        className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${notifCategoryFilter === cat ? "bg-[#C9A86A] text-black" : "bg-black/30 text-slate-400 hover:text-[#E2C48A]"}`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
                   {notifLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
                   {notifError && <div className="p-3 text-xs text-red-400">{notifError}</div>}
                   {!notifLoading && notifications.length === 0 && !notifError && (
                     <div className="p-3 text-xs text-slate-500">Keine Benachrichtigungen</div>
                   )}
-                  {NOTIF_CATEGORY_ORDER.map((cat) => {
-                    const group = notifications.filter((n) => notifCategory(n.type) === cat);
-                    if (group.length === 0) return null;
+                  {(() => {
+                    const filtered = notifCategoryFilter
+                      ? notifications.filter((n) => notifCategory(n.type) === notifCategoryFilter)
+                      : notifications;
                     return (
-                      <div key={cat}>
-                        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#9C7A3D] bg-[#C9A86A]/5 sticky top-8">
-                          {cat}
-                        </div>
-                        <div className="divide-y divide-[#9C7A3D]/10">
-                          {group.map((n) => (
+                      <div className="divide-y divide-[#9C7A3D]/10">
+                          {filtered.map((n) => (
                             <div key={n.id} className={`p-3 flex gap-2 ${!n.isRead ? "bg-[#C9A86A]/5" : ""}`}>
                               <span className="flex-shrink-0 mt-0.5">{notifIcon(n.type)}</span>
                               <div className="min-w-0 flex-1">
@@ -899,10 +960,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               </div>
                             </div>
                           ))}
-                        </div>
                       </div>
                     );
-                  })}
+                  })()}
                   {notifLoadingMore && <div className="p-3 text-xs text-slate-500 italic text-center">Lade weitere…</div>}
                 </div>
               )}
@@ -916,6 +976,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 Leiste. */}
             <div className="relative">
               <button
+                onClick={openListsModal}
+                title="Listen"
+                className={`hover:scale-110 transition ${listsModalOpen ? "scale-110 text-[#C9A86A]" : ""}`}
+              >
+                <BookmarkIcon size={30} />
+              </button>
+            </div>
+            <div className="relative">
+              <button
                 onClick={() => openVaultModal("view")}
                 title="Tresor"
                 className={`hover:scale-110 transition ${vaultModalMode === "view" ? "scale-110 text-[#C9A86A]" : ""}`}
@@ -925,14 +994,11 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             </div>
             {(isAdmin
               ? [
-                  { Icon: BookmarkIcon, key: "lists" as const, label: "Listen" },
                   { Icon: CalendarIcon, key: "schedules" as const, label: "Kalender" },
                   { Icon: ChartIcon, key: "stats" as const, label: "Statistik" },
                   { Icon: ReceiptIcon, key: "earnings" as const, label: "Auszahlungen" },
                 ]
-              : [
-                  { Icon: BookmarkIcon, key: "lists" as const, label: "Listen" },
-                ]
+              : []
             ).map(({ Icon, key, label }) => (
                 <div className="relative" key={key}>
                   <button
@@ -949,41 +1015,6 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                       </div>
                       {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
                       {panelError && <div className="p-3 text-xs text-red-400">{panelError}</div>}
-
-                      {key === "lists" && !panelLoading && (
-                        <div className="divide-y divide-[#9C7A3D]/10">
-                          {fanLists.map((l) => (
-                            <div key={l.id}>
-                              <button
-                                onClick={() => setExpandedListId((v) => (v === l.id ? null : l.id))}
-                                className="w-full p-3 flex items-center justify-between hover:bg-[#C9A86A]/5"
-                              >
-                                <span className="text-sm font-bold text-white">{l.name}</span>
-                                <span className="flex items-center gap-2">
-                                  <span className="text-xs text-[#C9A86A] font-bold">{l.usersCount ?? l.users?.length ?? 0}</span>
-                                  {l.canDelete && (
-                                    <span
-                                      onClick={(e) => { e.stopPropagation(); deleteList(l.id); }}
-                                      title="Liste löschen"
-                                      className="text-slate-500 hover:text-red-400"
-                                    >
-                                      <CloseIcon size={13} />
-                                    </span>
-                                  )}
-                                </span>
-                              </button>
-                              {expandedListId === l.id && (
-                                <div className="px-3 pb-3 text-xs text-slate-400">
-                                  {l.users && l.users.length > 0
-                                    ? `Mitglieder (Vorschau): ${l.users.map((u: any) => u.id).join(", ")}${(l.usersCount || 0) > l.users.length ? ` +${l.usersCount - l.users.length} weitere` : ""}`
-                                    : "Keine Mitglieder"}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                          {fanLists.length === 0 && <div className="p-3 text-xs text-slate-500">Keine Listen</div>}
-                        </div>
-                      )}
 
                       {key === "stats" && !panelLoading && stats?.overview?.massMessages && (
                         <>
@@ -1552,6 +1583,72 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 <button onClick={() => setVaultModalMode(null)} className="px-4 py-1.5 rounded text-xs font-bold uppercase bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black hover:from-[#E5C158]">
                   Schließen
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {listsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setListsModalOpen(false)}>
+          <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="w-56 flex-shrink-0 border-r border-[#9C7A3D]/20 flex flex-col overflow-hidden">
+              <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Listen</span>
+                <SearchIcon size={14} />
+              </div>
+              <div className="flex-1 overflow-y-auto scrollbar-hide">
+                {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
+                {!panelLoading && fanLists.length === 0 && <div className="p-3 text-xs text-slate-500">Keine Listen</div>}
+                {fanLists.map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => selectList(l.id)}
+                    className={`w-full text-left px-3 py-2.5 flex items-center justify-between ${selectedListId === l.id ? "bg-[#C9A86A]/15 text-[#C9A86A]" : "text-slate-300 hover:bg-[#C9A86A]/10"}`}
+                  >
+                    <span className="min-w-0">
+                      <div className="text-xs font-bold truncate">{l.name}</div>
+                      <div className="text-[10px] text-slate-500">{l.usersCount ?? l.users?.length ?? 0} Fans</div>
+                    </span>
+                    {l.canDelete && (
+                      <span onClick={(e) => { e.stopPropagation(); deleteList(l.id); }} title="Liste löschen" className="text-slate-500 hover:text-red-400 flex-shrink-0 ml-1">
+                        <CloseIcon size={12} />
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {(() => {
+                const list = fanLists.find((l) => l.id === selectedListId);
+                return (
+                  <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">{list?.name || "Fans"}</span>
+                    <button onClick={() => setListsModalOpen(false)} className="text-slate-400 hover:text-[#E2C48A]"><CloseIcon size={16} /></button>
+                  </div>
+                );
+              })()}
+              <div className="flex-1 overflow-y-auto scrollbar-hide p-3">
+                {listMembersLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}
+                {(() => {
+                  const list = fanLists.find((l) => l.id === selectedListId);
+                  const members = list?.users || [];
+                  if (members.length === 0) return <div className="text-xs text-slate-500 text-center py-6">Keine Mitglieder (oder nur eine Vorschau ohne Details verfügbar)</div>;
+                  return (
+                    <div className="space-y-2">
+                      {members.map((u: any) => (
+                        <div key={u.id} className="flex items-center gap-2.5 p-2 rounded hover:bg-[#C9A86A]/5">
+                          <Avatar fanId={u.id} size={36} />
+                          <span className="text-sm text-white">{displayName(u.id)}</span>
+                        </div>
+                      ))}
+                      {(list?.usersCount || 0) > members.length && (
+                        <div className="text-[10px] text-slate-500 px-2">+{(list?.usersCount || 0) - members.length} weitere (nur Vorschau, volle Mitgliederliste noch nicht angebunden)</div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
