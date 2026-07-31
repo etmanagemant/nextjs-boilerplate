@@ -93,22 +93,49 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [notifError, setNotifError] = useState("");
+  const [notifHasMore, setNotifHasMore] = useState(true);
+  const [notifLoadingMore, setNotifLoadingMore] = useState(false);
+  const notifOffsetRef = useRef(0);
+  const NOTIF_PAGE_SIZE = 20;
 
-  const loadNotifications = useCallback(async () => {
+  const loadNotifications = useCallback(async (opts: { more?: boolean } = {}) => {
     if (!modelId) return;
-    setNotifLoading(true);
+    const offset = opts.more ? notifOffsetRef.current : 0;
+    if (opts.more) setNotifLoadingMore(true);
+    else { setNotifLoading(true); notifOffsetRef.current = 0; setNotifHasMore(true); }
     setNotifError("");
     try {
-      const res = await fetch(`/api/crm/of-inbox/notifications?modelId=${encodeURIComponent(modelId)}`);
+      const res = await fetch(`/api/crm/of-inbox/notifications?modelId=${encodeURIComponent(modelId)}&offset=${offset}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
-      setNotifications(Array.isArray(data.data) ? data.data : []);
+      const list = Array.isArray(data.data) ? data.data : [];
+      setNotifHasMore(list.length >= NOTIF_PAGE_SIZE);
+      notifOffsetRef.current = offset + list.length;
+      setNotifications((prev) => (opts.more ? [...prev, ...list] : list));
     } catch (e: any) {
       setNotifError(e.message || "Fehler beim Laden der Benachrichtigungen");
     } finally {
       setNotifLoading(false);
+      setNotifLoadingMore(false);
     }
   }, [modelId]);
+
+  function handleNotifScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    if (notifLoadingMore || notifLoading || !notifHasMore) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) loadNotifications({ more: true });
+  }
+
+  // Groups notification types the same way OnlyFans' own notification
+  // tabs do, instead of one flat list - matches the categories the user
+  // asked for (Abos, Bezahlung, Likes).
+  function notifCategory(type: string): string {
+    if (type === "subscribed" || type === "price_changed") return "Abos";
+    if (type.includes("tip") || type.includes("purchase") || type.includes("ppv")) return "Bezahlung";
+    if (type.includes("like")) return "Likes";
+    return "Sonstiges";
+  }
+  const NOTIF_CATEGORY_ORDER = ["Abos", "Bezahlung", "Likes", "Sonstiges"];
 
   function toggleNotifPanel() {
     setNotifPanelOpen((v) => {
@@ -414,32 +441,44 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId }: {
                 <BellIcon />
               </button>
               {notifPanelOpen && (
-                <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
+                <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30" onScroll={handleNotifScroll}>
                   <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between sticky top-0 bg-[#0A0A0A]">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Benachrichtigungen</span>
-                    <button onClick={loadNotifications} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
+                    <button onClick={() => loadNotifications()} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
                   </div>
                   {notifLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
                   {notifError && <div className="p-3 text-xs text-red-400">{notifError}</div>}
                   {!notifLoading && notifications.length === 0 && !notifError && (
                     <div className="p-3 text-xs text-slate-500">Keine Benachrichtigungen</div>
                   )}
-                  <div className="divide-y divide-[#9C7A3D]/10">
-                    {notifications.map((n) => (
-                      <div key={n.id} className={`p-3 flex gap-2 ${!n.isRead ? "bg-[#C9A86A]/5" : ""}`}>
-                        <span className="flex-shrink-0 mt-0.5">{notifIcon(n.type)}</span>
-                        <div className="min-w-0 flex-1">
-                          {n.user?.name && (
-                            <div className="text-xs font-bold text-[#E2C48A]">{n.user.name}</div>
-                          )}
-                          <div className="text-xs text-slate-300" dangerouslySetInnerHTML={{ __html: n.text }} />
-                          <div className="text-[10px] text-slate-500 mt-0.5">
-                            {n.createdAt ? new Date(n.createdAt).toLocaleString("de-DE") : ""}
-                          </div>
+                  {NOTIF_CATEGORY_ORDER.map((cat) => {
+                    const group = notifications.filter((n) => notifCategory(n.type) === cat);
+                    if (group.length === 0) return null;
+                    return (
+                      <div key={cat}>
+                        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#9C7A3D] bg-[#C9A86A]/5 sticky top-8">
+                          {cat}
+                        </div>
+                        <div className="divide-y divide-[#9C7A3D]/10">
+                          {group.map((n) => (
+                            <div key={n.id} className={`p-3 flex gap-2 ${!n.isRead ? "bg-[#C9A86A]/5" : ""}`}>
+                              <span className="flex-shrink-0 mt-0.5">{notifIcon(n.type)}</span>
+                              <div className="min-w-0 flex-1">
+                                {n.user?.name && (
+                                  <div className="text-xs font-bold text-[#E2C48A]">{n.user.name}</div>
+                                )}
+                                <div className="text-xs text-slate-300" dangerouslySetInnerHTML={{ __html: n.text }} />
+                                <div className="text-[10px] text-slate-500 mt-0.5">
+                                  {n.createdAt ? new Date(n.createdAt).toLocaleString("de-DE") : ""}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
+                  {notifLoadingMore && <div className="p-3 text-xs text-slate-500 italic text-center">Lade weitere…</div>}
                 </div>
               )}
             </div>
