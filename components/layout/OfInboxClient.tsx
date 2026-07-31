@@ -75,6 +75,89 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   }, [modelFromUrl]);
 
   usePublishModelTabs(connectedModels, modelId, chatterId, "/of-inbox");
+
+  // Tresor/Listen/Statistik/Kalender/Auszahlungen (Tasks #47-#50) - alle
+  // read-only, ein Fetch pro Panel-Öffnung, kein eigener Pagination-Aufwand
+  // in dieser ersten Fassung. Response-Shapes CONFIRMED LIVE gegen das
+  // Testmodel (2026-07-31), nicht geraten:
+  // vault-lists: data.list[]; vault-media: data.list[]; lists: data ist
+  // direkt das Array (kein data.list!); stats: data.overview.massMessages
+  // + data.top.purchases; schedules: data.list[]; earnings: data ist ein
+  // flaches Objekt.
+  const [activePanel, setActivePanel] = useState<null | "vault" | "lists" | "stats" | "schedules" | "earnings">(null);
+  const [panelLoading, setPanelLoading] = useState(false);
+  const [panelError, setPanelError] = useState("");
+  const [vaultLists, setVaultLists] = useState<any[]>([]);
+  const [vaultMedia, setVaultMedia] = useState<any[]>([]);
+  const [vaultActiveListId, setVaultActiveListId] = useState<string | null>(null);
+  const [fanLists, setFanLists] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [earnings, setEarnings] = useState<any>(null);
+
+  async function loadVaultMedia(listId: string | null) {
+    if (!modelId) return;
+    const res = await fetch(`/api/crm/of-inbox/vault-media?modelId=${encodeURIComponent(modelId)}${listId ? `&listId=${encodeURIComponent(listId)}` : ""}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
+    setVaultMedia(data.data?.list || []);
+  }
+
+  async function openPanel(panel: NonNullable<typeof activePanel>) {
+    if (activePanel === panel) { setActivePanel(null); return; }
+    setActivePanel(panel);
+    if (!modelId) return;
+    setPanelLoading(true);
+    setPanelError("");
+    try {
+      if (panel === "vault") {
+        const res = await fetch(`/api/crm/of-inbox/vault-lists?modelId=${encodeURIComponent(modelId)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
+        setVaultLists(data.data?.list || []);
+        setVaultActiveListId(null);
+        await loadVaultMedia(null);
+      } else if (panel === "lists") {
+        const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
+        setFanLists(Array.isArray(data.data) ? data.data : []);
+      } else if (panel === "stats") {
+        const res = await fetch(`/api/crm/of-inbox/stats?modelId=${encodeURIComponent(modelId)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
+        setStats(data.data || null);
+      } else if (panel === "schedules") {
+        const res = await fetch(`/api/crm/of-inbox/schedules?modelId=${encodeURIComponent(modelId)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
+        setSchedules(data.data?.list || []);
+      } else if (panel === "earnings") {
+        const res = await fetch(`/api/crm/of-inbox/earnings?modelId=${encodeURIComponent(modelId)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
+        setEarnings(data.data || null);
+      }
+    } catch (e: any) {
+      setPanelError(e.message || "Fehler beim Laden");
+    } finally {
+      setPanelLoading(false);
+    }
+  }
+
+  async function selectVaultList(listId: string | null) {
+    setVaultActiveListId(listId);
+    setPanelLoading(true);
+    setPanelError("");
+    try {
+      await loadVaultMedia(listId);
+    } catch (e: any) {
+      setPanelError(e.message || "Fehler beim Laden");
+    } finally {
+      setPanelLoading(false);
+    }
+  }
+
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [chatsLoading, setChatsLoading] = useState(false);
   const [chatsError, setChatsError] = useState("");
@@ -513,13 +596,145 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             </div>
             <button title="Nachrichten (aktiv)" className="text-[#C9A86A]"><ChatIcon size={30} /></button>
             {/* Task: chatter role only ever needs Messages/Bell (above) +
-                Tresor/Listen - the rest (Galerie/Kalender/Statistik/
-                Warteschlange) is admin/content-manager only. */}
-            {(isAdmin ? [FolderIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon] : [FolderIcon, ListIcon]).map((IconComp, i) => (
-              <button key={i} disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">
-                <IconComp size={30} />
-              </button>
-            ))}
+                Tresor/Listen - Kalender/Statistik/Auszahlungen bleiben
+                admin/content-manager only. Galerie hat noch keinen
+                bestätigten eigenen Endpunkt (nur der Tresor selbst), daher
+                weiter ausgegraut statt vorgetäuscht funktionsfähig. */}
+            {(isAdmin
+              ? [
+                  { Icon: FolderIcon, key: "vault" as const, label: "Tresor" },
+                  { Icon: ImageIcon, key: null, label: "Galerie" },
+                  { Icon: CalendarIcon, key: "schedules" as const, label: "Kalender" },
+                  { Icon: ChartIcon, key: "stats" as const, label: "Statistik" },
+                  { Icon: ReceiptIcon, key: "earnings" as const, label: "Auszahlungen" },
+                  { Icon: ListIcon, key: "lists" as const, label: "Listen" },
+                ]
+              : [
+                  { Icon: FolderIcon, key: "vault" as const, label: "Tresor" },
+                  { Icon: ListIcon, key: "lists" as const, label: "Listen" },
+                ]
+            ).map(({ Icon, key, label }, i) =>
+              key ? (
+                <div className="relative" key={key}>
+                  <button
+                    onClick={() => openPanel(key)}
+                    title={label}
+                    className={`hover:scale-110 transition ${activePanel === key ? "scale-110 text-[#C9A86A]" : ""}`}
+                  >
+                    <Icon size={30} />
+                  </button>
+                  {activePanel === key && (
+                    <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
+                      <div className="p-3 border-b border-[#9C7A3D]/20 sticky top-0 bg-[#0A0A0A]">
+                        <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">{label}</span>
+                      </div>
+                      {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
+                      {panelError && <div className="p-3 text-xs text-red-400">{panelError}</div>}
+
+                      {key === "vault" && !panelLoading && (
+                        <>
+                          <div className="flex gap-1.5 flex-wrap p-2 border-b border-[#9C7A3D]/10">
+                            <button
+                              onClick={() => selectVaultList(null)}
+                              className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase ${!vaultActiveListId ? "bg-[#C9A86A] text-black" : "bg-[#C9A86A]/10 text-[#E2C48A]"}`}
+                            >
+                              Alle
+                            </button>
+                            {vaultLists.map((l) => (
+                              <button
+                                key={l.id}
+                                onClick={() => selectVaultList(String(l.id))}
+                                className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase truncate max-w-[120px] ${vaultActiveListId === String(l.id) ? "bg-[#C9A86A] text-black" : "bg-[#C9A86A]/10 text-[#E2C48A]"}`}
+                              >
+                                {l.name} ({(l.videosCount || 0) + (l.photosCount || 0) + (l.gifsCount || 0) + (l.audiosCount || 0)})
+                              </button>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-3 gap-1 p-2">
+                            {vaultMedia.map((m) => {
+                              const url = m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url;
+                              if (!url) return null;
+                              return (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img key={m.id} src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
+                              );
+                            })}
+                            {vaultMedia.length === 0 && <div className="col-span-3 p-3 text-xs text-slate-500 text-center">Keine Medien in diesem Ordner</div>}
+                          </div>
+                        </>
+                      )}
+
+                      {key === "lists" && !panelLoading && (
+                        <div className="divide-y divide-[#9C7A3D]/10">
+                          {fanLists.map((l) => (
+                            <div key={l.id} className="p-3 flex items-center justify-between">
+                              <span className="text-sm font-bold text-white">{l.name}</span>
+                              <span className="text-xs text-[#C9A86A] font-bold">{l.usersCount ?? l.users?.length ?? 0}</span>
+                            </div>
+                          ))}
+                          {fanLists.length === 0 && <div className="p-3 text-xs text-slate-500">Keine Listen</div>}
+                        </div>
+                      )}
+
+                      {key === "stats" && !panelLoading && stats?.overview?.massMessages && (
+                        <>
+                          <div className="p-3 grid grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-[10px] text-slate-500 uppercase">Massnachrichten (30 Tage)</div>
+                              <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.count?.total ?? 0}</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-slate-500 uppercase">Views</div>
+                              <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.views?.total ?? 0}</div>
+                            </div>
+                            <div className="col-span-2">
+                              <div className="text-[10px] text-slate-500 uppercase">Einnahmen</div>
+                              <div className="text-lg font-black text-[#C9A86A]">${stats.overview.massMessages.earnings?.total ?? 0}</div>
+                            </div>
+                          </div>
+                          {Array.isArray(stats.top?.purchases) && stats.top.purchases.length > 0 && (
+                            <div className="p-3 border-t border-[#9C7A3D]/10">
+                              <div className="text-[10px] text-slate-500 uppercase mb-2">Top-Nachrichten</div>
+                              {stats.top.purchases.slice(0, 5).map((p: any, i: number) => (
+                                <div key={i} className="text-xs text-slate-300 mb-1 truncate">{stripHtmlPreview(p.text || "")}</div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {key === "schedules" && !panelLoading && (
+                        <div className="divide-y divide-[#9C7A3D]/10">
+                          {schedules.map((s: any, i: number) => (
+                            <div key={s.id ?? i} className="p-3 text-xs text-slate-300">
+                              {stripHtmlPreview(s.post?.text || s.text || "") || s.type || "Geplanter Beitrag"}
+                            </div>
+                          ))}
+                          {schedules.length === 0 && <div className="p-3 text-xs text-slate-500">Heute nichts geplant</div>}
+                        </div>
+                      )}
+
+                      {key === "earnings" && !panelLoading && earnings && (
+                        <div className="p-3 grid grid-cols-2 gap-3">
+                          <div>
+                            <div className="text-[10px] text-slate-500 uppercase">Verfügbar</div>
+                            <div className="text-lg font-black text-[#C9A86A]">{earnings.payoutAvailable} {earnings.currency}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-slate-500 uppercase">Ausstehend</div>
+                            <div className="text-lg font-black text-[#C9A86A]">{earnings.payoutPending} {earnings.currency}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button key={i} disabled title="Noch nicht verfügbar" className="opacity-30 cursor-not-allowed">
+                  <Icon size={30} />
+                </button>
+              )
+            )}
           </div>
 
           <div className="w-[380px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden flex flex-col h-full">

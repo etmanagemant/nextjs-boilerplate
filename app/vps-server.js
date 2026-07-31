@@ -3107,6 +3107,119 @@ app.get('/of-notifications', async (req, res) => {
   }
 });
 
+// GET /of-vault-lists?modelId=X - Tresor-Ordner (Task #50).
+app.get('/of-vault-lists', async (req, res) => {
+  const { modelId } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = 'https://onlyfans.com/api2/v2/vault/lists?view=main&offset=0&limit=50';
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-VAULT-LISTS] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-vault-media?modelId=X&offset=0&listId=Y - Tresor-Medien, optional
+// nach Ordner gefiltert (Task #50).
+app.get('/of-vault-media', async (req, res) => {
+  const { modelId, offset, listId } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/vault/media?limit=40&offset=${Number(offset) || 0}&field=recent&sort=desc&list=${listId ? encodeURIComponent(listId) : 'all'}`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-VAULT-MEDIA] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-lists?modelId=X - Fan-Listen/Segmente (⭐ "zu Liste hinzufügen").
+app.get('/of-lists', async (req, res) => {
+  const { modelId } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = 'https://onlyfans.com/api2/v2/lists?limit=50&offset=0';
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-LISTS] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-stats?modelId=X - Massmessage-Statistik, letzte 30 Tage fest
+// (Task #48 - kein Datumsbereich-Picker in der ersten Fassung).
+app.get('/of-stats', async (req, res) => {
+  const { modelId } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const end = new Date();
+    const start = new Date(end.getTime() - 30 * 86400000);
+    const fmt = (d) => d.toISOString().slice(0, 10) + ' 00:00:00';
+    const range = `startDate=${encodeURIComponent(fmt(start))}&endDate=${encodeURIComponent(fmt(end))}`;
+    const [overview, top] = await Promise.all([
+      callOnlyFansApi(session.page, `https://onlyfans.com/api2/v2/users/me/stats/overview?${range}&by=messages`),
+      callOnlyFansApi(session.page, `https://onlyfans.com/api2/v2/users/me/stats/top/message?${range}`),
+    ]);
+    if (!overview.ok) return res.status(502).json({ error: 'OnlyFans API error', status: overview.status, body: overview.json || overview.textSample });
+    res.json({ status: 'success', data: { overview: overview.json, top: top.ok ? top.json : null } });
+  } catch (error) {
+    console.error(`[OF-STATS] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-schedules?modelId=X&date=YYYY-MM-DD - Content-Plan-Kalender
+// (Task #49, standardmäßig heute).
+app.get('/of-schedules', async (req, res) => {
+  const { modelId, date } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const day = (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) ? date : new Date().toISOString().slice(0, 10);
+    const url = `https://onlyfans.com/api2/v2/schedules?filter[publishDate]=${day}&filter[publishDateEnd]=${day}&limit=20`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json, date: day });
+  } catch (error) {
+    console.error(`[OF-SCHEDULES] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-earnings?modelId=X - Kontostand/Auszahlungen (das "was noch da
+// ist" - ReceiptIcon in der Leiste).
+app.get('/of-earnings', async (req, res) => {
+  const { modelId } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = 'https://onlyfans.com/api2/v2/payouts/balances';
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-EARNINGS] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /of-media-proxy?url=<encoded CDN url> - CONFIRMED LIVE (2026-07-31,
 // Task #44): OnlyFans' signed CloudFront media URLs carry an IpAddress
 // condition locked to the IP that requested them - since the /of-chats etc.
