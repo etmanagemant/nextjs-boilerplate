@@ -3169,6 +3169,26 @@ app.post('/of-list-membership', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// DELETE /of-list-delete { modelId, listId } - deletes a whole custom
+// list. NOT YET LIVE-VERIFIED (Task #69) - inferred from the same REST
+// convention as the already-confirmed /lists/{listId}/users/{fanId}.
+// Tested once against a disposable test list before being trusted.
+app.delete('/of-list-delete', async (req, res) => {
+  const { modelId, listId } = req.body || {};
+  if (!modelId || !listId) return res.status(400).json({ error: 'Missing modelId or listId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/lists/${encodeURIComponent(listId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'DELETE' });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-LIST-DELETE] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.delete('/of-list-membership', async (req, res) => {
   const { modelId, fanId, listId } = req.body || {};
   if (!modelId || !fanId || !listId) return res.status(400).json({ error: 'Missing modelId, fanId, or listId' });

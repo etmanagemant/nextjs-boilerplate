@@ -119,6 +119,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [pinnedMessages, setPinnedMessages] = useState<any[]>([]);
   const [pinnedLoading, setPinnedLoading] = useState(false);
   const [fanLists, setFanLists] = useState<any[]>([]);
+  const [expandedListId, setExpandedListId] = useState<string | null>(null);
   const [stats, setStats] = useState<any>(null);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [earnings, setEarnings] = useState<any>(null);
@@ -659,13 +660,33 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     try {
       const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}&relatedUserId=${activeFanId}`);
       const data = await res.json();
-      const list = Array.isArray(data.data) ? data.data : [];
+      // Bug (2026-07-31): related_user-Abfrage kommt vermutlich als
+      // {list:[...]} statt als direktes Array zurück (wie vault-media),
+      // anders als die ungefilterte /lists-Antwort - das ließ "Listen"
+      // immer leer aussehen. Beide Formen abfangen.
+      const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
       const relevant = list.filter((l: any) => l.type === "custom" || l.id === "friends");
       setAvailableLists(relevant);
       setAddedToList(new Set(relevant.filter((l: any) => l.users?.some((u: any) => String(u.id) === String(activeFanId))).map((l: any) => l.id)));
     } catch {
       setAvailableLists([]);
     }
+  }
+
+  // Task #69: CONFIRMED LIVE 2026-07-31 gegen eine leere Testliste.
+  // "Liste leeren" (alle Mitglieder auf einmal entfernen) hat noch keinen
+  // bestätigten Einzel-Endpunkt - offen.
+  async function deleteList(listId: string) {
+    if (!modelId) return;
+    if (!window.confirm("Diese Liste wirklich unwiderruflich löschen?")) return;
+    setFanLists((prev) => prev.filter((l) => l.id !== listId));
+    try {
+      await fetch("/api/crm/of-inbox/list-delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, listId }),
+      });
+    } catch {}
   }
 
   async function addFanToList(listId: string) {
@@ -932,9 +953,32 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                       {key === "lists" && !panelLoading && (
                         <div className="divide-y divide-[#9C7A3D]/10">
                           {fanLists.map((l) => (
-                            <div key={l.id} className="p-3 flex items-center justify-between">
-                              <span className="text-sm font-bold text-white">{l.name}</span>
-                              <span className="text-xs text-[#C9A86A] font-bold">{l.usersCount ?? l.users?.length ?? 0}</span>
+                            <div key={l.id}>
+                              <button
+                                onClick={() => setExpandedListId((v) => (v === l.id ? null : l.id))}
+                                className="w-full p-3 flex items-center justify-between hover:bg-[#C9A86A]/5"
+                              >
+                                <span className="text-sm font-bold text-white">{l.name}</span>
+                                <span className="flex items-center gap-2">
+                                  <span className="text-xs text-[#C9A86A] font-bold">{l.usersCount ?? l.users?.length ?? 0}</span>
+                                  {l.canDelete && (
+                                    <span
+                                      onClick={(e) => { e.stopPropagation(); deleteList(l.id); }}
+                                      title="Liste löschen"
+                                      className="text-slate-500 hover:text-red-400"
+                                    >
+                                      <CloseIcon size={13} />
+                                    </span>
+                                  )}
+                                </span>
+                              </button>
+                              {expandedListId === l.id && (
+                                <div className="px-3 pb-3 text-xs text-slate-400">
+                                  {l.users && l.users.length > 0
+                                    ? `Mitglieder (Vorschau): ${l.users.map((u: any) => u.id).join(", ")}${(l.usersCount || 0) > l.users.length ? ` +${l.usersCount - l.users.length} weitere` : ""}`
+                                    : "Keine Mitglieder"}
+                                </div>
+                              )}
                             </div>
                           ))}
                           {fanLists.length === 0 && <div className="p-3 text-xs text-slate-500">Keine Listen</div>}
