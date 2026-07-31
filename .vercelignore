@@ -42,4 +42,4 @@ dist
 build
 
 # Large files that don't belong in serverless
-scripts/
+/scripts/
