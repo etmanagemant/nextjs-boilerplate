@@ -780,8 +780,14 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     try {
       const res = await fetch(`/api/crm/of-inbox/chat-gallery?modelId=${encodeURIComponent(modelId)}&fanId=${activeFanId}`);
       const data = await res.json();
-      const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
-      setGalleryMedia(list);
+      // Bug (2026-07-31): der Endpunkt liefert ganze NACHRICHTEN zurück
+      // (responseType:"message", jede mit einem eigenen media[]-Array),
+      // keine flache Medien-Liste - die Galerie zeigte deshalb nichts an
+      // (m.files war immer undefined). Hier auf einzelne Medien
+      // aufgefaltet, Preis der Nachricht wird pro Medium mitgegeben.
+      const messages = Array.isArray(data.data) ? data.data : data.data?.list || [];
+      const flat = messages.flatMap((msg: any) => (msg.media || []).map((med: any) => ({ ...med, price: msg.price })));
+      setGalleryMedia(flat);
     } catch {
       setGalleryMedia([]);
     } finally {
@@ -1207,17 +1213,21 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     )}
                     <div className="grid grid-cols-6 gap-1.5">
                       {galleryMedia.map((m, i) => {
-                        const url = m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url;
-                        if (!url) return null;
                         const isPaid = !!(m.price && Number(m.price) > 0);
+                        const url = m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url;
                         return (
-                          <div key={m.id ?? i} className="relative">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
+                          <button key={m.id ?? i} onClick={() => setLightboxMedia(m)} className="relative">
+                            {m.type === "audio" || !url ? (
+                              <div className="w-full aspect-square rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={16} /></div>
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
+                            )}
+                            {m.type === "video" && <span className="absolute bottom-0.5 left-0.5 text-[8px] font-bold bg-black/70 text-white px-1 rounded">▶</span>}
                             {isPaid && (
                               <span className="absolute bottom-0.5 right-0.5 text-[8px] font-bold bg-[#C9A86A] text-black px-1 rounded">PAID</span>
                             )}
-                          </div>
+                          </button>
                         );
                       })}
                     </div>

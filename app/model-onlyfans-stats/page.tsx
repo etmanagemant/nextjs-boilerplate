@@ -1,6 +1,6 @@
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
-import ComingSoon from "@/components/layout/ComingSoon";
+import ModelOnlyFansStatsClient from "@/components/layout/ModelOnlyFansStatsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +14,5 @@ export default async function ModelOnlyFansStatsPage() {
     redirect("/");
   }
 
-  return (
-    <ComingSoon
-      icon="📊"
-      title="OnlyFans Statistik"
-      subtitle="Deine echten OnlyFans-Zahlen direkt hier einsehen - ist in Arbeit."
-    />
-  );
+  return <ModelOnlyFansStatsClient />;
 }
