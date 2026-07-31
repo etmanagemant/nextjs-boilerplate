@@ -237,6 +237,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
   const [scripts, setScripts] = useState<any[]>([]);
   const [scriptsLoading, setScriptsLoading] = useState(false);
+  const [scriptsError, setScriptsError] = useState("");
   const [attachedMedia, setAttachedMedia] = useState<any[]>([]);
   const [attachPrice, setAttachPrice] = useState("");
   const [sending, setSending] = useState(false);
@@ -505,12 +506,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   async function loadScripts() {
     if (!modelId) return;
     setScriptsLoading(true);
+    setScriptsError("");
     try {
       const res = await fetch(`/api/crm/of-inbox/scripts?modelId=${encodeURIComponent(modelId)}`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Fehler ${res.status}`);
       setScripts(data.scripts || []);
-    } catch {
+    } catch (e: any) {
       setScripts([]);
+      setScriptsError(e.message || "Fehler beim Laden");
     } finally {
       setScriptsLoading(false);
     }
@@ -1434,7 +1438,13 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                             <button onClick={loadScripts} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
                           </div>
                           {scriptsLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
-                          {!scriptsLoading && scripts.length === 0 && <div className="p-3 text-xs text-slate-500">Keine Scripts für dieses Model</div>}
+                          {scriptsError && <div className="p-3 text-xs text-red-400">{scriptsError}</div>}
+                          {!scriptsLoading && !scriptsError && scripts.length === 0 && (
+                            <div className="p-3 text-xs text-slate-500">
+                              Keine Scripts für dieses Model
+                              <div className="text-[9px] text-slate-600 mt-1 select-all">modelId: {modelId}</div>
+                            </div>
+                          )}
                           <div className="divide-y divide-[#9C7A3D]/10">
                             {scripts.map((s) => {
                               const mediaCount = (s.steps || []).flatMap((st: any) => st.media_refs || []).length;
