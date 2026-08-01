@@ -246,6 +246,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [spendDisplay, setSpendDisplay] = useState<Record<string, string>>({});
   const [fanMetadata, setFanMetadata] = useState<any | null>(null);
   const [fanMetaLastEditedBy, setFanMetaLastEditedBy] = useState<string | null>(null);
+  // Task #32: echte Lifetime-Ausgaben pro Fan (CONFIRMED LIVE 2026-08-01
+  // via /users/u{fanId} -> subscribedOnData.totalSumm etc.), ersetzt die
+  // vorherige "keine Quelle gefunden"-Lücke.
+  const [fanSpend, setFanSpend] = useState<{ totalSumm: number; tipsSumm: number; subscribesSumm: number; messagesSumm: number; postsSumm: number } | null>(null);
   const [messageSearch, setMessageSearch] = useState<string | null>(null);
   const [chatSearchResults, setChatSearchResults] = useState<Message[] | null>(null);
   const [listsPanelOpen, setListsPanelOpen] = useState(false);
@@ -462,8 +466,20 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setVaultModalMode(null);
     setAttachedMedia([]);
     setAttachPrice("");
+    setFanSpend(null);
     loadMessages(fanId);
     loadFanMetadata(fanId);
+    loadFanSpend(fanId);
+  }
+
+  async function loadFanSpend(fanId: number) {
+    if (!modelId) return;
+    try {
+      const res = await fetch(`/api/crm/of-inbox/fan-detail?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}`);
+      const data = await res.json();
+      const s = data.data?.subscribedOnData;
+      if (s) setFanSpend({ totalSumm: s.totalSumm || 0, tipsSumm: s.tipsSumm || 0, subscribesSumm: s.subscribesSumm || 0, messagesSumm: s.messagesSumm || 0, postsSumm: s.postsSumm || 0 });
+    } catch {}
   }
 
   async function handleSend() {
@@ -677,36 +693,35 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   }
 
   // Task: der Stern-Button ("Zu Favoriten und anderen Listen hinzufügen")
-  // - CONFIRMED LIVE 2026-07-31: POST/DELETE /lists/{listId}/users/{fanId}
-  // zum Ändern, GET /lists?related_user={fanId} zum Anzeigen (genau das
-  // ruft OnlyFans' eigener Dialog auf, siehe Screenshot vom User mit
-  // Häkchen pro Liste). Welches Feld genau "ist Mitglied" markiert, ist
-  // NICHT live bestätigt (Testmodel-Session ist beim Testen ausgeloggt) -
-  // hier über die schon bekannte users[]-Vorschau angenähert, sollte
-  // nochmal live geprüft werden sobald das Testmodel wieder eingeloggt ist.
+  // CONFIRMED LIVE 2026-08-01: POST/DELETE /lists/{listId}/users/{fanId}
+  // zum Ändern, GET /users/u{fanId} -> listsStates[].hasUser zum genauen
+  // Mitglied-Status (System- UND Custom-Listen) - live verifiziert durch
+  // echtes Hinzufügen/Entfernen eines Testfans aus einer echten Liste.
+  // Ersetzt die vorherige Näherung über die abgeschnittene users[]-Vorschau.
   async function openListsPanel() {
     if (listsPanelOpen) { setListsPanelOpen(false); return; }
     setListsPanelOpen(true);
     if (!modelId || !activeFanId) return;
     try {
-      const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}&relatedUserId=${activeFanId}`);
-      const data = await res.json();
-      // Bug (2026-07-31): related_user-Abfrage kommt vermutlich als
-      // {list:[...]} statt als direktes Array zurück (wie vault-media),
-      // anders als die ungefilterte /lists-Antwort - das ließ "Listen"
-      // immer leer aussehen. Beide Formen abfangen.
-      const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
+      const [listsRes, detailRes] = await Promise.all([
+        fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}`),
+        fetch(`/api/crm/of-inbox/fan-detail?modelId=${encodeURIComponent(modelId)}&fanId=${activeFanId}`),
+      ]);
+      const listsData = await listsRes.json();
+      const list = Array.isArray(listsData.data) ? listsData.data : listsData.data?.list || [];
       const relevant = list.filter((l: any) => l.type === "custom" || l.id === "friends");
       setAvailableLists(relevant);
-      setAddedToList(new Set(relevant.filter((l: any) => l.users?.some((u: any) => String(u.id) === String(activeFanId))).map((l: any) => l.id)));
+
+      const detailData = await detailRes.json();
+      const states: any[] = detailData.data?.listsStates || [];
+      const hasUserIds = new Set(states.filter((s: any) => s.hasUser).map((s: any) => String(s.id)));
+      setAddedToList(new Set(relevant.filter((l: any) => hasUserIds.has(String(l.id))).map((l: any) => l.id)));
     } catch {
       setAvailableLists([]);
     }
   }
 
   // Task #69: CONFIRMED LIVE 2026-07-31 gegen eine leere Testliste.
-  // "Liste leeren" (alle Mitglieder auf einmal entfernen) hat noch keinen
-  // bestätigten Einzel-Endpunkt - offen.
   async function deleteList(listId: string) {
     if (!modelId) return;
     if (!window.confirm("Diese Liste wirklich unwiderruflich löschen?")) return;
@@ -717,6 +732,37 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modelId, listId }),
+      });
+    } catch {}
+  }
+
+  // Task #69: "Liste leeren" - CONFIRMED LIVE 2026-08-01 via echten
+  // Netzwerk-Mitschnitt (DELETE /lists/{listId}/users ohne fanId).
+  async function clearList(listId: string) {
+    if (!modelId) return;
+    if (!window.confirm("Alle Mitglieder aus dieser Liste entfernen? Die Liste selbst bleibt bestehen.")) return;
+    setFanLists((prev) => prev.map((l) => (l.id === listId ? { ...l, usersCount: 0, users: [] } : l)));
+    try {
+      await fetch("/api/crm/of-inbox/list-clear", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, listId }),
+      });
+    } catch {}
+  }
+
+  // Task #69: "Liste umbenennen" - CONFIRMED LIVE 2026-08-01 via echten
+  // Netzwerk-Mitschnitt (PATCH /lists/{listId} body {name}).
+  async function renameList(listId: string, currentName: string) {
+    if (!modelId) return;
+    const name = window.prompt("Neuer Name für diese Liste:", currentName);
+    if (!name || name === currentName) return;
+    setFanLists((prev) => prev.map((l) => (l.id === listId ? { ...l, name } : l)));
+    try {
+      await fetch("/api/crm/of-inbox/list-rename", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, listId, name }),
       });
     } catch {}
   }
@@ -1166,6 +1212,14 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   >
                     ✏️
                   </button>
+                  {fanSpend && (
+                    <span
+                      className="text-xs font-bold text-[#C9A86A] bg-[#C9A86A]/10 border border-[#9C7A3D]/30 rounded-full px-2.5 py-1 ml-1"
+                      title={`Abos: $${fanSpend.subscribesSumm} · Nachrichten: $${fanSpend.messagesSumm} · Trinkgelder: $${fanSpend.tipsSumm} · Beiträge: $${fanSpend.postsSumm}`}
+                    >
+                      Lifetime: ${fanSpend.totalSumm}
+                    </span>
+                  )}
                   <div className="flex items-center gap-3 ml-auto text-slate-400">
                     <button
                       onClick={() => setMessageSearch((v) => (v === null ? "" : null))}
@@ -1686,8 +1740,16 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 const list = fanLists.find((l) => l.id === selectedListId);
                 return (
                   <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">{list?.name || "Fans"}</span>
-                    <button onClick={() => setListsModalOpen(false)} className="text-slate-400 hover:text-[#E2C48A]"><CloseIcon size={16} /></button>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A] truncate">{list?.name || "Fans"}</span>
+                      {list && list.type === "custom" && (
+                        <>
+                          <button onClick={() => renameList(list.id, list.name)} title="Liste umbenennen" className="text-slate-400 hover:text-[#E2C48A] flex-shrink-0">✏️</button>
+                          <button onClick={() => clearList(list.id)} title="Liste leeren (alle Mitglieder entfernen)" className="text-[10px] font-bold uppercase text-slate-400 hover:text-red-400 flex-shrink-0">leeren</button>
+                        </>
+                      )}
+                    </div>
+                    <button onClick={() => setListsModalOpen(false)} className="text-slate-400 hover:text-[#E2C48A] flex-shrink-0"><CloseIcon size={16} /></button>
                   </div>
                 );
               })()}

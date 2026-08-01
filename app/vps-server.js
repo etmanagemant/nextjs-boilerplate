@@ -1413,7 +1413,7 @@ async function applyScriptVaultButton(page, userId, role, modelId, applyOnCurren
       // one first (baked in for a DIFFERENT earlier viewer, if any) so
       // this always ends up wired to whoever is asking right now.
       await page
-        .evaluate(() => document.getElementById('__etm_script_vault_btn__')?.remove())
+        .evaluate(() => { const el = document.getElementById('__etm_script_vault_btn__'); if (el) el.remove(); })
         .catch(() => {});
       await page.evaluate(script).catch(() => {});
     }
@@ -1991,7 +1991,7 @@ const MAIN_VIEWER_IDLE_MS = 20 * 60 * 1000; // matches CHATTER_SLOT_IDLE_MS
 function resolveViewerSlot(userId, modelId) {
   const key = `${userId}:${modelId}`;
   const session = modelSessions[modelId];
-  if (session?.mainViewer?.key === key) {
+  if (session && session.mainViewer && session.mainViewer.key === key) {
     // Keeps the claim alive from ordinary use of the session (sending a
     // message, polling current-fan, etc.), not just from re-opening the
     // view - otherwise a quiet-but-still-open tab could lose its claim to
@@ -2339,7 +2339,7 @@ async function getLoginState(page) {
   }
 
   const isLoggedIn =
-    !!sessCookie?.value && !pageUrl.includes('/login') && !pageUrl.includes('return_to=') && !hasPasswordField;
+    !!(sessCookie && sessCookie.value) && !pageUrl.includes('/login') && !pageUrl.includes('return_to=') && !hasPasswordField;
 
   return { isLoggedIn, cookieCount: cookies.length, pageUrl, checkFailed };
 }
@@ -2613,7 +2613,7 @@ async function syncFanLifetimeSpend(modelId, page) {
       body: JSON.stringify({ modelId, fans }),
     });
     const data = await res.json().catch(() => ({}));
-    console.log(`[FAN-SPEND-SYNC] ${modelId}: scraped ${fans.length} fan(s) with a resolvable id, synced ${data.updated ?? '?'}`);
+    console.log(`[FAN-SPEND-SYNC] ${modelId}: scraped ${fans.length} fan(s) with a resolvable id, synced ${data.updated !== undefined && data.updated !== null ? data.updated : '?'}`);
   } catch (e) {
     console.warn(`[FAN-SPEND-SYNC] ${modelId}: failed to post`, e.message);
   }
@@ -3205,6 +3205,70 @@ app.delete('/of-list-membership', async (req, res) => {
   }
 });
 
+// PATCH /of-list-rename { modelId, listId, name } - CONFIRMED LIVE
+// 2026-08-01 via real network capture of OnlyFans' own "Liste umbenennen"
+// dialog: PATCH /lists/{listId} body {"name": "..."}.
+app.patch('/of-list-rename', async (req, res) => {
+  const { modelId, listId, name } = req.body || {};
+  if (!modelId || !listId || typeof name !== 'string') return res.status(400).json({ error: 'Missing modelId, listId, or name' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/lists/${encodeURIComponent(listId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'PATCH', body: { name } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-LIST-RENAME] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /of-list-clear { modelId, listId } - CONFIRMED LIVE 2026-08-01 via
+// real network capture of OnlyFans' own "Liste leeren" action: DELETE
+// /lists/{listId}/users with no fanId and no body - removes every member
+// but keeps the list itself (unlike /of-list-delete, which removes the
+// list entirely).
+app.delete('/of-list-clear', async (req, res) => {
+  const { modelId, listId } = req.body || {};
+  if (!modelId || !listId) return res.status(400).json({ error: 'Missing modelId or listId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/lists/${encodeURIComponent(listId)}/users`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'DELETE' });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-LIST-CLEAR] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-fan-detail?modelId=X&fanId=Y - CONFIRMED LIVE 2026-08-01 via
+// GET /users/u{fanId}: returns listsStates[] (per-list {id,type,name,
+// hasUser,canAddUser} - covers system AND custom lists, verified by
+// adding/removing a real test fan from a real custom list and watching
+// hasUser flip) and subscribedOnData (tipsSumm/subscribesSumm/
+// messagesSumm/postsSumm/streamsSumm/totalSumm - real per-fan lifetime
+// spend breakdown, Task #32). Replaces the earlier "no viable read
+// endpoint found" conclusion for list-membership checkboxes.
+app.get('/of-fan-detail', async (req, res) => {
+  const { modelId, fanId } = req.query;
+  if (!modelId || !fanId) return res.status(400).json({ error: 'Missing modelId or fanId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/users/u${encodeURIComponent(fanId)}`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-FAN-DETAIL] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // DELETE /of-message { modelId, fanId, messageId } - CONFIRMED LIVE
 // 2026-07-31 via the real "Senden rückgängig machen" flow (OnlyFans' own
 // 24h-window delete-own-message feature, Task #56). Body shape
@@ -3505,7 +3569,7 @@ app.get('/vnc-info', (req, res) => {
   // always pass it now that each model has its own display.
   const { modelId } = req.query;
   const session = modelId ? modelSessions[modelId] : null;
-  const wsPath = session?.displaySlot?.wsPath || MODEL_DISPLAY_SLOTS[0].wsPath;
+  const wsPath = (session && session.displaySlot && session.displaySlot.wsPath) || MODEL_DISPLAY_SLOTS[0].wsPath;
   res.json({ status: 'success', password, wsPath });
 });
 
@@ -3522,10 +3586,10 @@ app.post('/chatter-slot', async (req, res) => {
     if (!userId || !modelId) return res.status(400).json({ error: 'Missing userId or modelId' });
 
     const result = await withModelLock(`slot:${userId}:${modelId}`, () => assignSlot(userId, modelId, role, chatterName));
-    res.json({ status: 'success', slotId: result.slotId ?? null, isMain: result.isMain, wsPath: result.wsPath });
+    res.json({ status: 'success', slotId: result.slotId !== undefined ? result.slotId : null, isMain: result.isMain, wsPath: result.wsPath });
   } catch (error) {
     if (error.code === 'NO_MODEL_SESSION') {
-      return res.json({ status: 'no_session', modelId: req.body?.modelId });
+      return res.json({ status: 'no_session', modelId: req.body && req.body.modelId });
     }
     console.error('[CHATTER-SLOT] Error:', error.message);
     res.status(200).json({ status: 'error', error: error.message });
@@ -4331,7 +4395,7 @@ function verifyUploadToken(req, res, next) {
 app.get('/audio-stream', verifyUploadToken, (req, res) => {
   const { modelId } = req.query;
   const session = modelSessions[modelId];
-  const sink = session?.displaySlot?.audioSink;
+  const sink = session && session.displaySlot && session.displaySlot.audioSink;
   // Temporary diagnostic (2026-07-30): confirms whether the browser ever
   // actually reaches this route at all vs. the click/token fetch never
   // firing client-side - remove once the "no audio at all" report is
