@@ -105,7 +105,7 @@ export default function NextShiftsWidget({
   return (
     <div className="w-full max-w-4xl mx-auto">
       {/* REMINDER BOX - PROMINENT */}
-      <div className="mb-6 p-5 bg-gradient-to-r from-[#C9A86A]/15 to-[#9C7A3D]/10 border-2 border-[#C9A86A]/50 rounded-xl shadow-2xl relative overflow-hidden">
+      <div className="mb-6 p-5 bg-gradient-to-r from-[#C9A86A]/15 to-[#9C7A3D]/10 border-2 border-[#C9A86A]/50 rounded-2xl shadow-2xl relative overflow-hidden">
         {/* Animated background effect - subtle gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#C9A86A]/5 via-transparent to-[#9C7A3D]/5 opacity-50 pointer-events-none"></div>
         
@@ -121,7 +121,7 @@ export default function NextShiftsWidget({
       </div>
 
       {/* SHIFTS WIDGET */}
-      <div className="mb-6 p-6 bg-gradient-to-br from-[#C9A86A]/8 to-[#8B7500]/5 border-2 border-[#C9A86A]/30 rounded-xl shadow-lg backdrop-blur-sm">
+      <div className="mb-6 p-6 bg-gradient-to-br from-[#C9A86A]/8 to-[#8B7500]/5 border-2 border-[#C9A86A]/30 rounded-2xl shadow-lg backdrop-blur-xl">
         <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#C9A86A]/20">
           <h2 className="text-xl font-black text-[#C9A86A] uppercase tracking-widest">
             📅 Deine nächsten 2 Schichten
