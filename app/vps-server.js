@@ -3504,10 +3504,17 @@ app.get('/of-stats', async (req, res) => {
   const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
   try {
+    // Bugfix 2026-08-05: fmt() truncated to midnight (00:00:00) for BOTH
+    // start and end - endDate landed at midnight of TODAY, silently
+    // excluding every massmessage sent later today. CONFIRMED LIVE: the
+    // exact same request with endDate one day later (tomorrow's
+    // midnight) returned today's messages that were missing before.
+    // endExclusive = tomorrow's midnight covers all of today.
     const end = new Date();
+    const endExclusive = new Date(end.getTime() + 86400000);
     const start = new Date(end.getTime() - 30 * 86400000);
     const fmt = (d) => d.toISOString().slice(0, 10) + ' 00:00:00';
-    const range = `startDate=${encodeURIComponent(fmt(start))}&endDate=${encodeURIComponent(fmt(end))}`;
+    const range = `startDate=${encodeURIComponent(fmt(start))}&endDate=${encodeURIComponent(fmt(endExclusive))}`;
     const [overview, top] = await Promise.all([
       callOnlyFansApi(session.page, `https://onlyfans.com/api2/v2/users/me/stats/overview?${range}&by=messages`),
       callOnlyFansApi(session.page, `https://onlyfans.com/api2/v2/users/me/stats/top/message?${range}`),
@@ -3614,10 +3621,13 @@ app.get('/of-massmessage-list', async (req, res) => {
   const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
   try {
+    // Bugfix 2026-08-05: same midnight-truncation bug as /of-stats - see
+    // its comment. endExclusive (tomorrow's midnight) covers all of today.
     const end = new Date();
+    const endExclusive = new Date(end.getTime() + 86400000);
     const start = new Date(end.getTime() - 30 * 86400000);
     const fmt = (d) => d.toISOString().slice(0, 10) + ' 00:00:00';
-    const url = `https://onlyfans.com/api2/v2/users/me/stats/messages/group?startDate=${encodeURIComponent(fmt(start))}&endDate=${encodeURIComponent(fmt(end))}&limit=20`;
+    const url = `https://onlyfans.com/api2/v2/users/me/stats/messages/group?startDate=${encodeURIComponent(fmt(start))}&endDate=${encodeURIComponent(fmt(endExclusive))}&limit=20`;
     const result = await callOnlyFansApi(session.page, url);
     if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
     res.json({ status: 'success', data: result.json });
