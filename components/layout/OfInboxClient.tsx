@@ -110,6 +110,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   // echten OnlyFans) - dieser Flag entscheidet, in welchen State ein
   // Klick auf ein Medium landet.
   const [vaultAttachTarget, setVaultAttachTarget] = useState<"chat" | "massmessage">("chat");
+  // Task: neben PAID (isPurchased) auch SENT markieren - Medien die dem
+  // gerade offenen Fan schon geschickt wurden, egal ob kostenlos oder
+  // noch nicht gekauft. userPurchaseCheck allein sagt nur "gekauft ja/
+  // nein", nicht "überhaupt geschickt" - dafür wird die Chat-Galerie des
+  // Fans (echte gesendete Medien) mit den Tresor-Medien-IDs abgeglichen.
+  const [vaultSentIds, setVaultSentIds] = useState<Set<number>>(new Set());
   const [panelLoading, setPanelLoading] = useState(false);
   const [panelError, setPanelError] = useState("");
   const [vaultLists, setVaultLists] = useState<any[]>([]);
@@ -186,6 +192,24 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     }
   }
 
+  async function loadVaultSentIds(fanId: number) {
+    if (!modelId) return;
+    const ids = new Set<number>();
+    try {
+      // Bis zu 5 Seiten (100 Nachrichten) - reicht für die allermeisten
+      // Fälle, ohne bei sehr langen Chats endlos weiterzublättern.
+      for (let offset = 0; offset < 100; offset += 20) {
+        const res = await fetch(`/api/crm/of-inbox/chat-gallery?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}&offset=${offset}`);
+        const data = await res.json();
+        const messages = Array.isArray(data.data) ? data.data : data.data?.list || [];
+        if (messages.length === 0) break;
+        messages.forEach((msg: any) => (msg.media || []).forEach((med: any) => { if (med.id != null) ids.add(med.id); }));
+        if (messages.length < 20) break;
+      }
+    } catch {}
+    setVaultSentIds(ids);
+  }
+
   async function openVaultModal(mode: "view" | "attach", target: "chat" | "massmessage" = "chat") {
     if (vaultModalMode === mode) { setVaultModalMode(null); return; }
     setVaultModalMode(mode);
@@ -203,6 +227,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
       // sind Werte aus dem AKTUELLEN Aufruf, nicht die gerade erst per
       // setState angestoßenen (die wären in diesem Tick noch alt).
       const purchaseCheckFanId = mode === "attach" && target === "chat" ? activeFanId : null;
+      if (purchaseCheckFanId) loadVaultSentIds(purchaseCheckFanId); else setVaultSentIds(new Set());
       // Task #58: die zwei Requests liefen vorher nacheinander, jetzt
       // parallel - spürbar schnelleres erstes Laden.
       const [listsRes] = await Promise.all([
@@ -607,6 +632,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [messagesHasMore, setMessagesHasMore] = useState(true);
   const [messagesLoadingMore, setMessagesLoadingMore] = useState(false);
   const messagesOffsetRef = useRef(0);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const MESSAGES_PAGE_SIZE = 20;
 
   const loadMessages = useCallback(async (fanId: number, opts: { more?: boolean } = {}) => {
@@ -631,6 +657,19 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
       // internal order flipped before being stitched onto the FRONT of
       // the already-oldest-first array.
       setMessages((prev) => (opts.more ? [...list.slice().reverse(), ...prev] : list.slice().reverse()));
+      if (!opts.more) {
+        // Bugfix: ein frisch geöffneter Chat blieb einfach bei
+        // scrollTop=0 stehen (Browser scrollt neuen Content nie von
+        // selbst) - zeigte damit den ÄLTESTEN Teil der zuletzt geladenen
+        // Seite zuerst statt der wirklich letzten Nachrichten, wirkte wie
+        // "mitten in der Konversation reingeworfen". Nach dem ersten
+        // Laden explizit ans Ende scrollen; requestAnimationFrame wartet
+        // auf den tatsächlichen DOM-Commit der neuen Nachrichten.
+        requestAnimationFrame(() => {
+          const el = messagesContainerRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      }
     } catch (e: any) {
       setSendError(e.message || "Fehler beim Laden der Nachrichten");
     } finally {
@@ -1685,7 +1724,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     />
                   </div>
                 )}
-                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide p-4 space-y-2" onScroll={handleMessagesScroll}>
+                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-hide p-4 space-y-2" onScroll={handleMessagesScroll}>
                   {messagesLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}
                   {messagesLoadingMore && <div className="text-xs text-slate-500 italic text-center">Lade ältere…</div>}
                   {(() => {
@@ -2044,11 +2083,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full h-full object-cover rounded" alt="" />
                             )}
                             {m.type === "video" && <span className="absolute bottom-1 right-1 text-[8px] font-bold bg-black/70 text-white px-1 rounded">▶</span>}
-                            {m.isPurchased && (
+                            {m.isPurchased ? (
                               <span className="absolute inset-0 flex items-center justify-center">
                                 <span className="text-[10px] font-black bg-[#C9A86A] text-black px-2 py-0.5 rounded shadow-lg">PAID</span>
                               </span>
-                            )}
+                            ) : vaultSentIds.has(m.id) ? (
+                              <span className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-[10px] font-black bg-slate-600 text-white px-2 py-0.5 rounded shadow-lg">SENT</span>
+                              </span>
+                            ) : null}
                             {selected && <span className="absolute top-1 right-1 bg-[#C9A86A] rounded-full p-0.5"><CheckIcon size={10} /></span>}
                           </button>
                         </div>
