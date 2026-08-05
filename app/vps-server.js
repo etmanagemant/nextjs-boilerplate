@@ -4546,6 +4546,97 @@ async function handleUploadToVaultFan(req, res) {
   delete pendingUploadBatches[key];
 
   try {
+    // Task #45 fast path - CONFIRMED LIVE 2026-08-01 via real network
+    // capture + repeated live testing: OnlyFans dedupes vault media by
+    // content hash, so a file that was ever uploaded before (very common
+    // for Upload Vault in practice - the same evergreen promo content
+    // typically gets resent to many different fans) can be sent via pure
+    // signed API with zero VNC/clicking at all. GET-only hash checks are
+    // side-effect-free, so always safe to try first regardless of
+    // vaultFanId/vaultFanLabel.
+    //
+    // A genuinely brand-new file's registration is NOT confirmed working
+    // this way despite extensive live testing (hash lookup, signed
+    // upload, S3 PUT via both Node's fetch AND the real page's own
+    // browser fetch, polling up to 2 minutes) - it never resolves, and no
+    // hidden "register this upload" call was found in a real network
+    // capture either. Rather than guess further or ship a broken fast
+    // path for new content, any file whose hash doesn't already match
+    // falls through to the original, proven click-based automation below
+    // for the WHOLE batch - slower, but correct.
+    let mediaIds = [];
+    let allAlreadyInVault = vaultFanId ? true : false;
+    if (vaultFanId) {
+      for (const filePath of filePaths) {
+        const fileBuffer = await fs.readFile(filePath);
+        const hash = crypto.createHash('md5').update(fileBuffer).digest('hex');
+        const hashResult = await callOnlyFansApi(page, `https://onlyfans.com/api2/v2/vault/media/hash?h=${hash}&size=${fileBuffer.length}`);
+        if (hashResult.ok && hashResult.json && hashResult.json.id && hashResult.json.isReady) {
+          mediaIds.push(hashResult.json.id);
+        } else {
+          allAlreadyInVault = false;
+          break;
+        }
+      }
+    }
+
+    if (allAlreadyInVault && mediaIds.length === filePaths.length) {
+      // CONFIRMED LIVE 2026-08-01 (real network capture, Task #45): exact
+      // body shape OnlyFans' own frontend sends for a priced vault-media
+      // message - mirrored field-for-field rather than trimmed down, in
+      // case any of the empty arrays/false flags matter server-side for a
+      // case this session's tests didn't happen to exercise.
+      const sendResult = await callOnlyFansApi(page, `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(vaultFanId)}/messages`, {
+        method: 'POST',
+        body: {
+          text: '',
+          lockedText: false,
+          mediaFiles: mediaIds,
+          price: price ? Number(price) : 0,
+          previews: [],
+          rfTag: [],
+          rfGuest: [],
+          rfPartner: [],
+          isForward: false,
+        },
+      });
+      if (sendResult.ok) {
+        console.log(`[UPLOAD-TO-VAULT-FAN] Fast API path: sent ${mediaIds.length} already-in-vault file(s) to fan ${vaultFanId}.`);
+
+        // "Gesendet von Upload Vault" attribution (unchanged behavior, see
+        // 2026-07-31 comment history) - sourced from the send response's
+        // own real media CDN keys instead of scraping a DOM bubble, since
+        // nothing was clicked/rendered to scrape on this path.
+        try {
+          const media = (sendResult.json && sendResult.json.media) || [];
+          const mediaKeys = media
+            .map((m) => {
+              const url = m && m.files && ((m.files.thumb && m.files.thumb.url) || (m.files.full && m.files.full.url));
+              return url ? String(url).split('?')[0] : null;
+            })
+            .filter(Boolean);
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+          if (appUrl) {
+            for (const mediaKey of mediaKeys) {
+              await fetch(`${appUrl}/api/crm/log-sent-message`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelId, fanId: vaultFanId, chatterName: 'Upload Vault', mediaKey }),
+              }).catch(() => {});
+            }
+          }
+        } catch (e) {
+          console.warn('[UPLOAD-TO-VAULT-FAN] Sent-by logging failed (non-fatal):', e.message);
+        }
+
+        return res.json({ status: 'success', sentCount: filePaths.length });
+      }
+      console.warn(`[UPLOAD-TO-VAULT-FAN] Fast API send failed (HTTP ${sendResult.status}), falling back to click automation.`);
+    }
+
+    // Fallback: original click-based automation (Task #45's pure-API path
+    // only covers content already present in the Vault - see comment
+    // above). Unchanged from before this rewrite.
     let opened;
     if (vaultFanId) {
       // Confirmed-unique target: the exact chat URL captured when the
@@ -4722,20 +4813,6 @@ async function handleUploadToVaultFan(req, res) {
     // wasn't, is exactly the failure mode this guards against. OnlyFans
     // resets the compose box (attachments + price badge cleared) once a
     // send actually completes - polling for that is the proxy used here.
-    // CONFIRMED LIVE (twice now): this proxy itself is correct - the
-    // price input really does disappear from the DOM once a send truly
-    // completes (checked live moments after a "failed" report and found
-    // zero price inputs present, matching a fully reset compose box) -
-    // but it can take longer than expected, especially from a phone:
-    // real camera photos are typically several MB each versus the much
-    // smaller test images used earlier, and OnlyFans has to actually
-    // receive/process all of that before resetting. A first fix (scaling
-    // up to 60s) still wasn't enough for an 11-file phone batch. Given
-    // the real risk here isn't slowness but a chatter panic-retrying a
-    // send that actually already went out (billing the fan twice for the
-    // same content), correctness matters far more than how long this
-    // takes - much larger budget, and the error message itself now says
-    // not to blindly resend.
     const sendConfirmed = await page
       .waitForFunction(
         () => {
@@ -4748,10 +4825,6 @@ async function handleUploadToVaultFan(req, res) {
       .then(() => true)
       .catch(() => false);
     if (!sendConfirmed) {
-      // Diagnostic snapshot at the exact moment we gave up - this is the
-      // one thing missing last time (this whole path logged nothing at
-      // all), which is why the previous two fixes were guesses instead
-      // of based on real evidence.
       const domSnapshot = await page
         .evaluate(() => {
           var priceInput = document.querySelector('input[autocomplete="price-input"]');
@@ -4775,15 +4848,8 @@ async function handleUploadToVaultFan(req, res) {
     }
     console.log(`[UPLOAD-TO-VAULT-FAN] Send confirmed after ${Date.now() - clickedAt}ms for ${filePaths.length} file(s).`);
 
-    // "Gesendet von Upload Vault" - CHANGED 2026-07-31 per explicit ask:
-    // previously only logged the real chatterName, and only when a chatter
-    // (not the model herself) drove the send - the model's own uploads
-    // logged nothing at all, so those messages showed no attribution.
-    // Now always a fixed "Upload Vault" label regardless of who queued it
-    // (model or chatter) - the point is marking "this went out via the
-    // automated bulk-send tool", not who specifically triggered it.
-    // Best-effort: a logging failure must never affect the actual send
-    // result, which already succeeded by this point.
+    // "Gesendet von Upload Vault" - fixed label regardless of who queued
+    // it (model or chatter), see 2026-07-31 comment history.
     if (vaultFanId) {
       try {
         const mediaKeys = await page.evaluate((count) => {
