@@ -885,13 +885,18 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setScriptPanelOpen(false);
   }
 
-  function toggleAttachMedia(m: any) {
+  // Bugfix: useCallback statt einer plain function - AttachedMediaPreview
+  // ist memo()-isiert, bekam über onRemove aber jede Render eine NEUE
+  // Funktionsreferenz (plain function = neue Identität jedes Mal), womit
+  // memo's Shallow-Vergleich immer fehlschlug und trotzdem neu gerendert
+  // hat - der gemeldete Flacker-Fix hat deshalb nichts gebracht.
+  const toggleAttachMedia = useCallback((m: any) => {
     if (vaultAttachTarget === "massmessage") {
       setMmMedia((prev) => (prev.some((x) => x.id === m.id) ? prev.filter((x) => x.id !== m.id) : [...prev, m]));
       return;
     }
     setAttachedMedia((prev) => (prev.some((x) => x.id === m.id) ? prev.filter((x) => x.id !== m.id) : [...prev, m]));
-  }
+  }, [vaultAttachTarget]);
 
   function openVaultForMassmessage() {
     openVaultModal("attach", "massmessage");
