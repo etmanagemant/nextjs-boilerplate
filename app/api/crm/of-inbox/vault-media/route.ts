@@ -25,9 +25,10 @@ export async function GET(req: NextRequest) {
     const modelId = searchParams.get("modelId");
     const offset = searchParams.get("offset") || "";
     const listId = searchParams.get("listId") || "";
+    const userPurchaseCheck = searchParams.get("userPurchaseCheck") || "";
     if (!modelId) return NextResponse.json({ error: "Missing modelId" }, { status: 400 });
 
-    const vpsRes = await vpsFetch(`/of-vault-media?modelId=${encodeURIComponent(modelId)}${offset ? `&offset=${encodeURIComponent(offset)}` : ""}${listId ? `&listId=${encodeURIComponent(listId)}` : ""}`);
+    const vpsRes = await vpsFetch(`/of-vault-media?modelId=${encodeURIComponent(modelId)}${offset ? `&offset=${encodeURIComponent(offset)}` : ""}${listId ? `&listId=${encodeURIComponent(listId)}` : ""}${userPurchaseCheck ? `&userPurchaseCheck=${encodeURIComponent(userPurchaseCheck)}` : ""}`);
     const data = await vpsRes.json();
     if (!vpsRes.ok) return NextResponse.json({ error: data.error || "VPS error" }, { status: vpsRes.status });
     return NextResponse.json(data);

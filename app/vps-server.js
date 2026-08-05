@@ -3452,12 +3452,18 @@ app.get('/of-vault-lists', async (req, res) => {
 // GET /of-vault-media?modelId=X&offset=0&listId=Y - Tresor-Medien, optional
 // nach Ordner gefiltert (Task #50).
 app.get('/of-vault-media', async (req, res) => {
-  const { modelId, offset, listId } = req.query;
+  const { modelId, offset, listId, userPurchaseCheck } = req.query;
   if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
   const session = await ensureModelSessionForApi(modelId);
   if (!session) return res.status(404).json({ error: 'No active session for this model' });
   try {
-    const url = `https://onlyfans.com/api2/v2/vault/media?limit=40&offset=${Number(offset) || 0}&field=recent&sort=desc&list=${listId ? encodeURIComponent(listId) : 'all'}`;
+    // userPurchaseCheck (optional, a fan's numeric id) - CONFIRMED LIVE
+    // 2026-07-31 (Task #50): marks which vault items that specific fan has
+    // already bought/unlocked, so the Tresor-Popup can show a PAID badge
+    // when opened from that fan's own chat compose (avoids re-selling the
+    // same PPV to someone who already has it).
+    let url = `https://onlyfans.com/api2/v2/vault/media?limit=40&offset=${Number(offset) || 0}&field=recent&sort=desc&list=${listId ? encodeURIComponent(listId) : 'all'}`;
+    if (userPurchaseCheck) url += `&userPurchaseCheck=${encodeURIComponent(userPurchaseCheck)}`;
     const result = await callOnlyFansApi(session.page, url);
     if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
     res.json({ status: 'success', data: result.json });

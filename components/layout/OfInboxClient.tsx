@@ -157,7 +157,13 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   async function loadVaultMedia(listId: string | null, opts: { more?: boolean } = {}) {
     if (!modelId) return;
     const offset = opts.more ? vaultMediaOffsetRef.current : 0;
-    const res = await fetch(`/api/crm/of-inbox/vault-media?modelId=${encodeURIComponent(modelId)}&offset=${offset}${listId ? `&listId=${encodeURIComponent(listId)}` : ""}`);
+    // CONFIRMED LIVE 2026-08-05: userPurchaseCheck={fanId} marks which
+    // Tresor-Medien dieser Fan schon gekauft hat (isPurchased je Item) -
+    // nur sinnvoll wenn der Tresor aus EINEM bestimmten Fan-Chat heraus
+    // geöffnet wird (Anhängen-Button im Tippfeld), nicht bei der
+    // allgemeinen Tresor-Ansicht oder der Massmessage (kein einzelner Fan).
+    const purchaseCheck = vaultModalMode === "attach" && vaultAttachTarget === "chat" && activeFanId ? `&userPurchaseCheck=${activeFanId}` : "";
+    const res = await fetch(`/api/crm/of-inbox/vault-media?modelId=${encodeURIComponent(modelId)}&offset=${offset}${listId ? `&listId=${encodeURIComponent(listId)}` : ""}${purchaseCheck}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
     const list = data.data?.list || [];
@@ -1595,7 +1601,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                             )}
                             {m.type === "video" && <span className="absolute bottom-0.5 left-0.5 text-[8px] font-bold bg-black/70 text-white px-1 rounded">▶</span>}
                             {isPaid && (
-                              <span className="absolute bottom-0.5 right-0.5 text-[8px] font-bold bg-[#C9A86A] text-black px-1 rounded">PAID</span>
+                              <span className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-xs font-black bg-[#C9A86A] text-black px-2.5 py-1 rounded shadow-lg">PAID</span>
+                              </span>
                             )}
                           </button>
                         );
@@ -1969,6 +1977,11 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full h-full object-cover rounded" alt="" />
                             )}
                             {m.type === "video" && <span className="absolute bottom-1 right-1 text-[8px] font-bold bg-black/70 text-white px-1 rounded">▶</span>}
+                            {m.isPurchased && (
+                              <span className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-[10px] font-black bg-[#C9A86A] text-black px-2 py-0.5 rounded shadow-lg">PAID</span>
+                              </span>
+                            )}
                             {selected && <span className="absolute top-1 right-1 bg-[#C9A86A] rounded-full p-0.5"><CheckIcon size={10} /></span>}
                           </button>
                         </div>
