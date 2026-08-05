@@ -1341,8 +1341,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 <BellIcon size={30} />
               </button>
               {notifPanelOpen && (
-                <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30" onScroll={handleNotifScroll}>
-                  <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between sticky top-0 bg-[#0A0A0A]">
+                <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto scrollbar-hide bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30" onScroll={handleNotifScroll}>
+                  <div className="p-3 border-b border-white/10 flex items-center justify-between sticky top-0 bg-[#0A0A0A]">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Benachrichtigungen</span>
                     <button onClick={() => loadNotifications()} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
                   </div>
@@ -1376,7 +1376,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                       ? notifications.filter((n) => notifCategory(n.type) === notifCategoryFilter)
                       : notifications;
                     return (
-                      <div className="divide-y divide-[#9C7A3D]/10">
+                      <div className="divide-y divide-white/5">
                           {filtered.map((n) => (
                             <div key={n.id} className={`p-3 flex gap-2 ${!n.isRead ? "bg-[#C9A86A]/5" : ""}`}>
                               <span className="flex-shrink-0 mt-0.5">{notifIcon(n.type)}</span>
@@ -1432,8 +1432,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 <SearchIcon size={26} />
               </button>
               {fanSearchOpen && (
-                <div className="absolute top-full left-0 mt-2 w-72 bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 overflow-hidden">
-                  <div className="p-2 border-b border-[#9C7A3D]/20">
+                <div className="absolute top-full left-0 mt-2 w-72 bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30 overflow-hidden">
+                  <div className="p-2 border-b border-white/10">
                     <input
                       autoFocus
                       value={fanSearchQuery}
@@ -1477,15 +1477,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     <Icon size={30} />
                   </button>
                   {activePanel === key && (
-                    <div className="absolute top-full left-0 mt-2 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 w-96 max-h-[500px]">
-                      <div className="p-3 border-b border-[#9C7A3D]/20 sticky top-0 bg-[#0A0A0A]">
+                    <div className="absolute top-full left-0 mt-2 overflow-y-auto scrollbar-hide bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30 w-96 max-h-[500px]">
+                      <div className="p-3 border-b border-white/10 sticky top-0 bg-[#0A0A0A]">
                         <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">{label}</span>
                       </div>
                       {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
                       {panelError && <div className="p-3 text-xs text-red-400">{panelError}</div>}
 
                       {key === "schedules" && !panelLoading && (
-                        <div className="divide-y divide-[#9C7A3D]/10">
+                        <div className="divide-y divide-white/5">
                           {schedules.map((s: any, i: number) => (
                             <div key={s.id ?? i} className="p-3 text-xs text-slate-300">
                               {stripHtmlPreview(s.post?.text || s.text || "") || s.type || "Geplanter Beitrag"}
@@ -1513,8 +1513,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             ))}
           </div>
 
-          <div className="w-[380px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl flex flex-col h-full">
-            <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between relative">
+          <div className="w-[380px] flex-shrink-0 border border-white/10 rounded-2xl flex flex-col h-full">
+            <div className="p-3 border-b border-white/10 flex items-center justify-between relative">
               <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Chats</span>
               <div className="flex items-center gap-3 text-[#C9A86A]">
                 {isAdmin && (
@@ -1531,8 +1531,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   overflow-hidden mehr auf dem äußeren Panel, das hat das
                   Popup vorher sichtbar abgeschnitten). */}
               {activePanel === "stats" && (
-                <div className="absolute top-full right-3 mt-2 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 w-96 max-h-[500px]">
-                  <div className="p-3 border-b border-[#9C7A3D]/20 sticky top-0 bg-[#0A0A0A]">
+                <div className="absolute top-full right-3 mt-2 overflow-y-auto scrollbar-hide bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30 w-96 max-h-[500px]">
+                  <div className="p-3 border-b border-white/10 sticky top-0 bg-[#0A0A0A]">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Statistik</span>
                   </div>
                   {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
@@ -1578,7 +1578,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                         {massmessageList.length === 0 && (
                           <div className="px-3 pb-3 text-xs text-slate-500">Keine Massennachrichten (30 Tage)</div>
                         )}
-                        <div className="divide-y divide-[#9C7A3D]/10">
+                        <div className="divide-y divide-white/5">
                           {massmessageList.map((m: any) => (
                             <div key={m.id} className="px-3 py-2">
                               <div className="flex items-center justify-between gap-2">
@@ -1613,7 +1613,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             </div>
             {chatsLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
             {chatsError && <div className="p-3 text-xs text-red-400">{chatsError}</div>}
-            <div className="divide-y divide-[#9C7A3D]/10 flex-1 min-h-0 overflow-y-auto scrollbar-hide" onScroll={handleChatListScroll}>
+            <div className="divide-y divide-white/5 flex-1 min-h-0 overflow-y-auto scrollbar-hide" onScroll={handleChatListScroll}>
               {chats.map((c) => (
                 <button
                   key={c.withUser.id}
@@ -1643,12 +1643,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             </div>
           </div>
 
-          <div className="flex-1 min-w-0 border border-[#9C7A3D]/20 rounded-xl flex flex-col">
+          <div className="flex-1 min-w-0 border border-white/10 rounded-2xl flex flex-col">
             {!activeFanId ? (
               <div className="flex-1 flex items-center justify-center text-sm text-slate-500">Chat auswählen</div>
             ) : (
               <>
-                <div className="p-4 border-b border-[#9C7A3D]/20 flex items-center gap-3">
+                <div className="p-4 border-b border-white/10 flex items-center gap-3">
                   <button onClick={() => setActiveFanId(null)} title="Zurück zur Chat-Liste" className="text-slate-400 hover:text-[#E2C48A] mr-1">
                     <ArrowLeftIcon size={20} />
                   </button>
@@ -1686,7 +1686,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                         <StarIcon size={18} />
                       </button>
                       {listsPanelOpen && (
-                        <div className="absolute top-full right-0 mt-2 w-56 bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 overflow-hidden">
+                        <div className="absolute top-full right-0 mt-2 w-56 bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30 overflow-hidden">
                           {availableLists.length === 0 && (
                             <div className="p-3 text-xs text-slate-500">Keine Listen</div>
                           )}
@@ -1719,12 +1719,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                         <PinIcon size={18} />
                       </button>
                       {pinnedPanelOpen && (
-                        <div className="absolute top-full right-0 mt-2 w-72 max-h-72 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
+                        <div className="absolute top-full right-0 mt-2 w-72 max-h-72 overflow-y-auto scrollbar-hide bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30">
                           {pinnedLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
                           {!pinnedLoading && pinnedMessages.length === 0 && (
                             <div className="p-3 text-xs text-slate-500">Keine angehefteten Nachrichten</div>
                           )}
-                          <div className="divide-y divide-[#9C7A3D]/10">
+                          <div className="divide-y divide-white/5">
                             {pinnedMessages.map((m: any, i: number) => (
                               <div key={m.id ?? i} className="p-2.5 text-xs text-slate-300">{stripHtmlPreview(m.text || "")}</div>
                             ))}
@@ -1742,7 +1742,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   </div>
                 </div>
                 {galleryOpen && (
-                  <div className="p-3 border-b border-[#9C7A3D]/20 bg-black/20 max-h-56 overflow-y-auto scrollbar-hide">
+                  <div className="p-3 border-b border-white/10 bg-black/20 max-h-56 overflow-y-auto scrollbar-hide">
                     {galleryLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}
                     {!galleryLoading && galleryMedia.length === 0 && (
                       <div className="text-xs text-slate-500">Noch nichts in dieser Konversation gesendet</div>
@@ -1772,7 +1772,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   </div>
                 )}
                 {messageSearch !== null && (
-                  <div className="px-3 py-2 border-b border-[#9C7A3D]/20 bg-black/20">
+                  <div className="px-3 py-2 border-b border-white/10 bg-black/20">
                     <input
                       autoFocus
                       value={messageSearch}
@@ -1845,7 +1845,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               )}
                             </div>
                           )}
-                          <div className={`max-w-[70%] rounded-xl px-4 py-2.5 text-base ${isOwn ? "bg-[#C9A86A]/20 text-white" : "bg-black/30 text-slate-200"}`}>
+                          <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-base backdrop-blur-sm ${isOwn ? "bg-[#C9A86A]/15 border border-[#C9A86A]/20 text-white" : "bg-white/[0.04] border border-white/5 text-slate-200"}`}>
                             {isPinned && <div className="flex items-center gap-1 text-[10px] text-[#C9A86A] mb-1"><PinIcon size={11} /> Angeheftet</div>}
                             {/* CONFIRMED LIVE 2026-07-31: price/canPurchase sind
                                 echte Felder - eine noch nicht freigeschaltete
@@ -1902,7 +1902,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   });
                   })()}
                 </div>
-                <div className="p-3 border-t border-[#9C7A3D]/20">
+                <div className="p-3 border-t border-white/10">
                   {sendError && <div className="text-xs text-red-400 mb-2">{sendError}</div>}
                   {attachedMedia.length > 0 && (
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -1922,8 +1922,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                         <ScriptIcon size={20} />
                       </button>
                       {scriptPanelOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 w-72 max-h-72 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30">
-                          <div className="p-2.5 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+                        <div className="absolute bottom-full left-0 mb-2 w-72 max-h-72 overflow-y-auto scrollbar-hide bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30">
+                          <div className="p-2.5 border-b border-white/10 flex items-center justify-between">
                             <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Script Vault</span>
                             <button onClick={loadScripts} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
                           </div>
@@ -1935,7 +1935,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               <div className="text-[9px] text-slate-600 mt-1 select-all">modelId: {modelId}</div>
                             </div>
                           )}
-                          <div className="divide-y divide-[#9C7A3D]/10">
+                          <div className="divide-y divide-white/5">
                             {scripts.map((s) => {
                               const mediaCount = (s.steps || []).flatMap((st: any) => st.media_refs || []).length;
                               const price = (s.steps || []).find((st: any) => st.price)?.price;
@@ -1985,7 +1985,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             // comment) - reverted to the plain DB value rather than keep
             // code reading a field that's always undefined.
             return (
-              <div className="w-80 flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden h-full">
+              <div className="w-80 flex-shrink-0 border border-white/10 rounded-2xl overflow-hidden h-full">
                 <FanCrmPanel
                   modelId={modelId}
                   fanId={String(activeFanId)}
@@ -2040,10 +2040,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
         // liegen, sonst geht der Tresor sichtbar dahinter auf (genau der
         // gemeldete Bug).
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={() => setVaultModalMode(null)}>
-          <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
             {/* Linke Spalte: Ordner, wie im echten OnlyFans-Popup. */}
-            <div className="w-56 flex-shrink-0 border-r border-[#9C7A3D]/20 flex flex-col overflow-hidden">
-              <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+            <div className="w-56 flex-shrink-0 border-r border-white/10 flex flex-col overflow-hidden">
+              <div className="p-3 border-b border-white/10 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Tresor</span>
                 <SearchIcon size={14} />
               </div>
@@ -2073,7 +2073,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             </div>
             {/* Rechte Spalte: Medien, nach Typ gefiltert + nach Datum gruppiert. */}
             <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+              <div className="p-3 border-b border-white/10 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Alle Medien</span>
                 <button onClick={() => setVaultModalMode(null)} className="text-slate-400 hover:text-[#E2C48A]"><CloseIcon size={16} /></button>
               </div>
@@ -2144,7 +2144,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 })()}
                 {vaultMediaLoadingMore && <div className="text-xs text-slate-500 italic text-center mt-2">Lade weitere…</div>}
               </div>
-              <div className="p-3 border-t border-[#9C7A3D]/20 flex justify-end">
+              <div className="p-3 border-t border-white/10 flex justify-end">
                 <button onClick={() => setVaultModalMode(null)} className="px-4 py-1.5 rounded text-xs font-bold uppercase bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black hover:from-[#E5C158]">
                   Schließen
                 </button>
@@ -2156,9 +2156,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
 
       {listsModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setListsModalOpen(false)}>
-          <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="w-56 flex-shrink-0 border-r border-[#9C7A3D]/20 flex flex-col overflow-hidden">
-              <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+          <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="w-56 flex-shrink-0 border-r border-white/10 flex flex-col overflow-hidden">
+              <div className="p-3 border-b border-white/10 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Listen</span>
                 <div className="flex items-center gap-2.5">
                   <button onClick={createList} title="Neue Liste erstellen" className="text-slate-400 hover:text-[#E2C48A] font-bold text-sm leading-none">+</button>
@@ -2191,7 +2191,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
               {(() => {
                 const list = fanLists.find((l) => l.id === selectedListId);
                 return (
-                  <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+                  <div className="p-3 border-b border-white/10 flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A] truncate">{list?.name || "Fans"}</span>
                       {list && list.type === "custom" && (
@@ -2233,9 +2233,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
 
       {mmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setMmOpen(false)}>
-          <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="w-64 flex-shrink-0 border-r border-[#9C7A3D]/20 flex flex-col overflow-hidden">
-              <div className="p-3 border-b border-[#9C7A3D]/20">
+          <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="w-64 flex-shrink-0 border-r border-white/10 flex flex-col overflow-hidden">
+              <div className="p-3 border-b border-white/10">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Ausschließen</span>
                 <div className="text-[10px] text-slate-500 mt-0.5">Basis: alle Fans. Ausgewählte Listen werden ausgeschlossen.</div>
               </div>
@@ -2257,7 +2257,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
               </div>
             </div>
             <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+              <div className="p-3 border-b border-white/10 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">
                   Massmessage {mmRecipientCount !== null ? `· ${mmRecipientCount} Empfänger` : ""}
                 </span>
@@ -2299,7 +2299,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   />
                 )}
               </div>
-              <div className="p-3 border-t border-[#9C7A3D]/20 flex items-center justify-between">
+              <div className="p-3 border-t border-white/10 flex items-center justify-between">
                 <button onClick={openVaultForMassmessage} className="text-slate-400 hover:text-[#E2C48A]" title="Aus dem Tresor anhängen">
                   <ImageIcon size={20} />
                 </button>
