@@ -28,14 +28,14 @@ export default async function BuchhaltungPage() {
   const assignments = shiftsRes.data || [];
   const revenues = revenueRes.data || [];
   return (
-    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
-      <div className="mb-6 border-b border-[#9C7A3D]/20 pb-4">
+    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-2xl my-6 border border-white/5 shadow-2xl">
+      <div className="mb-6 border-b border-white/5 pb-4">
         <h1 className="text-2xl font-black tracking-wide bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase">FINANZ-BUCHHALTUNG</h1>
         <p className="text-xs text-slate-400 mt-1">Hier verwaltest du deine Agenturdaten und ziehst alle Abrechnungen gesammelt ab.</p>
       </div>
 
       {/* 1. SEKTION: Optionale Agentur-Stammdaten einstellen */}
-      <section className="bg-black/40 border border-[#9C7A3D]/10 p-4 rounded-xl mb-8">
+      <section className="bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-xl shadow-black/20 p-4 rounded-2xl mb-8">
         <h2 className="text-xs font-bold text-[#C9A86A] mb-3 uppercase tracking-wider">Agentur-Stammdaten hinterlegen (Optional)</h2>
         <form action={updateAgencySettings} className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
           <input type="text" name="agency_name" defaultValue={agency.agency_name} placeholder="Agentur Name" className="bg-[#050505] border border-[#9C7A3D]/30 rounded p-2 text-white outline-none" />
@@ -59,9 +59,9 @@ export default async function BuchhaltungPage() {
             const rev = userRevenues.reduce((sum, r) => sum + Number(r.gross_amount || 0), 0);
 
             return (
-              <div key={chatter.user_id} className="bg-black/30 border border-[#9C7A3D]/20 rounded-xl p-4 flex flex-col justify-between hover:border-[#C9A86A]/40 transition">
+              <div key={chatter.user_id} className="bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-lg shadow-black/20 rounded-2xl p-4 flex flex-col justify-between hover:border-[#C9A86A]/40 transition-colors duration-300">
                 <div>
-                  <div className="flex justify-between items-center border-b border-[#9C7A3D]/10 pb-2 mb-2">
+                  <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-2">
                     <span className="text-sm font-bold text-white tracking-wide">{chatter.full_name || "Mitarbeiter"}</span>
                     <span className="text-[10px] text-slate-500 font-mono">{chatter.email}</span>
                   </div>
@@ -69,7 +69,7 @@ export default async function BuchhaltungPage() {
                     <div>Stunden: <span className="text-white font-bold">{hrs.toFixed(2)} h</span></div>
                     <div>Live-Umsatz: <span className="text-emerald-400 font-bold">${rev.toFixed(2)}</span></div>
                   </div>
-                  <div className="text-[11px] text-slate-400 border-t border-[#9C7A3D]/5 pt-2 mt-2">
+                  <div className="text-[11px] text-slate-400 border-t border-white/5 pt-2 mt-2">
                     <div><span>💳</span> <span className="text-[#C9A86A] font-semibold">Methode:</span> {chatter.zahlungs_methode || "Nicht hinterlegt"}</div>
                     <div className="truncate"><span>🔑</span> <span className="text-[#C9A86A] font-semibold">Details:</span> {chatter.zahlungs_details || "Keine Daten"}</div>
                   </div>

@@ -59,9 +59,9 @@ export default async function ContentPlanPage({
     const posts = selectedModelId ? await getContentPlanPosts(selectedModelId) : [];
 
     return (
-      <main className="p-6 max-w-7xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
+      <main className="p-6 max-w-7xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-2xl my-6 border border-white/5 shadow-2xl">
         {/* HEADER */}
-        <div className="flex justify-between items-center mb-8 border-b border-[#9C7A3D]/20 pb-6 flex-wrap gap-4 pt-4">
+        <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-6 flex-wrap gap-4 pt-4">
           <div>
             <h1 className="text-3xl font-black uppercase tracking-wider">
               <span>📅</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Content-Plan</span>
@@ -81,7 +81,7 @@ export default async function ContentPlanPage({
         </div>
 
         {/* MODEL SELECTOR */}
-        <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 shadow-lg">
+        <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 mb-8">
           <label className="text-xs font-bold text-[#C9A86A] uppercase tracking-wider block mb-3">
             Model auswählen:
           </label>
@@ -122,7 +122,7 @@ export default async function ContentPlanPage({
 
         {/* INFO SECTION */}
         {selectedModelId && (
-          <section className="bg-black/40 border border-[#9C7A3D]/10 p-4 rounded-xl mb-8 text-center shadow-lg">
+          <section className="bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-xl shadow-black/20 p-4 rounded-2xl mb-8 text-center">
             <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">
               Posts für Model
             </div>
@@ -141,7 +141,7 @@ export default async function ContentPlanPage({
             selectedModelId={selectedModelId}
           />
         ) : (
-          <div className="bg-black/40 p-12 rounded-xl border border-[#9C7A3D]/10 text-center">
+          <div className="bg-white/[0.03] backdrop-blur-xl p-12 rounded-2xl border border-white/10 shadow-xl shadow-black/20 text-center">
             <p className="text-slate-400">Bitte wähle ein Model aus der Liste oben.</p>
           </div>
         )}

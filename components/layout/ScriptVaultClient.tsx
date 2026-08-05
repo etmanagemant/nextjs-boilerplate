@@ -254,7 +254,7 @@ export default function ScriptVaultClient({
           )}
 
           {showForm && (
-            <section className="mb-8 bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/20 shadow-lg space-y-4">
+            <section className="mb-8 bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 space-y-4">
               <h2 className="text-lg font-bold text-[#C9A86A] uppercase">
                 {editingScriptId ? "✏️ Script bearbeiten" : "✨ Neues Script"}
               </h2>
@@ -393,7 +393,7 @@ export default function ScriptVaultClient({
 
           <div className="space-y-3">
             {modelScripts.length === 0 ? (
-              <div className="bg-black/40 p-8 rounded-xl border border-[#9C7A3D]/10 text-center text-slate-400 text-sm">
+              <div className="bg-white/[0.03] backdrop-blur-xl p-8 rounded-2xl border border-white/10 shadow-xl shadow-black/20 text-center text-slate-400 text-sm">
                 {connectedModels.length === 0 ? "Kein Model verbunden." : "Noch keine Scripts für dieses Model."}
               </div>
             ) : (
@@ -401,7 +401,7 @@ export default function ScriptVaultClient({
                 const scriptSteps = steps.filter((s) => s.script_id === script.id);
                 const isExpanded = expandedScriptId === script.id;
                 return (
-                  <div key={script.id} className="bg-black/40 rounded-lg border border-[#9C7A3D]/10 overflow-hidden">
+                  <div key={script.id} className="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
                     <div
                       className="flex justify-between items-center p-4 cursor-pointer hover:bg-white/5 transition"
                       onClick={() => setExpandedScriptId(isExpanded ? null : script.id)}

@@ -68,8 +68,8 @@ export default async function ManagementPage() {
     revalidatePath("/management");
   }
   return (
-    <main className="p-6 w-full min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
-      <div className="flex justify-between items-center mb-6 border-b border-[#9C7A3D]/20 pb-4 flex-wrap gap-4">
+    <main className="p-6 w-full min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-2xl my-6 border border-white/5 shadow-2xl">
+      <div className="flex justify-between items-center mb-6 border-b border-white/5 pb-4 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-black bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase tracking-wider">Management Control</h1>
           <p className="text-xs text-slate-400 mt-1">Zentrale Verwaltung der Agentur-Mitarbeiter und Models</p>
@@ -79,18 +79,18 @@ export default async function ManagementPage() {
         </form>
       </div>
 
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 text-center shadow-lg">
+      <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 mb-8 text-center">
         <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Abgeleistete Gesamtstunden (Stechuhr)</div>
         <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-[#C9A86A] mt-2 font-mono tracking-wide">{gesamtStundenAllerUser.toFixed(2)} h</div>
       </section>
 
       {/* MITARBEITER-VERWALTUNG */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 shadow-lg">
+      <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 mb-8">
         <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Mitarbeiter & Rollen modifizieren</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
+              <tr className="border-b border-white/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
                 <th className="p-3">Name</th>
                 <th className="p-3">E-Mail</th>
                 <th className="p-3 w-[140px]">Provision %</th>
@@ -101,7 +101,7 @@ export default async function ManagementPage() {
             </thead>
             <tbody>
               {sichereProfile.map((p) => (
-                <tr key={p.user_id} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
+                <tr key={p.user_id} className="border-b border-white/5 hover:bg-black/20 transition">
                   <td className="p-3">
                     <form action={updateMitarbeiterName} className="flex gap-2">
                       <input type="hidden" name="user_id" value={p.user_id} />
@@ -171,7 +171,7 @@ export default async function ManagementPage() {
           it's most relevant next to. */}
 
       {/* RECHTE-KONTROLLZENTRUM */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 mb-8 shadow-lg">
+      <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 mb-8">
         <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">Rechte-Kontrollzentrum</h2>
         <p className="text-[11px] text-slate-500 mb-4">
           Seiten-Zugriffe und OnlyFans-Funktionen pro Rolle freischalten oder sperren - Admin/Content-Managerin starten hier mit allem angehakt, lassen sich aber genauso umstellen.
@@ -179,7 +179,7 @@ export default async function ManagementPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
+              <tr className="border-b border-white/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
                 <th className="p-3">Funktion</th>
                 {PERMISSION_GRID_ROLES.map((r) => (
                   <th key={r} className="p-3 text-center capitalize">{r}</th>
@@ -188,7 +188,7 @@ export default async function ManagementPage() {
             </thead>
             <tbody>
               {GRANTABLE_FEATURES.map((feature) => (
-                <tr key={feature.key} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
+                <tr key={feature.key} className="border-b border-white/5 hover:bg-black/20 transition">
                   <td className="p-3 text-white">{feature.label}</td>
                   {PERMISSION_GRID_ROLES.map((r) => (
                     <td key={r} className="p-3 text-center">

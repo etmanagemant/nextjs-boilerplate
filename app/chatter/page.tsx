@@ -220,9 +220,9 @@ export default function ChatterPage() {
   const bothVisible = hasModeratorAccess && hasChatterAccess;
 
   return (
-    <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
+    <main className="p-6 max-w-4xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-2xl my-6 border border-white/5 shadow-2xl">
       {/* Header-Zustand */}
-      <div className="flex justify-between items-center border-b border-[#9C7A3D]/20 pb-4 mb-6">
+      <div className="flex justify-between items-center border-b border-white/5 pb-4 mb-6">
         <div>
           <h1 className="text-2xl font-black uppercase tracking-wider">{bothVisible ? <><span>👑</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Dual-Mode Stechuhr</span></> : currentUserRole === "moderator" ? <><span>🎭</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Stripchat Stechuhr</span></> : <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Mitarbeiter Stechuhr</span>}</h1>
           <p className="text-xs text-slate-400 mt-0.5">{bothVisible ? "OnlyFans + Stripchat Stechuhr-Systeme" : currentUserRole === "moderator" ? "Stripchat Sessions & Umsatz-Tracking" : "Schichten erfassen und Live-Mass-Messages kopieren"}</p>
