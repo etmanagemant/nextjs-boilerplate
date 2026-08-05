@@ -119,6 +119,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [vaultMediaHasMore, setVaultMediaHasMore] = useState(true);
   const [vaultMediaLoadingMore, setVaultMediaLoadingMore] = useState(false);
   const vaultMediaOffsetRef = useRef(0);
+  // Ref statt State: openVaultModal setzt vaultModalMode/vaultAttachTarget
+  // und ruft im selben Tick loadVaultMedia auf - React-State ist da noch
+  // nicht aktualisiert (klassischer Stale-Closure-Bug), weshalb der
+  // PAID-Check beim ersten Laden nie griff. Ein Ref ist sofort aktuell,
+  // Pagination/Ordnerwechsel lesen einfach den zuletzt gesetzten Wert.
+  const vaultPurchaseCheckFanIdRef = useRef<number | null>(null);
   const [lightboxMedia, setLightboxMedia] = useState<any | null>(null);
   const [pinnedPanelOpen, setPinnedPanelOpen] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<any[]>([]);
@@ -154,15 +160,14 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
 
   const VAULT_PAGE_SIZE = 40;
 
-  async function loadVaultMedia(listId: string | null, opts: { more?: boolean } = {}) {
+  async function loadVaultMedia(listId: string | null, opts: { more?: boolean; purchaseCheckFanId?: number | null } = {}) {
     if (!modelId) return;
     const offset = opts.more ? vaultMediaOffsetRef.current : 0;
-    // CONFIRMED LIVE 2026-08-05: userPurchaseCheck={fanId} marks which
-    // Tresor-Medien dieser Fan schon gekauft hat (isPurchased je Item) -
-    // nur sinnvoll wenn der Tresor aus EINEM bestimmten Fan-Chat heraus
-    // geöffnet wird (Anhängen-Button im Tippfeld), nicht bei der
-    // allgemeinen Tresor-Ansicht oder der Massmessage (kein einzelner Fan).
-    const purchaseCheck = vaultModalMode === "attach" && vaultAttachTarget === "chat" && activeFanId ? `&userPurchaseCheck=${activeFanId}` : "";
+    // purchaseCheckFanId wird nur bei einem frischen Öffnen (nicht
+    // more/Ordnerwechsel) explizit übergeben - dann im Ref gemerkt, damit
+    // Pagination/Ordnerwechsel denselben Kontext behalten.
+    if (opts.purchaseCheckFanId !== undefined) vaultPurchaseCheckFanIdRef.current = opts.purchaseCheckFanId;
+    const purchaseCheck = vaultPurchaseCheckFanIdRef.current ? `&userPurchaseCheck=${vaultPurchaseCheckFanIdRef.current}` : "";
     const res = await fetch(`/api/crm/of-inbox/vault-media?modelId=${encodeURIComponent(modelId)}&offset=${offset}${listId ? `&listId=${encodeURIComponent(listId)}` : ""}${purchaseCheck}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
@@ -181,9 +186,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     }
   }
 
-  async function openVaultModal(mode: "view" | "attach") {
+  async function openVaultModal(mode: "view" | "attach", target: "chat" | "massmessage" = "chat") {
     if (vaultModalMode === mode) { setVaultModalMode(null); return; }
     setVaultModalMode(mode);
+    setVaultAttachTarget(target);
     setScriptPanelOpen(false);
     if (!modelId) return;
     setPanelLoading(true);
@@ -193,11 +199,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
       setVaultTypeFilter(null);
       vaultMediaOffsetRef.current = 0;
       setVaultMediaHasMore(true);
+      // target/activeFanId hier lesen (nicht in loadVaultMedia) - das
+      // sind Werte aus dem AKTUELLEN Aufruf, nicht die gerade erst per
+      // setState angestoßenen (die wären in diesem Tick noch alt).
+      const purchaseCheckFanId = mode === "attach" && target === "chat" ? activeFanId : null;
       // Task #58: die zwei Requests liefen vorher nacheinander, jetzt
       // parallel - spürbar schnelleres erstes Laden.
       const [listsRes] = await Promise.all([
         fetch(`/api/crm/of-inbox/vault-lists?modelId=${encodeURIComponent(modelId)}`).then((r) => r.json()),
-        loadVaultMedia(null),
+        loadVaultMedia(null, { purchaseCheckFanId }),
       ]);
       if (listsRes.error) throw new Error(listsRes.error);
       setVaultLists(listsRes.data?.list || []);
@@ -769,8 +779,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   }
 
   function openVaultForMassmessage() {
-    setVaultAttachTarget("massmessage");
-    openVaultModal("attach");
+    openVaultModal("attach", "massmessage");
   }
 
   function editNickname(fanId: number) {
@@ -1810,7 +1819,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                         </div>
                       )}
                     </div>
-                    <button onClick={() => { setVaultAttachTarget("chat"); openVaultModal("attach"); }} title="Aus dem Tresor anhängen" className={vaultModalMode === "attach" ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
+                    <button onClick={() => openVaultModal("attach", "chat")} title="Aus dem Tresor anhängen" className={vaultModalMode === "attach" ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
                       <ImageIcon size={20} />
                     </button>
                     <input
@@ -1890,7 +1899,11 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
       )}
 
       {vaultModalMode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setVaultModalMode(null)}>
+        // z-[60]: kann als "Anhängen"-Picker aus einem anderen Overlay
+        // heraus geöffnet werden (Massmessage-Compose) - muss darüber
+        // liegen, sonst geht der Tresor sichtbar dahinter auf (genau der
+        // gemeldete Bug).
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={() => setVaultModalMode(null)}>
           <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
             {/* Linke Spalte: Ordner, wie im echten OnlyFans-Popup. */}
             <div className="w-56 flex-shrink-0 border-r border-[#9C7A3D]/20 flex flex-col overflow-hidden">
