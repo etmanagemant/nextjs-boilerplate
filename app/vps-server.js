@@ -3514,6 +3514,127 @@ app.get('/of-stats', async (req, res) => {
   }
 });
 
+// GET /of-massmessage-recipient-count?modelId=X&listId=fans&excludedLists=following,muted
+// - CONFIRMED LIVE 2026-08-05 via real network capture of OnlyFans' own
+// massmessage compose screen: this is exactly how the live "X Ausgewählt"
+// recipient counter updates as segments get checked/unchecked.
+app.get('/of-massmessage-recipient-count', async (req, res) => {
+  const { modelId, listId, excludedLists } = req.query;
+  if (!modelId || !listId) return res.status(400).json({ error: 'Missing modelId or listId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    let url = `https://onlyfans.com/api2/v2/chats/users?limit=1&offset=0&skip_users=all&total=1&filter[list_id]=${encodeURIComponent(listId)}&field=recent&sort=desc`;
+    if (excludedLists) url += `&filter[excluded_lists]=${encodeURIComponent(excludedLists)}`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: { total: result.json.total ?? 0 } });
+  } catch (error) {
+    console.error(`[OF-MASSMESSAGE-RECIPIENT-COUNT] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /of-massmessage-send { modelId, text, mediaFiles, price, userLists,
+// excludedLists } - CONFIRMED LIVE 2026-08-05 via real network capture +
+// live test send (3 recipients, confirmed delivered). userLists is the
+// base target (OnlyFans' own frontend defaults to ["fans"] = every active
+// fan), excludedLists further removes specific list ids from that base -
+// matches the real "SENDEN AN"/"AUSSCHLIESSEN" tabs exactly.
+app.post('/of-massmessage-send', async (req, res) => {
+  const { modelId, text, mediaFiles, price, userLists, excludedLists } = req.body || {};
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const result = await callOnlyFansApi(session.page, 'https://onlyfans.com/api2/v2/messages/queue', {
+      method: 'POST',
+      body: {
+        text: text || '',
+        lockedText: false,
+        mediaFiles: Array.isArray(mediaFiles) ? mediaFiles : [],
+        price: price ? Number(price) : 0,
+        previews: [],
+        rfTag: [],
+        rfGuest: [],
+        rfPartner: [],
+        isForward: false,
+        filters: {},
+        excludedLists: Array.isArray(excludedLists) ? excludedLists : [],
+        userLists: Array.isArray(userLists) && userLists.length > 0 ? userLists : ['fans'],
+      },
+    });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-MASSMESSAGE-SEND] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-massmessage-list?modelId=X - CONFIRMED LIVE 2026-08-05: the
+// real source behind OnlyFans' own Statistik->Verlobung->Massen-Nachrichten
+// table (date/sent/viewed/price/canUnsend per message, last 30 days).
+app.get('/of-massmessage-list', async (req, res) => {
+  const { modelId } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const end = new Date();
+    const start = new Date(end.getTime() - 30 * 86400000);
+    const fmt = (d) => d.toISOString().slice(0, 10) + ' 00:00:00';
+    const url = `https://onlyfans.com/api2/v2/users/me/stats/messages/group?startDate=${encodeURIComponent(fmt(start))}&endDate=${encodeURIComponent(fmt(end))}&limit=20`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-MASSMESSAGE-LIST] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /of-massmessage-delete { modelId, queueId } - CONFIRMED LIVE
+// 2026-08-05 via a real "Senden rückgängig machen" test (isCanceled:true
+// in the response). Same mechanism whether the message is still sending
+// or already fully delivered, as long as canUnsend is still true.
+app.delete('/of-massmessage-delete', async (req, res) => {
+  const { modelId, queueId } = req.body || {};
+  if (!modelId || !queueId) return res.status(400).json({ error: 'Missing modelId or queueId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const result = await callOnlyFansApi(session.page, `https://onlyfans.com/api2/v2/messages/queue/${encodeURIComponent(queueId)}`, { method: 'DELETE' });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-MASSMESSAGE-DELETE] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-fan-search?modelId=X&query=Y - fan-name search across every
+// chat (the 🔍 in OnlyFans' own Nachrichten header). Reuses the same
+// /chats/users endpoint CONFIRMED LIVE for the massmessage recipient
+// counter above - the `query` param name itself is inferred from
+// OnlyFans' other search endpoints (chat-internal search uses the same
+// name), NOT yet independently live-confirmed for this specific endpoint.
+app.get('/of-fan-search', async (req, res) => {
+  const { modelId, query } = req.query;
+  if (!modelId || !query) return res.status(400).json({ error: 'Missing modelId or query' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/chats/users?limit=20&offset=0&skip_users=all&query=${encodeURIComponent(query)}&field=recent&sort=desc`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-FAN-SEARCH] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /of-schedules?modelId=X&date=YYYY-MM-DD - Content-Plan-Kalender
 // (Task #49, standardmäßig heute).
 app.get('/of-schedules', async (req, res) => {

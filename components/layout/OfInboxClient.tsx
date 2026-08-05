@@ -105,6 +105,11 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   // Compose-Leiste geöffnet. "view" = nur ansehen (Lightbox bei Klick),
   // "attach" = Mehrfachauswahl für eine Nachricht.
   const [vaultModalMode, setVaultModalMode] = useState<null | "view" | "attach">(null);
+  // Task: Tresor-Popup wird sowohl vom Chat-Tippfeld als auch vom
+  // Massmessage-Compose zum Anhängen genutzt (gleiches Popup, wie im
+  // echten OnlyFans) - dieser Flag entscheidet, in welchen State ein
+  // Klick auf ein Medium landet.
+  const [vaultAttachTarget, setVaultAttachTarget] = useState<"chat" | "massmessage">("chat");
   const [panelLoading, setPanelLoading] = useState(false);
   const [panelError, setPanelError] = useState("");
   const [vaultLists, setVaultLists] = useState<any[]>([]);
@@ -125,6 +130,27 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [stats, setStats] = useState<any>(null);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [earnings, setEarnings] = useState<any>(null);
+
+  // Task: Massmessage genau wie im echten OnlyFans (CONFIRMED LIVE
+  // 2026-08-05 via echten Netzwerk-Mitschnitt + echtem Testversand).
+  const [fanSearchOpen, setFanSearchOpen] = useState(false);
+  const [fanSearchQuery, setFanSearchQuery] = useState("");
+  const [fanSearchResults, setFanSearchResults] = useState<any[]>([]);
+  const [fanSearchLoading, setFanSearchLoading] = useState(false);
+
+  const [massmessageList, setMassmessageList] = useState<any[]>([]);
+  const [mmDeletingId, setMmDeletingId] = useState<number | null>(null);
+
+  const [mmOpen, setMmOpen] = useState(false);
+  const [mmLists, setMmLists] = useState<any[]>([]);
+  const [mmExcluded, setMmExcluded] = useState<Set<string>>(new Set());
+  const [mmRecipientCount, setMmRecipientCount] = useState<number | null>(null);
+  const [mmText, setMmText] = useState("");
+  const [mmPrice, setMmPrice] = useState("");
+  const [mmMedia, setMmMedia] = useState<any[]>([]);
+  const [mmSending, setMmSending] = useState(false);
+  const [mmError, setMmError] = useState("");
+  const [mmSentInfo, setMmSentInfo] = useState<string | null>(null);
 
   const VAULT_PAGE_SIZE = 40;
 
@@ -184,10 +210,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setPanelError("");
     try {
       if (panel === "stats") {
-        const res = await fetch(`/api/crm/of-inbox/stats?modelId=${encodeURIComponent(modelId)}`);
+        const [res, mmRes] = await Promise.all([
+          fetch(`/api/crm/of-inbox/stats?modelId=${encodeURIComponent(modelId)}`),
+          fetch(`/api/crm/of-inbox/massmessage-list?modelId=${encodeURIComponent(modelId)}`),
+        ]);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
         setStats(data.data || null);
+        const mmData = await mmRes.json();
+        setMassmessageList(mmRes.ok ? mmData.data?.items || [] : []);
       } else if (panel === "schedules") {
         const res = await fetch(`/api/crm/of-inbox/schedules?modelId=${encodeURIComponent(modelId)}`);
         const data = await res.json();
@@ -203,6 +234,142 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
       setPanelError(e.message || "Fehler beim Laden");
     } finally {
       setPanelLoading(false);
+    }
+  }
+
+  // CONFIRMED LIVE 2026-08-05: /chats/users?query= - der echte 🔍 im
+  // OnlyFans-Nachrichten-Header, sucht Fan-Namen über ALLE Chats (nicht
+  // nur die aktuell geladene Seite der Chatliste).
+  function toggleFanSearch() {
+    setFanSearchOpen((v) => {
+      if (v) { setFanSearchQuery(""); setFanSearchResults([]); }
+      return !v;
+    });
+  }
+
+  useEffect(() => {
+    if (!fanSearchOpen || !modelId || fanSearchQuery.trim().length < 2) {
+      setFanSearchResults([]);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      setFanSearchLoading(true);
+      try {
+        const res = await fetch(`/api/crm/of-inbox/fan-search?modelId=${encodeURIComponent(modelId)}&query=${encodeURIComponent(fanSearchQuery.trim())}`);
+        const data = await res.json();
+        setFanSearchResults(res.ok ? data.data?.list || [] : []);
+      } catch {
+        setFanSearchResults([]);
+      } finally {
+        setFanSearchLoading(false);
+      }
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [fanSearchOpen, fanSearchQuery, modelId]);
+
+  function selectFanSearchResult(fanId: number) {
+    setFanSearchOpen(false);
+    setFanSearchQuery("");
+    setFanSearchResults([]);
+    openChat(fanId);
+  }
+
+  // "Senden rückgängig machen" - CONFIRMED LIVE 2026-08-05.
+  async function deleteMassmessage(queueId: number) {
+    if (!modelId) return;
+    if (!window.confirm("Diese Massennachricht wirklich zurückziehen?")) return;
+    setMmDeletingId(queueId);
+    try {
+      await fetch("/api/crm/of-inbox/massmessage-delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, queueId }),
+      });
+      setMassmessageList((prev) => prev.map((m) => (m.id === queueId ? { ...m, isCanceled: true, canUnsend: false } : m)));
+    } catch {
+    } finally {
+      setMmDeletingId(null);
+    }
+  }
+
+  // Massmessage-Compose - CONFIRMED LIVE 2026-08-05 gegen echtes Testmodel
+  // (echter Versand an 3 Empfänger, bestätigt angekommen). Basis-Zielgruppe
+  // ist immer "Fans" (= alle aktiven Abonnenten, wie im echten OnlyFans-
+  // Standardverhalten), einzelne Listen können davon ausgeschlossen werden -
+  // exakt die "SENDEN AN"/"AUSSCHLIESSEN"-Mechanik aus dem Mitschnitt.
+  async function openMassmessageCompose() {
+    setMmOpen(true);
+    setMmError("");
+    setMmSentInfo(null);
+    setMmText("");
+    setMmPrice("");
+    setMmMedia([]);
+    setMmExcluded(new Set());
+    setMmRecipientCount(null);
+    if (!modelId) return;
+    try {
+      const res = await fetch(`/api/crm/of-inbox/lists?modelId=${encodeURIComponent(modelId)}`);
+      const data = await res.json();
+      const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
+      setMmLists(list.filter((l: any) => l.id !== "fans"));
+    } catch {
+      setMmLists([]);
+    }
+    loadMmRecipientCount(new Set());
+  }
+
+  async function loadMmRecipientCount(excluded: Set<string>) {
+    if (!modelId) return;
+    try {
+      const qs = new URLSearchParams({ modelId, listId: "fans" });
+      if (excluded.size > 0) qs.set("excludedLists", Array.from(excluded).join(","));
+      const res = await fetch(`/api/crm/of-inbox/massmessage-recipient-count?${qs.toString()}`);
+      const data = await res.json();
+      setMmRecipientCount(res.ok ? data.data?.total ?? 0 : null);
+    } catch {
+      setMmRecipientCount(null);
+    }
+  }
+
+  function toggleMmExcluded(listId: string) {
+    setMmExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(listId)) next.delete(listId); else next.add(listId);
+      loadMmRecipientCount(next);
+      return next;
+    });
+  }
+
+  async function sendMassmessage() {
+    if (!modelId) return;
+    const hasText = !!mmText.trim();
+    const hasMedia = mmMedia.length > 0;
+    if (!hasText && !hasMedia) return;
+    setMmSending(true);
+    setMmError("");
+    try {
+      const res = await fetch("/api/crm/of-inbox/massmessage-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelId,
+          text: mmText.trim(),
+          mediaFiles: hasMedia ? mmMedia.map((m) => m.id) : [],
+          price: hasMedia && mmPrice ? Number(mmPrice) : undefined,
+          userLists: ["fans"],
+          excludedLists: Array.from(mmExcluded),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Senden fehlgeschlagen");
+      setMmSentInfo(`Gesendet an ${mmRecipientCount ?? "?"} Empfänger`);
+      setMmText("");
+      setMmPrice("");
+      setMmMedia([]);
+    } catch (e: any) {
+      setMmError(e.message || "Senden fehlgeschlagen");
+    } finally {
+      setMmSending(false);
     }
   }
 
@@ -588,7 +755,16 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   }
 
   function toggleAttachMedia(m: any) {
+    if (vaultAttachTarget === "massmessage") {
+      setMmMedia((prev) => (prev.some((x) => x.id === m.id) ? prev.filter((x) => x.id !== m.id) : [...prev, m]));
+      return;
+    }
     setAttachedMedia((prev) => (prev.some((x) => x.id === m.id) ? prev.filter((x) => x.id !== m.id) : [...prev, m]));
+  }
+
+  function openVaultForMassmessage() {
+    setVaultAttachTarget("massmessage");
+    openVaultModal("attach");
   }
 
   function editNickname(fanId: number) {
@@ -1106,6 +1282,44 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 <ImageIcon size={30} />
               </button>
             </div>
+            <div className="relative">
+              <button
+                onClick={toggleFanSearch}
+                title="Fan suchen"
+                className={`hover:scale-110 transition ${fanSearchOpen ? "scale-110 text-[#C9A86A]" : ""}`}
+              >
+                <SearchIcon size={26} />
+              </button>
+              {fanSearchOpen && (
+                <div className="absolute top-full left-0 mt-2 w-72 bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 overflow-hidden">
+                  <div className="p-2 border-b border-[#9C7A3D]/20">
+                    <input
+                      autoFocus
+                      value={fanSearchQuery}
+                      onChange={(e) => setFanSearchQuery(e.target.value)}
+                      placeholder="Fan-Namen suchen…"
+                      className="w-full bg-[#050505] border border-[#9C7A3D]/30 rounded px-3 py-1.5 text-sm text-white outline-none focus:border-[#C9A86A]"
+                    />
+                  </div>
+                  <div className="max-h-72 overflow-y-auto scrollbar-hide">
+                    {fanSearchLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
+                    {!fanSearchLoading && fanSearchQuery.trim().length >= 2 && fanSearchResults.length === 0 && (
+                      <div className="p-3 text-xs text-slate-500">Keine Treffer</div>
+                    )}
+                    {fanSearchResults.map((u: any) => (
+                      <button
+                        key={u.id}
+                        onClick={() => selectFanSearchResult(u.id)}
+                        className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-[#C9A86A]/10"
+                      >
+                        <Avatar fanId={u.id} size={28} />
+                        <span className="text-sm text-white truncate">{displayName(u.id)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             {(isAdmin
               ? [
                   { Icon: CalendarIcon, key: "schedules" as const, label: "Kalender" },
@@ -1154,6 +1368,43 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               ))}
                             </div>
                           )}
+                          {/* CONFIRMED LIVE 2026-08-05: gleiche Tabelle wie
+                              echtes OnlyFans Statistiken->Verlobung->
+                              Massen-Nachrichten, inkl. "Rückgängig machen"
+                              (DELETE /messages/queue/{id}, live getestet). */}
+                          <div className="border-t border-[#9C7A3D]/10">
+                            <div className="p-3 text-[10px] text-slate-500 uppercase">Letzte Massennachrichten</div>
+                            {massmessageList.length === 0 && (
+                              <div className="px-3 pb-3 text-xs text-slate-500">Keine Massennachrichten (30 Tage)</div>
+                            )}
+                            <div className="divide-y divide-[#9C7A3D]/10">
+                              {massmessageList.map((m: any) => (
+                                <div key={m.id} className="px-3 py-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs text-slate-300 truncate">{stripHtmlPreview(m.text || "") || "(Medien)"}</span>
+                                    <span className="text-[10px] text-slate-500 flex-shrink-0">{m.date ? new Date(m.date).toLocaleDateString("de-DE") : ""}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between mt-1">
+                                    <span className="text-[10px] text-slate-500">
+                                      Gesendet: {m.sentCount ?? 0} · Betrachtet: {m.viewedCount ?? 0}
+                                      {typeof m.price === "number" && m.price > 0 && <> · ${m.price}</>}
+                                    </span>
+                                    {m.isCanceled ? (
+                                      <span className="text-[10px] text-red-400">Zurückgezogen</span>
+                                    ) : m.canUnsend ? (
+                                      <button
+                                        onClick={() => deleteMassmessage(m.id)}
+                                        disabled={mmDeletingId === m.id}
+                                        className="text-[10px] font-bold uppercase text-slate-400 hover:text-red-400"
+                                      >
+                                        {mmDeletingId === m.id ? "…" : "Rückgängig"}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </>
                       )}
 
@@ -1184,6 +1435,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   )}
                 </div>
             ))}
+            {isAdmin && (
+              <button onClick={openMassmessageCompose} title="Massmessage erstellen" className="hover:scale-110 transition text-2xl leading-none font-bold">+</button>
+            )}
           </div>
 
           <div className="w-[380px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden flex flex-col h-full">
@@ -1548,7 +1802,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                         </div>
                       )}
                     </div>
-                    <button onClick={() => openVaultModal("attach")} title="Aus dem Tresor anhängen" className={vaultModalMode === "attach" ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
+                    <button onClick={() => { setVaultAttachTarget("chat"); openVaultModal("attach"); }} title="Aus dem Tresor anhängen" className={vaultModalMode === "attach" ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
                       <ImageIcon size={20} />
                     </button>
                     <input
@@ -1698,7 +1952,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     const showHeader = dateKey && dateKey !== lastDateKey;
                     lastDateKey = dateKey;
                     const label = !d ? "" : dateKey === today ? "Heute" : dateKey === yesterday ? "Gestern" : d.toLocaleDateString("de-DE", { day: "numeric", month: "long" });
-                    const selected = attachedMedia.some((x) => x.id === m.id);
+                    const selected = (vaultAttachTarget === "massmessage" ? mmMedia : attachedMedia).some((x) => x.id === m.id);
                     const url = m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url;
                     return (
                       <Fragment key={m.id}>
@@ -1805,6 +2059,91 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     </div>
                   );
                 })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setMmOpen(false)}>
+          <div className="w-full max-w-4xl h-[80vh] bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="w-64 flex-shrink-0 border-r border-[#9C7A3D]/20 flex flex-col overflow-hidden">
+              <div className="p-3 border-b border-[#9C7A3D]/20">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Ausschließen</span>
+                <div className="text-[10px] text-slate-500 mt-0.5">Basis: alle Fans. Ausgewählte Listen werden ausgeschlossen.</div>
+              </div>
+              <div className="flex-1 overflow-y-auto scrollbar-hide">
+                {mmLists.length === 0 && <div className="p-3 text-xs text-slate-500">Keine Listen</div>}
+                {mmLists.map((l: any) => (
+                  <button
+                    key={l.id}
+                    onClick={() => toggleMmExcluded(l.id)}
+                    className={`w-full text-left px-3 py-2.5 flex items-center justify-between ${mmExcluded.has(l.id) ? "bg-red-500/10 text-red-300" : "text-slate-300 hover:bg-[#C9A86A]/10"}`}
+                  >
+                    <span className="min-w-0">
+                      <div className="text-xs font-bold truncate">{l.name}</div>
+                      <div className="text-[10px] text-slate-500">{l.usersCount ?? 0} Fans</div>
+                    </span>
+                    {mmExcluded.has(l.id) && <CloseIcon size={12} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">
+                  Massmessage {mmRecipientCount !== null ? `· ${mmRecipientCount} Empfänger` : ""}
+                </span>
+                <button onClick={() => setMmOpen(false)} className="text-slate-400 hover:text-[#E2C48A]"><CloseIcon size={16} /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto scrollbar-hide p-3">
+                {mmSentInfo && <div className="text-sm text-[#C9A86A] font-bold mb-3">{mmSentInfo}</div>}
+                {mmError && <div className="text-sm text-red-400 mb-3">{mmError}</div>}
+                {mmMedia.length > 0 && (
+                  <div className="grid grid-cols-4 gap-1.5 mb-3">
+                    {mmMedia.map((m: any) => (
+                      <div key={m.id} className="relative">
+                        {m.type === "audio" || !(m.files?.thumb?.url) ? (
+                          <div className="w-full aspect-square rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={16} /></div>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(m.files.thumb.url)}`} className="w-full aspect-square object-cover rounded" alt="" />
+                        )}
+                        <button onClick={() => setMmMedia((prev) => prev.filter((x) => x.id !== m.id))} className="absolute -top-1 -right-1 bg-black/80 rounded-full text-white">
+                          <CloseIcon size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <textarea
+                  value={mmText}
+                  onChange={(e) => setMmText(e.target.value)}
+                  placeholder="Nachricht an alle Fans…"
+                  rows={6}
+                  className="w-full bg-[#050505] border border-[#9C7A3D]/30 rounded px-3 py-2 text-sm text-white outline-none focus:border-[#C9A86A] resize-none"
+                />
+                {mmMedia.length > 0 && (
+                  <input
+                    value={mmPrice}
+                    onChange={(e) => setMmPrice(e.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder="Preis (optional, $)"
+                    className="mt-2 w-40 bg-[#050505] border border-[#9C7A3D]/30 rounded px-3 py-1.5 text-sm text-white outline-none focus:border-[#C9A86A]"
+                  />
+                )}
+              </div>
+              <div className="p-3 border-t border-[#9C7A3D]/20 flex items-center justify-between">
+                <button onClick={openVaultForMassmessage} className="text-slate-400 hover:text-[#E2C48A]" title="Aus dem Tresor anhängen">
+                  <ImageIcon size={20} />
+                </button>
+                <button
+                  onClick={sendMassmessage}
+                  disabled={mmSending || (!mmText.trim() && mmMedia.length === 0)}
+                  className="px-5 py-2 rounded-lg text-sm font-bold uppercase tracking-wider bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black hover:from-[#E5C158] disabled:opacity-50"
+                >
+                  {mmSending ? "Sende…" : "Senden"}
+                </button>
               </div>
             </div>
           </div>
