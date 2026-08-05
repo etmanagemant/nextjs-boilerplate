@@ -655,7 +655,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
         const raw = data.userDetails;
         const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
         arr.forEach((u: any) => {
-          if (u && u.id != null) userDetailsMap[String(u.id)] = { name: u.name || u.displayName, username: u.username, avatar: u.avatar || null, subscribedByData: u.subscribedByData || undefined };
+          if (u && u.id != null) userDetailsMap[String(u.id)] = { name: u.displayName || u.name, username: u.username, avatar: u.avatar || null, subscribedByData: u.subscribedByData || undefined };
         });
         setUserDetails((prev) => ({ ...prev, ...userDetailsMap }));
 
@@ -1178,7 +1178,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
       const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
       const map: Record<string, UserDetail> = {};
       arr.forEach((u: any) => {
-        if (u && u.id != null) map[String(u.id)] = { name: u.name || u.displayName, username: u.username, avatar: u.avatar || null };
+        if (u && u.id != null) map[String(u.id)] = { name: u.displayName || u.name, username: u.username, avatar: u.avatar || null };
       });
       setUserDetails((prev) => ({ ...prev, ...map }));
     } catch {
@@ -1255,9 +1255,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
 
   function displayName(fanId: number): string {
     const u = userDetails[String(fanId)];
-    // u.name IS the real OnlyFans display/custom name (editable via the
-    // rename modal, Task #43 - PUT /subscriptions/{fanId}) - prefer it over
-    // the @username (often just an auto-generated "u12345678").
+    // Bugfix (real production report, 2026-08-05): u.name is the fan's OWN
+    // immutable OnlyFans name, NOT the custom nickname set via the rename
+    // modal (Task #43 - PUT /subscriptions/{fanId} {displayName}) - that
+    // one's u.displayName. Renaming a fan visibly never stuck because the
+    // mapping sites below preferred u.name (present) over u.displayName,
+    // so the real (unchanged) name always won - CONFIRMED live: a fan
+    // already renamed earlier this session still showed users/list?cl[]=
+    // returning both name:"TobEL" (original) AND displayName:"Vault/Tresor"
+    // (the actual rename), proving which field really updates.
     return u?.name || u?.username || `Fan #${fanId}`;
   }
 
