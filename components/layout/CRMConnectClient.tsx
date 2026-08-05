@@ -202,7 +202,7 @@ export default function CRMConnectClient({
         <div className="max-w-7xl mx-auto min-h-screen">
       {/* Hero Section */}
       <div className="mb-12">
-        <div className="flex items-center justify-between mb-6 pb-6 border-b border-[#9C7A3D]/20 flex-wrap gap-4">
+        <div className="flex items-center justify-between mb-6 pb-6 border-b border-white/5 flex-wrap gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-black uppercase tracking-wider flex items-center gap-2">
               <span>🔗</span>
@@ -226,7 +226,7 @@ export default function CRMConnectClient({
 
       {/* Creator Overview Grid */}
       <section className="mb-12">
-        <div className="mb-6 pb-4 border-b border-[#9C7A3D]/20">
+        <div className="mb-6 pb-4 border-b border-white/5">
           <h2 className="text-xl font-bold text-[#C9A86A] uppercase tracking-wider">
             👥 Creator Connection Grid
           </h2>
@@ -247,7 +247,7 @@ export default function CRMConnectClient({
                 return (
                   <div
                     key={model.id}
-                    className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 hover:border-[#C9A86A]/30 transition hover:shadow-lg hover:shadow-[#C9A86A]/20 group"
+                    className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 hover:shadow-[#C9A86A]/20 group"
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div>
@@ -368,7 +368,7 @@ export default function CRMConnectClient({
 
       {/* Models (Schichtplanung) - moved here from the Management page,
           alongside the model connection status it's most relevant next to. */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg">
+      <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20">
         <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">Models (Schichtplanung)</h2>
         <p className="text-[11px] text-slate-500 mb-4">
           Alle Models der Agentur, plattformübergreifend - sobald eins OnlyFans-verbunden ist, erscheint es zusätzlich oben im Connection Grid.

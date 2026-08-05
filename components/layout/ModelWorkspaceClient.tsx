@@ -75,7 +75,7 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
   if (!model) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-black/40 border border-[#9C7A3D]/20 rounded-xl p-8 text-center">
+        <div className="max-w-md w-full bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-xl shadow-black/20 rounded-2xl p-8 text-center">
           <div className="text-3xl mb-3">⏳</div>
           <h1 className="text-lg font-black uppercase tracking-wider text-[#E2C48A] mb-2">
             Dir wurde noch kein Model zugewiesen
@@ -230,7 +230,7 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
         </div>
 
         {/* Segmented tab switcher - one bucket visible at a time */}
-        <div className="flex gap-2 p-1 bg-black/40 rounded-xl border border-[#9C7A3D]/20">
+        <div className="flex gap-2 p-1 bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/10">
           <button
             onClick={() => setActiveTab("reddit")}
             className={`flex-1 min-h-[44px] rounded-lg text-xs font-bold uppercase tracking-wider transition ${
@@ -251,7 +251,7 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
 
         {/* Reddit */}
         {activeTab === "reddit" && (
-          <section className="bg-black/40 p-4 sm:p-6 rounded-2xl border border-[#9C7A3D]/20">
+          <section className="bg-white/[0.03] backdrop-blur-xl p-4 sm:p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20">
             <p className="text-xs text-slate-500 mb-4">Landet automatisch in deinem Content Plan.</p>
 
             <label
@@ -292,7 +292,7 @@ export default function ModelWorkspaceClient({ model, vaultFanLabel, vaultFanId,
 
         {/* OnlyFans */}
         {activeTab === "onlyfans" && (
-          <section className="bg-black/40 p-4 sm:p-6 rounded-2xl border border-[#9C7A3D]/20">
+          <section className="bg-white/[0.03] backdrop-blur-xl p-4 sm:p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20">
             <p className="text-xs text-slate-500 mb-4">Landet automatisch in deinem OnlyFans-Tresor.</p>
 
             {!canSendOf ? (

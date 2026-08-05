@@ -102,7 +102,7 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
   return (
     <div className="w-[98%] mx-auto mt-4 text-[#E2C48A]">
       {/* Kopfzeile im edlen Gold-Look */}
-      <div className="flex items-center justify-between gap-4 mb-6 bg-[#0A0A0A] p-4 rounded-xl border border-[#9C7A3D]/20 shadow-lg">
+      <div className="flex items-center justify-between gap-4 mb-6 bg-white/[0.03] backdrop-blur-xl p-4 rounded-2xl border border-white/10 shadow-xl shadow-black/20">
         <div>
           <h1 className="text-2xl font-black tracking-wide bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase">Schichtplan</h1>
           <div className="mt-1 text-sm text-[#C9A86A]/80 font-mono font-semibold">{weekLabel}</div>
@@ -114,7 +114,7 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
         </div>
       </div>
 
-      <div className="rounded-xl border border-[#9C7A3D]/20 bg-[#0A0A0A]/60 p-6 shadow-2xl backdrop-blur-md">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 shadow-2xl backdrop-blur-xl">
         <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
           {days.map((d) => {
             const dateKey = formatDateISO(d);
@@ -147,11 +147,11 @@ export default function WeeklyCalendar({ sichereShifts, modelsListe, role, userE
             }
 
             return (
-              <div key={dateKey} className={`rounded-xl p-4 border transition-all flex flex-col justify-between min-h-[480px] ${
-                isToday ? "border-[#C9A86A] bg-[#C9A86A]/5 shadow-lg shadow-[#C9A86A]/5" : "border-[#9C7A3D]/20 bg-black/40"
+              <div key={dateKey} className={`rounded-2xl p-4 border backdrop-blur-xl transition-all flex flex-col justify-between min-h-[480px] ${
+                isToday ? "border-[#C9A86A] bg-[#C9A86A]/5 shadow-lg shadow-[#C9A86A]/5" : "border-white/10 bg-white/[0.03]"
               }`}>
                 <div>
-                  <div className="flex items-center justify-between border-b border-[#9C7A3D]/10 pb-2 mb-3">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
                     <span className="text-xs font-bold uppercase tracking-widest text-[#C9A86A]/70">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
                     <span className={`text-base font-mono font-bold px-2 py-0.5 rounded-md ${isToday ? "bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black" : "text-[#E2C48A]"}`}>{d.toLocaleDateString(undefined, { day: "2-digit" })}</span>
                   </div>

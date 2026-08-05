@@ -55,7 +55,7 @@ export default async function CalendarPage() {
           auf der alten Seite: gleiche Rechte wie Admin, aber weiterhin
           nicht für Chatter/Moderator sichtbar. */}
       {isAdminTierRole(role) && (
-        <section className="w-[98%] mx-auto mt-6 bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/20 shadow-lg">
+        <section className="w-[98%] mx-auto mt-6 bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20">
           <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Neue Schicht zuteilen & planen</h2>
           <CreateShiftForm sichereProfile={profiles || []} sichereModels={models || []} />
         </section>

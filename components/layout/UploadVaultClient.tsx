@@ -204,7 +204,7 @@ export default function UploadVaultClient({
           )}
 
           {activeModelId && (
-            <section className="mb-6 bg-black/40 p-4 rounded-xl border border-[#9C7A3D]/20 space-y-4">
+            <section className="mb-6 bg-white/[0.03] backdrop-blur-xl p-4 rounded-2xl border border-white/10 shadow-xl shadow-black/20 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-2 uppercase">
                   Vault-Fan für dieses Model
