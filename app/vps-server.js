@@ -4093,6 +4093,11 @@ app.post('/insert-script-step', async (req, res) => {
       // one waitForFunction: same wait for OnlyFans to render the popup,
       // but one round trip instead of two - the focus/clear happens the
       // instant the input exists rather than as a second, later step.
+      // Bugfix (real production report, 2026-08-05): 3s was too short for
+      // a video (needs processing time before the price popup's input
+      // exists at all) - same fix as /upload-to-vault-fan's identical
+      // check, bumped to a flat generous wait since this path handles one
+      // attachment at a time (no batch size to scale by).
       const priceFocused = await page
         .waitForFunction(
           () => {
@@ -4103,7 +4108,7 @@ app.post('/insert-script-step', async (req, res) => {
             input.dispatchEvent(new Event('input', { bubbles: true }));
             return true;
           },
-          { timeout: 3000 }
+          { timeout: 20000 }
         )
         .then(() => true)
         .catch(() => false);
@@ -4955,6 +4960,13 @@ async function handleUploadToVaultFan(req, res) {
         var toggle = document.querySelector('[at-attr="price_btn"]');
         if (toggle) toggle.click();
       });
+      // Bugfix (real production report, 2026-08-05): a flat 3s wait was
+      // fine for photos but not videos - OnlyFans needs real time to
+      // process/transcode a video before the price popup's input even
+      // exists, so every video in a batch failed with "Preisfeld nicht
+      // gefunden" while photos in the exact same flow worked fine. Scaled
+      // by batch size, same reasoning as the existing attach-button-ready
+      // wait a few lines up.
       const priceFocused = await page
         .waitForFunction(
           () => {
@@ -4965,7 +4977,7 @@ async function handleUploadToVaultFan(req, res) {
             input.dispatchEvent(new Event('input', { bubbles: true }));
             return true;
           },
-          { timeout: 3000 }
+          { timeout: Math.min(60000, 8000 + filePaths.length * 4000) }
         )
         .then(() => true)
         .catch(() => false);
