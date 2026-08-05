@@ -47,7 +47,7 @@ function NavLink({ href, label, Icon, active }: { href: string; label: string; I
       }`}
     >
       <span className={`flex-shrink-0 transition-transform duration-200 ${active ? "" : "group-hover:scale-110"}`}>
-        <Icon size={18} />
+        <Icon size={22} />
       </span>
       <span>{label}</span>
     </Link>

@@ -97,6 +97,41 @@ const AttachedMediaPreview = memo(function AttachedMediaPreview({ media, onRemov
   );
 });
 
+// Bugfix (real root cause of the reported "video flackert beim Tippen"):
+// this used to be a function DECLARED INSIDE OfInboxClient's own render
+// body - a fresh function/component identity every render, which made
+// React treat it as a genuinely different component type at that JSX
+// position on every keystroke (draft state change re-renders the whole
+// tree) and fully UNMOUNT+REMOUNT the <video>/<audio> element each time,
+// not just re-render it - that's what a video visibly restarting/
+// flashing on every letter actually was. Module scope keeps its identity
+// stable regardless of what triggers a parent re-render. Task #44's
+// media-proxy comment (CDN urls IP-locked to the VPS, not the browser)
+// still applies unchanged.
+function MessageMedia({ media }: { media?: MediaItem[] }) {
+  if (!media || media.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2 mb-2">
+      {media.map((m, i) => {
+        const url = m.files?.full?.url || m.files?.preview?.url;
+        if (!url) return null;
+        const proxied = `/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`;
+        if (m.type === "photo" || m.type === "gif") {
+          // eslint-disable-next-line @next/next/no-img-element
+          return <img key={i} src={proxied} alt="" className="max-w-full rounded-lg max-h-80 object-contain" />;
+        }
+        if (m.type === "video") {
+          return <video key={i} src={proxied} controls className="max-w-full rounded-lg max-h-80" />;
+        }
+        if (m.type === "audio") {
+          return <audio key={i} src={proxied} controls className="max-w-full" />;
+        }
+        return null;
+      })}
+    </div>
+  );
+}
+
 export default function OfInboxClient({ connectedModels, isAdmin, chatterId, userEmail = "", allShifts = [] }: { connectedModels: ConnectedModel[]; isAdmin: boolean; chatterId: string; userEmail?: string; allShifts?: Shift[] }) {
   const searchParams = useSearchParams();
   const modelFromUrl = searchParams.get("model");
@@ -1254,35 +1289,6 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
         <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-gradient-to-b from-[#E5C158] to-[#9C7A3D] text-black font-extrabold text-[9px] leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap shadow">
           {label}
         </span>
-      </div>
-    );
-  }
-
-  // Task #44: OnlyFans' signed CDN urls are IP-locked to the VPS that
-  // requested them, not the CRM user's browser - a raw <img src> 403'd
-  // (most visibly for video, since a blocked byte-range request leaves
-  // just the player chrome with no content). Routed through our own
-  // media-proxy, which re-fetches from the VPS's IP and streams it.
-  function MessageMedia({ media }: { media?: MediaItem[] }) {
-    if (!media || media.length === 0) return null;
-    return (
-      <div className="flex flex-col gap-2 mb-2">
-        {media.map((m, i) => {
-          const url = m.files?.full?.url || m.files?.preview?.url;
-          if (!url) return null;
-          const proxied = `/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`;
-          if (m.type === "photo" || m.type === "gif") {
-            // eslint-disable-next-line @next/next/no-img-element
-            return <img key={i} src={proxied} alt="" className="max-w-full rounded-lg max-h-80 object-contain" />;
-          }
-          if (m.type === "video") {
-            return <video key={i} src={proxied} controls className="max-w-full rounded-lg max-h-80" />;
-          }
-          if (m.type === "audio") {
-            return <audio key={i} src={proxied} controls className="max-w-full" />;
-          }
-          return null;
-        })}
       </div>
     );
   }
