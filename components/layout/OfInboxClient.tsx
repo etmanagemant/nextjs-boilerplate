@@ -50,6 +50,11 @@ type Message = {
 
 type UserDetail = {
   name?: string;
+  // Der Fan's eigener, unveränderlicher OnlyFans-Name (u.name aus der
+  // API) - getrennt von name (das nach dem Umbenennen-Fix jetzt der
+  // Custom-Nickname ist, falls gesetzt), damit displayName() beides
+  // anzeigen kann: "Custom-Name (Echter Name)".
+  realName?: string;
   username?: string;
   avatar?: string | null;
   // Real OnlyFans subscription dates (from the same users/list batch call
@@ -655,7 +660,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
         const raw = data.userDetails;
         const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
         arr.forEach((u: any) => {
-          if (u && u.id != null) userDetailsMap[String(u.id)] = { name: u.displayName || u.name, username: u.username, avatar: u.avatar || null, subscribedByData: u.subscribedByData || undefined };
+          if (u && u.id != null) userDetailsMap[String(u.id)] = { name: u.displayName || u.name, realName: u.name, username: u.username, avatar: u.avatar || null, subscribedByData: u.subscribedByData || undefined };
         });
         setUserDetails((prev) => ({ ...prev, ...userDetailsMap }));
 
@@ -1178,7 +1183,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
       const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
       const map: Record<string, UserDetail> = {};
       arr.forEach((u: any) => {
-        if (u && u.id != null) map[String(u.id)] = { name: u.displayName || u.name, username: u.username, avatar: u.avatar || null };
+        if (u && u.id != null) map[String(u.id)] = { name: u.displayName || u.name, realName: u.name, username: u.username, avatar: u.avatar || null };
       });
       setUserDetails((prev) => ({ ...prev, ...map }));
     } catch {
@@ -1264,7 +1269,16 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     // already renamed earlier this session still showed users/list?cl[]=
     // returning both name:"TobEL" (original) AND displayName:"Vault/Tresor"
     // (the actual rename), proving which field really updates.
-    return u?.name || u?.username || `Fan #${fanId}`;
+    const custom = u?.name || u?.username || `Fan #${fanId}`;
+    // Explicit ask: once a fan is renamed, show "CustomName (EchterName)" -
+    // the real name the fan subscribed under stays visible in parens
+    // instead of disappearing entirely. Only added when it actually
+    // differs (an un-renamed fan's realName equals the shown name, would
+    // just repeat itself).
+    if (u?.realName && u.realName !== custom) {
+      return `${custom} (${u.realName})`;
+    }
+    return custom;
   }
 
   function Avatar({ fanId, size }: { fanId: number; size: number }) {
