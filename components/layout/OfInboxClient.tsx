@@ -2337,7 +2337,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
       )}
 
       {lightboxMedia && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4" onClick={() => setLightboxMedia(null)}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4" onClick={() => setLightboxMedia(null)}>
           <div className="max-w-3xl max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
             {(() => {
               const url = lightboxMedia.files?.full?.url || lightboxMedia.files?.preview?.url || lightboxMedia.files?.thumb?.url;
