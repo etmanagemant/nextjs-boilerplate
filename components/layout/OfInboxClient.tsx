@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, Fragment } from "react";
+import { useEffect, useState, useCallback, useRef, Fragment, memo } from "react";
 import { useSearchParams } from "next/navigation";
 import { FanCrmPanel } from "@/components/FanCrmPanel";
 import EmojiBar from "@/components/layout/EmojiBar";
@@ -69,6 +69,33 @@ type UserDetail = {
 // sent-by overlay, script-vault button, PPV purchase detector, multi-
 // model tab bar, new-tab/refresh chrome - still VNC-only for now.
 type Shift = { id: number; shift_date: string; notes: string };
+
+// Bugfix: als Teil der großen OfInboxClient-Funktion re-rendert dieser
+// Block bei JEDEM Tastendruck im Tippfeld mit (draft-State betrifft die
+// ganze Komponente) - memo hält ihn stabil, solange sich attachedMedia
+// selbst nicht ändert, das war das gemeldete Flackern pro Buchstabe.
+const AttachedMediaPreview = memo(function AttachedMediaPreview({ media, onRemove }: { media: any[]; onRemove: (m: any) => void }) {
+  return (
+    <>
+      {media.map((m) => {
+        const url = m.files?.thumb?.url || m.files?.preview?.url;
+        return (
+          <div key={m.id} className="relative">
+            {m.type === "audio" ? (
+              <div className="w-12 h-12 rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={16} /></div>
+            ) : url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-12 h-12 object-cover rounded" alt="" />
+            ) : (
+              <div className="w-12 h-12 rounded bg-black/40" />
+            )}
+            <button onClick={() => onRemove(m)} className="absolute -top-1.5 -right-1.5 bg-black rounded-full text-red-400"><CloseIcon size={14} /></button>
+          </div>
+        );
+      })}
+    </>
+  );
+});
 
 export default function OfInboxClient({ connectedModels, isAdmin, chatterId, userEmail = "", allShifts = [] }: { connectedModels: ConnectedModel[]; isAdmin: boolean; chatterId: string; userEmail?: string; allShifts?: Shift[] }) {
   const searchParams = useSearchParams();
@@ -251,15 +278,22 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setPanelError("");
     try {
       if (panel === "stats") {
+        // Bugfix: ein Fehler im allgemeinen Stats-Call (stats/top/message
+        // etc.) hat vorher per throw den GESAMTEN Block abgebrochen -
+        // die Massmessage-Liste (eigener, unabhängiger Call) wurde dann
+        // nie gesetzt, obwohl sie selbst erfolgreich war. Jetzt beide
+        // unabhängig voneinander behandelt.
         const [res, mmRes] = await Promise.all([
           fetch(`/api/crm/of-inbox/stats?modelId=${encodeURIComponent(modelId)}`),
           fetch(`/api/crm/of-inbox/massmessage-list?modelId=${encodeURIComponent(modelId)}`),
         ]);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
-        setStats(data.data || null);
-        const mmData = await mmRes.json();
-        setMassmessageList(mmRes.ok ? mmData.data?.items || [] : []);
+        const data = await res.json().catch(() => null);
+        const mmData = await mmRes.json().catch(() => null);
+        setStats(res.ok ? data?.data || null : null);
+        setMassmessageList(mmRes.ok ? mmData?.data?.items || [] : []);
+        if (!res.ok && !mmRes.ok) {
+          setPanelError(data?.error || mmData?.error || "Fehler beim Laden");
+        }
       } else if (panel === "schedules") {
         const res = await fetch(`/api/crm/of-inbox/schedules?modelId=${encodeURIComponent(modelId)}`);
         const data = await res.json();
@@ -628,6 +662,19 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setMessages([]);
     loadChats();
   }, [loadChats]);
+
+  // Task: "Chats werden zu wenig automatisch aktualisiert" - besonders
+  // spürbar wenn ein Chatter 2 Models gleichzeitig betreut und nicht
+  // ständig manuell auf ↻ klicken will. Lädt die Chatliste alle 20s im
+  // Hintergrund neu (loadChats zeigt dabei weiter die alten Daten aus dem
+  // Cache, kein Full-Reset/Ladeblitz) - bewusst NUR die Chatliste, nicht
+  // die gerade offene Konversation selbst (deren Nachrichten-Merge/
+  // Scroll-Logik ist empfindlicher, siehe scrollTop-Fix oben).
+  useEffect(() => {
+    if (!modelId) return;
+    const interval = setInterval(() => { loadChats(); }, 20000);
+    return () => clearInterval(interval);
+  }, [modelId, loadChats]);
 
   const [messagesHasMore, setMessagesHasMore] = useState(true);
   const [messagesLoadingMore, setMessagesLoadingMore] = useState(false);
@@ -1848,22 +1895,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   {sendError && <div className="text-xs text-red-400 mb-2">{sendError}</div>}
                   {attachedMedia.length > 0 && (
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      {attachedMedia.map((m) => {
-                        const url = m.files?.thumb?.url || m.files?.preview?.url;
-                        return (
-                          <div key={m.id} className="relative">
-                            {m.type === "audio" ? (
-                              <div className="w-12 h-12 rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={16} /></div>
-                            ) : url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-12 h-12 object-cover rounded" alt="" />
-                            ) : (
-                              <div className="w-12 h-12 rounded bg-black/40" />
-                            )}
-                            <button onClick={() => toggleAttachMedia(m)} className="absolute -top-1.5 -right-1.5 bg-black rounded-full text-red-400"><CloseIcon size={14} /></button>
-                          </div>
-                        );
-                      })}
+                      <AttachedMediaPreview media={attachedMedia} onRemove={toggleAttachMedia} />
                       <input
                         value={attachPrice}
                         onChange={(e) => setAttachPrice(e.target.value.replace(/[^0-9.]/g, ""))}

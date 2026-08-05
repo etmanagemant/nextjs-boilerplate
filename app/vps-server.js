@@ -3571,7 +3571,34 @@ app.post('/of-massmessage-send', async (req, res) => {
       },
     });
     if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
-    res.json({ status: 'success', data: result.json });
+
+    // Best-effort recipient id list, only for real (non-empty) text - the
+    // CRM's "gesendet von"-attribution matches by exact message text per
+    // fan chat (see log-sent-message), so this is what lets a massmessage
+    // show "gesendet von Mass Message" the same way Upload Vault sends
+    // already show "gesendet von Upload Vault". Reuses the SAME filtered
+    // /chats/users lookup as the live recipient counter, just paginated
+    // fully instead of limit=1. Capped at 1000 recipients so a very large
+    // fan base can't turn one send into an unbounded number of requests -
+    // an honest, bounded tradeoff, not full completeness for huge lists.
+    let recipientFanIds = [];
+    if (text && String(text).trim()) {
+      try {
+        const listId = Array.isArray(userLists) && userLists.length > 0 ? userLists[0] : 'fans';
+        const excludedParam = Array.isArray(excludedLists) && excludedLists.length > 0 ? `&filter[excluded_lists]=${encodeURIComponent(excludedLists.join(','))}` : '';
+        for (let offset = 0; offset < 1000; offset += 100) {
+          const pageUrl = `https://onlyfans.com/api2/v2/chats/users?limit=100&offset=${offset}&skip_users=all&total=1&filter[list_id]=${encodeURIComponent(listId)}${excludedParam}&field=recent&sort=desc`;
+          const pageResult = await callOnlyFansApi(session.page, pageUrl);
+          if (!pageResult.ok || !pageResult.json || !Array.isArray(pageResult.json.list)) break;
+          recipientFanIds.push(...pageResult.json.list.map((u) => u.id));
+          if (!pageResult.json.hasMore || pageResult.json.list.length === 0) break;
+        }
+      } catch (e) {
+        console.warn('[OF-MASSMESSAGE-SEND] Recipient list fetch failed (non-fatal):', e.message);
+      }
+    }
+
+    res.json({ status: 'success', data: result.json, recipientFanIds });
   } catch (error) {
     console.error(`[OF-MASSMESSAGE-SEND] Error for ${modelId}:`, error.message);
     res.status(500).json({ error: error.message });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { hasRole, isAdminTierRole } from "@/lib/roles";
 import { vpsFetch } from "@/lib/vpsClient";
+import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,6 +32,27 @@ export async function POST(req: NextRequest) {
     });
     const data = await vpsRes.json();
     if (!vpsRes.ok) return NextResponse.json({ error: data.error || "VPS error" }, { status: vpsRes.status });
+
+    // "gesendet von Mass Message" - same attribution mechanism already
+    // used for Upload Vault sends (crm_onlyfans_sent_log, matched by
+    // exact message text per fan chat). Best-effort, bulk insert - never
+    // blocks the response, the send itself already succeeded.
+    const recipientFanIds: number[] = Array.isArray(data.recipientFanIds) ? data.recipientFanIds : [];
+    if (text && String(text).trim() && recipientFanIds.length > 0) {
+      const rows = recipientFanIds.map((fanId) => ({
+        model_id: modelId,
+        fan_id: String(fanId),
+        chatter_name: "Mass Message",
+        message_text: String(text).trim(),
+      }));
+      createSupabaseAdminClient()
+        .from("crm_onlyfans_sent_log")
+        .insert(rows)
+        .then(({ error }: any) => {
+          if (error) console.error("[OF-INBOX-MASSMESSAGE-SEND] Attribution log insert failed:", error.message);
+        });
+    }
+
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("[OF-INBOX-MASSMESSAGE-SEND] Error:", error.message);

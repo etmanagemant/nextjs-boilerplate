@@ -51,16 +51,16 @@ export default function ModelTabsBar({ models, activeModelId, chatterId, basePat
   }, [contextMenu]);
 
   const openInNewTab = (modelId: string) => {
-    // /live/<modelId> is a separate, chrome-free route (see app/layout.tsx)
-    // showing only the live VNC view + overlay widgets - only makes sense
-    // for the VNC-based /crm-inbox. OF Inbox (Beta) has no VNC session to
-    // show there at all, so it just opens itself with ?model= instead -
-    // CONFIRMED this was still hardcoded to /live/ (the VNC view) even
-    // from inside the Beta page before this fix.
+    // /live/<modelId> (VNC) and /live-of-inbox/<modelId> (OF Inbox Beta)
+    // are both separate, chrome-free routes (see app/layout.tsx) - just
+    // the chat UI itself, no sidebar/top bar. Previously OF Inbox Beta's
+    // "In neuem Tab öffnen" opened `${basePath}?model=` instead, which is
+    // the FULL page with all the normal CRM chrome still around it - not
+    // what a chatter running 2 models at once wants for a popped-out tab.
     if (basePath === "/crm-inbox") {
       window.open(`/live/${modelId}`, "_blank", "noopener,noreferrer");
     } else {
-      window.open(`${basePath}?model=${modelId}`, "_blank", "noopener,noreferrer");
+      window.open(`/live-of-inbox/${modelId}?model=${modelId}`, "_blank", "noopener,noreferrer");
     }
     setContextMenu(null);
   };

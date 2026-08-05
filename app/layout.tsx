@@ -23,8 +23,11 @@ export default async function RootLayout({
   // meant to be popped into its own browser tab/window for a second
   // monitor - it renders only OnlyFansViewer itself, none of the normal
   // sidebar/top bar/model-tabs-bar, so it needs the full viewport.
+  // "/live-of-inbox/<modelId>" is the same idea for OF Inbox (Beta) - a
+  // chatter running 2 models wants "In neuem Tab öffnen" to pop just the
+  // chat UI, not the full CRM chrome again.
   const pathname = (await headers()).get("x-pathname") || "";
-  const isSoloView = pathname.startsWith("/live/");
+  const isSoloView = pathname.startsWith("/live/") || pathname.startsWith("/live-of-inbox/");
 
   let role = "chatter";
   // Task #80: a user can hold a second role (profiles.secondary_role) -
