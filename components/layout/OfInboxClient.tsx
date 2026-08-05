@@ -478,7 +478,17 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
       const res = await fetch(`/api/crm/of-inbox/fan-detail?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}`);
       const data = await res.json();
       const s = data.data?.subscribedOnData;
-      if (s) setFanSpend({ totalSumm: s.totalSumm || 0, tipsSumm: s.tipsSumm || 0, subscribesSumm: s.subscribesSumm || 0, messagesSumm: s.messagesSumm || 0, postsSumm: s.postsSumm || 0 });
+      if (s) {
+        setFanSpend({ totalSumm: s.totalSumm || 0, tipsSumm: s.tipsSumm || 0, subscribesSumm: s.subscribesSumm || 0, messagesSumm: s.messagesSumm || 0, postsSumm: s.postsSumm || 0 });
+        // Ring-Badge (spendDisplay) UND "Gesamtausgaben" (FanCrmPanel liest
+        // fanMetadata.lifetime_value) hingen bisher am alten VNC-Scrape-
+        // Cache, der Lücken hatte - der Server schreibt den echten Wert
+        // schon zurück in crm_fan_metadata (siehe fan-detail route), hier
+        // zusätzlich sofort im UI übernehmen statt auf den nächsten Sync
+        // zu warten.
+        setSpendDisplay((prev) => ({ ...prev, [String(fanId)]: String(Math.round(s.totalSumm || 0)) }));
+        loadFanMetadata(fanId);
+      }
     } catch {}
   }
 

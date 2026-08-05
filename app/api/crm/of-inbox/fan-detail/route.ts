@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { hasRole, isAdminTierRole } from "@/lib/roles";
 import { vpsFetch } from "@/lib/vpsClient";
+import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,6 +32,24 @@ export async function GET(req: NextRequest) {
     const vpsRes = await vpsFetch(`/of-fan-detail?modelId=${encodeURIComponent(modelId)}&fanId=${encodeURIComponent(fanId)}`);
     const data = await vpsRes.json();
     if (!vpsRes.ok) return NextResponse.json({ error: data.error || "VPS error" }, { status: vpsRes.status });
+
+    // Best-effort: this real, live totalSumm is the true fix for the
+    // long-standing "Gesamtausgaben"/spend-ring gap (crm_fan_metadata.
+    // lifetime_value used to only ever get backfilled by a periodic VNC
+    // DOM-scrape sync, which could lag or miss fans entirely). Every time
+    // a chatter opens this fan in OF Inbox Beta, the real number gets
+    // written straight back into the same cache both the FanCrmPanel
+    // sidebar and the avatar spend-ring already read - self-healing
+    // instead of waiting on the next scrape cycle. Never blocks the
+    // response on failure.
+    const totalSumm = data?.data?.subscribedOnData?.totalSumm;
+    if (typeof totalSumm === "number") {
+      const { error: upsertError } = await createSupabaseAdminClient()
+        .from("crm_fan_metadata")
+        .upsert({ model_id: modelId, fan_id: String(fanId), lifetime_value: totalSumm }, { onConflict: "model_id,fan_id" });
+      if (upsertError) console.error("[OF-INBOX-FAN-DETAIL] lifetime_value upsert failed:", upsertError.message);
+    }
+
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("[OF-INBOX-FAN-DETAIL] Error:", error.message);

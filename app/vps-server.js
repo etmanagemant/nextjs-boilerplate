@@ -4880,22 +4880,43 @@ app.post('/debug-network-start', async (req, res) => {
   if (page._networkCaptureHandler) {
     page.off('request', page._networkCaptureHandler);
   }
+  if (page._networkCaptureResponseHandler) {
+    page.off('response', page._networkCaptureResponseHandler);
+  }
   page._networkCaptureCalls = [];
   page._networkCaptureHandler = (r) => {
-    if (r.url().includes('/api2/')) {
-      // Headers + postData added (2026-07-30) - needed to find the real
-      // send-message endpoint's exact shape (URL, headers, body) by
-      // watching a real message actually get sent through the live UI,
-      // instead of guessing at it for a signed POST attempt.
-      page._networkCaptureCalls.push({
-        method: r.method(),
-        url: r.url(),
-        headers: r.headers(),
-        postData: r.postData() || null,
-      });
-    }
+    // 2026-08-01: no longer filtered to /api2/ only - finding the real
+    // vault-upload flow needs to see the actual file PUT too (goes to a
+    // signed CDN/S3 URL, not /api2/). postData truncated to 500 chars so a
+    // multi-MB file body captured here doesn't blow up memory/response
+    // size - only the URL/headers matter for that call, not its bytes.
+    page._networkCaptureCalls.push({
+      method: r.method(),
+      url: r.url(),
+      headers: r.headers(),
+      postData: r.postData() ? r.postData().slice(0, 500) : null,
+    });
   };
   page.on('request', page._networkCaptureHandler);
+
+  // 2026-08-01: request-only capture couldn't show what /api2/v2/upload/
+  // signed/create or the vault registration call actually RETURN (e.g. the
+  // new media id) - added alongside the request capture, /api2/-scoped
+  // only and body-sampled to stay small.
+  page._networkCaptureResponses = [];
+  page._networkCaptureResponseHandler = async (resp) => {
+    try {
+      const url = resp.url();
+      if (!url.includes('/api2/')) return;
+      const ct = (resp.headers()['content-type'] || '');
+      if (!ct.includes('json') && !ct.includes('text')) return;
+      const text = await resp.text().catch(() => null);
+      page._networkCaptureResponses.push({ url, status: resp.status(), bodySample: text ? text.slice(0, 1000) : null });
+    } catch (e) {
+      /* response body unavailable (redirect/aborted) - skip */
+    }
+  };
+  page.on('response', page._networkCaptureResponseHandler);
 
   // CONFIRMED LIVE (2026-07-30): a real sent chat message produced ZERO
   // /api2/ HTTP requests - page.on('request') never sees WebSocket traffic
@@ -4926,16 +4947,21 @@ app.post('/debug-network-stop', async (req, res) => {
   if (!page) return res.status(404).json({ error: 'No active page for that model/slot' });
 
   const calls = page._networkCaptureCalls || [];
+  const responses = page._networkCaptureResponses || [];
   const wsFrames = page._networkCaptureWsFrames || [];
   if (page._networkCaptureHandler) {
     page.off('request', page._networkCaptureHandler);
     page._networkCaptureHandler = null;
   }
+  if (page._networkCaptureResponseHandler) {
+    page.off('response', page._networkCaptureResponseHandler);
+    page._networkCaptureResponseHandler = null;
+  }
   if (page._networkCaptureCdpClient) {
     try { await page._networkCaptureCdpClient.detach(); } catch (e) { /* already detached */ }
     page._networkCaptureCdpClient = null;
   }
-  res.json({ status: 'success', calls, wsFrames, pageUrl: page.url() });
+  res.json({ status: 'success', calls, responses, wsFrames, pageUrl: page.url() });
 });
 
 // Diagnostic-only: navigates a slot's page to an arbitrary OnlyFans URL,
