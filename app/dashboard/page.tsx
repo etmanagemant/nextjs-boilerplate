@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "../../lib/supabaseClient";
 import { hasRole, isAdminTierRole } from "../../lib/roles";
+import { CircularProgress, MiniBarChart } from "@/components/layout/StatViz";
 
 // Task #85: consistent zero-padded 24h format for the new shift overview,
 // matching this app's convention elsewhere (see app/chatter/page.tsx).
@@ -298,6 +299,19 @@ export default function DashboardPage() {
             <div className="text-xs text-[#E5C158] mt-1">Gesamt-Zeit</div>
           </div>
         </section>
+
+        <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg flex items-center gap-5">
+          <CircularProgress
+            value={moderatorStriptchatStats.striptchatNetto}
+            max={moderatorStriptchatStats.striptchatBrutto || 1}
+            label={`${moderatorStriptchatStats.striptchatBrutto > 0 ? Math.round((moderatorStriptchatStats.striptchatNetto / moderatorStriptchatStats.striptchatBrutto) * 100) : 0}%`}
+            sublabel="Netto-Anteil"
+          />
+          <div>
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Netto/Brutto-Verhältnis</div>
+            <div className="text-xl font-black text-[#C9A86A] mt-1">Nach Plattformgebühr</div>
+          </div>
+        </section>
       </main>
     );
   }
@@ -442,10 +456,16 @@ export default function DashboardPage() {
             </>
           )}
         </div>
-        <div className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg text-center flex flex-col justify-center items-center">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Agentur Ranglisten-Platz</div>
-          <div className="text-4xl font-black text-[#C9A86A] mt-2 font-mono">
-            🏆 #{userStatsArray.findIndex(u => u.brutto === chatterBrutto) + 1} / {userStatsArray.length}
+        <div className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg flex items-center justify-center gap-5">
+          <CircularProgress
+            value={userStatsArray.length - (userStatsArray.findIndex(u => u.brutto === chatterBrutto))}
+            max={userStatsArray.length || 1}
+            label={`#${userStatsArray.findIndex(u => u.brutto === chatterBrutto) + 1}`}
+            sublabel={`von ${userStatsArray.length}`}
+          />
+          <div>
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Agentur Ranglisten-Platz</div>
+            <div className="text-xl font-black text-[#C9A86A] mt-1">🏆 Live-Position</div>
           </div>
         </div>
       </div>
@@ -453,6 +473,11 @@ export default function DashboardPage() {
       {/* Rangliste Mitarbeiter */}
       <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg mb-8">
         <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Mitarbeiter Live-Rangliste</h2>
+        {userStatsArray.length > 0 && (
+          <div className="mb-5 pb-5 border-b border-[#9C7A3D]/10">
+            <MiniBarChart items={userStatsArray.map((u: any) => ({ label: u.name, value: u.netto }))} />
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
@@ -488,6 +513,11 @@ export default function DashboardPage() {
       {isAdminTier && (
         <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg mb-8">
           <h2 className="text-sm font-bold mb-4 text-[#9C7A3D] uppercase tracking-wider">Model Live-Umsatz-Performance</h2>
+          {modelStatsArray.length > 0 && (
+            <div className="mb-5 pb-5 border-b border-[#9C7A3D]/10">
+              <MiniBarChart items={modelStatsArray.map((m: any) => ({ label: m.name, value: m.netto }))} />
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
               <thead>
