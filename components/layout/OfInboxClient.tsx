@@ -346,18 +346,18 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
 
       const fanIds = list.map((c) => String(c.withUser.id));
       if (fanIds.length > 0) {
-        fetch(`/api/crm/of-inbox/user-details?modelId=${encodeURIComponent(modelId)}&ids=${fanIds.join(",")}`)
-          .then((r) => r.json())
-          .then((d) => {
-            const raw = d.data;
-            const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
-            const map: Record<string, UserDetail> = {};
-            arr.forEach((u: any) => {
-              if (u && u.id != null) map[String(u.id)] = { name: u.name || u.displayName, username: u.username, avatar: u.avatar || null, subscribedByData: u.subscribedByData || undefined };
-            });
-            setUserDetails((prev) => ({ ...prev, ...map }));
-          })
-          .catch(() => {});
+        // Names/Avatare kommen jetzt direkt in der /chats-Antwort mit
+        // (data.userDetails, server-seitig im selben VPS-Request geholt) -
+        // spart eine komplette Browser->Vercel->VPS->OnlyFans-Runde, die
+        // vorher das sichtbare "Ringe/Namen laden verzögert nach" verursacht
+        // hat. Gleiche Response-Form wie vorher (Objekt-Map nach Fan-ID).
+        const raw = data.userDetails;
+        const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
+        const map: Record<string, UserDetail> = {};
+        arr.forEach((u: any) => {
+          if (u && u.id != null) map[String(u.id)] = { name: u.name || u.displayName, username: u.username, avatar: u.avatar || null, subscribedByData: u.subscribedByData || undefined };
+        });
+        setUserDetails((prev) => ({ ...prev, ...map }));
 
         fetch("/api/crm/fan-spend-overlay", {
           method: "POST",
@@ -729,6 +729,25 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     } catch {
       setAvailableLists([]);
     }
+  }
+
+  // CONFIRMED LIVE 2026-08-05: POST /lists body {name} - erstellt eine
+  // neue Custom-Liste, gegen eine Testliste geprüft und wieder gelöscht.
+  async function createList() {
+    if (!modelId) return;
+    const name = window.prompt("Name der neuen Liste:");
+    if (!name || !name.trim()) return;
+    try {
+      const res = await fetch("/api/crm/of-inbox/list-create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, name: name.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Fehler beim Erstellen");
+      setFanLists((prev) => [...prev, data.data]);
+      selectList(data.data.id, [...fanLists, data.data]);
+    } catch {}
   }
 
   // Task #69: CONFIRMED LIVE 2026-07-31 gegen eine leere Testliste.
@@ -1721,7 +1740,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             <div className="w-56 flex-shrink-0 border-r border-[#9C7A3D]/20 flex flex-col overflow-hidden">
               <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Listen</span>
-                <SearchIcon size={14} />
+                <div className="flex items-center gap-2.5">
+                  <button onClick={createList} title="Neue Liste erstellen" className="text-slate-400 hover:text-[#E2C48A] font-bold text-sm leading-none">+</button>
+                  <SearchIcon size={14} />
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto scrollbar-hide">
                 {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}

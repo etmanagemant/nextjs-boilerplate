@@ -3007,7 +3007,26 @@ app.get('/of-chats', async (req, res) => {
     const url = `https://onlyfans.com/api2/v2/chats?limit=20&offset=${Number(offset) || 0}&skip_users=all&order=recent`;
     const result = await callOnlyFansApi(session.page, url);
     if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
-    res.json({ status: 'success', data: result.json });
+
+    // Fetches names/avatars for every fan on this page in the SAME
+    // request cycle (parallel /api2/ call, same page/session) instead of
+    // making the client wait for this response first before it even
+    // knows which fan ids to ask about - CONFIRMED slow in practice
+    // (visible "names/rings pop in late" complaint): each /of-inbox/*
+    // hop is a full browser->Vercel->VPS->Puppeteer->OnlyFans round trip,
+    // so collapsing 2 sequential ones into 1 (this call) + 1 parallel
+    // OnlyFans call inside it removes one whole hop chain from the
+    // critical path the browser actually waits on.
+    const list = (result.json && result.json.list) || [];
+    const fanIds = list.map((c) => c.withUser && c.withUser.id).filter((id) => id != null);
+    let userDetails = null;
+    if (fanIds.length > 0) {
+      const qs = fanIds.map((id) => `cl[]=${encodeURIComponent(id)}`).join('&');
+      const detailsResult = await callOnlyFansApi(session.page, `https://onlyfans.com/api2/v2/users/list?${qs}`);
+      if (detailsResult.ok) userDetails = detailsResult.json;
+    }
+
+    res.json({ status: 'success', data: result.json, userDetails });
   } catch (error) {
     console.error(`[OF-CHATS] Error for ${modelId}:`, error.message);
     res.status(500).json({ error: error.message });
@@ -3201,6 +3220,26 @@ app.delete('/of-list-membership', async (req, res) => {
     res.json({ status: 'success', data: result.json });
   } catch (error) {
     console.error(`[OF-LIST-MEMBERSHIP] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /of-list-create { modelId, name } - CONFIRMED LIVE 2026-08-05:
+// POST /lists body {"name": "..."} creates a new custom list and returns
+// its full object (real numeric id, canDelete/canUpdate etc). Verified
+// against a disposable test list, then removed via the already-confirmed
+// /of-list-delete.
+app.post('/of-list-create', async (req, res) => {
+  const { modelId, name } = req.body || {};
+  if (!modelId || typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Missing modelId or name' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const result = await callOnlyFansApi(session.page, 'https://onlyfans.com/api2/v2/lists', { method: 'POST', body: { name: name.trim() } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-LIST-CREATE] Error for ${modelId}:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });
