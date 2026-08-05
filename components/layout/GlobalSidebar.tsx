@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isAdminTierRole, hasFeatureAccess, hasRole, type GrantableFeatureKey } from "@/lib/roles";
+import {
+  HomeIcon, ChartIcon, SparkleIcon, SatelliteIcon, FilmIcon, ClockIcon, CoinIcon,
+  SettingsIcon, MailIcon, CalendarIcon, ReceiptIcon, LinkIcon, ScriptIcon, UploadIcon,
+} from "./GoldIcons";
 
 interface GlobalSidebarProps {
   role: string;
@@ -19,7 +23,7 @@ interface GlobalSidebarProps {
 interface NavItem {
   href: string;
   label: string;
-  icon: string;
+  Icon: (p: { size?: number }) => React.ReactElement;
 }
 
 // Pages where the OnlyFans workspace (models + its own tools) should expand
@@ -27,6 +31,28 @@ interface NavItem {
 // second sidebar (WorkspaceSidebar) with the same models/tools, which read
 // as two sidebars stacked side by side once this global one existed too.
 const ONLYFANS_SECTION_PATHS = ["/crm-inbox", "/management/crm-connect", "/script-vault", "/upload-vault"];
+
+// 2026 reskin: glass surface (semi-transparent + blur, not flat black),
+// gold glow instead of a flat left-border on the active item, real SVG
+// icons (GoldIcons) instead of emoji - per explicit ask, applied
+// consistently everywhere this sidebar renders (every page in the app).
+function NavLink({ href, label, Icon, active }: { href: string; label: string; Icon: (p: { size?: number }) => React.ReactElement; active: boolean }) {
+  return (
+    <Link
+      href={href}
+      className={`group flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold uppercase tracking-wider transition-all duration-200 ${
+        active
+          ? "bg-gradient-to-r from-[#C9A86A]/25 to-transparent text-[#E2C48A] shadow-[0_0_18px_rgba(201,168,106,0.18)]"
+          : "text-slate-400 hover:text-[#E2C48A] hover:bg-white/5 hover:translate-x-0.5"
+      }`}
+    >
+      <span className={`flex-shrink-0 transition-transform duration-200 ${active ? "" : "group-hover:scale-110"}`}>
+        <Icon size={18} />
+      </span>
+      <span>{label}</span>
+    </Link>
+  );
+}
 
 export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatures = {} }: GlobalSidebarProps) {
   const pathname = usePathname();
@@ -64,7 +90,7 @@ export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatu
   const hamburgerButton = (
     <button
       onClick={() => setMobileOpen((v) => !v)}
-      className="md:hidden fixed top-3 left-3 z-50 w-11 h-11 flex items-center justify-center rounded-lg bg-[#0A0A0A] border border-[#9C7A3D]/40 text-[#C9A86A] shadow-lg"
+      className="md:hidden fixed top-3 left-3 z-50 w-11 h-11 flex items-center justify-center rounded-xl bg-[#0A0A0A]/80 backdrop-blur border border-[#9C7A3D]/40 text-[#C9A86A] shadow-lg"
       aria-label="Menü"
     >
       {mobileOpen ? "✕" : "☰"}
@@ -79,7 +105,7 @@ export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatu
   );
 
   const asideBase =
-    "fixed left-0 top-32 bottom-0 w-56 z-40 bg-[#0A0A0A] border-r border-[#9C7A3D]/30 flex flex-col py-4 px-2 gap-1 overflow-y-auto scrollbar-hide transition-transform duration-300 md:translate-x-0 " +
+    "fixed left-0 top-32 bottom-0 w-56 z-40 bg-[#0A0A0A]/70 backdrop-blur-xl border-r border-white/5 flex flex-col py-4 px-2 gap-1 overflow-y-auto scrollbar-hide transition-transform duration-300 md:translate-x-0 " +
     (mobileOpen ? "translate-x-0" : "-translate-x-full");
 
   const inOnlyFansSection = ONLYFANS_SECTION_PATHS.some((p) => pathname.startsWith(p));
@@ -94,86 +120,56 @@ export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatu
         {backdrop}
         <aside className={asideBase}>
         <p className="px-3 pb-2 text-xs font-bold text-slate-500 uppercase tracking-widest">Tools</p>
-        <Link
-          href="/model-workspace"
-          className={`btn-gold-hover-shimmer flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
-            pathname === "/model-workspace"
-              ? "bg-[#C9A86A]/20 text-[#C9A86A] border-l-2 border-[#C9A86A]"
-              : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
-          }`}
-        >
-          <span className="text-lg flex-shrink-0">📤</span>
-          <span>Mein Upload</span>
-        </Link>
-        <Link
-          href="/model-onlyfans-stats"
-          className={`btn-gold-hover-shimmer flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
-            pathname === "/model-onlyfans-stats"
-              ? "bg-[#C9A86A]/20 text-[#C9A86A] border-l-2 border-[#C9A86A]"
-              : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
-          }`}
-        >
-          <span className="text-lg flex-shrink-0">📊</span>
-          <span>OnlyFans</span>
-        </Link>
-        <Link
-          href="/model-stripchat"
-          className={`btn-gold-hover-shimmer flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
-            pathname === "/model-stripchat"
-              ? "bg-[#C9A86A]/20 text-[#C9A86A] border-l-2 border-[#C9A86A]"
-              : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
-          }`}
-        >
-          <span className="text-lg flex-shrink-0">🎬</span>
-          <span>Stripchat</span>
-        </Link>
+        <NavLink href="/model-workspace" label="Mein Upload" Icon={UploadIcon} active={pathname === "/model-workspace"} />
+        <NavLink href="/model-onlyfans-stats" label="OnlyFans" Icon={ChartIcon} active={pathname === "/model-onlyfans-stats"} />
+        <NavLink href="/model-stripchat" label="Stripchat" Icon={FilmIcon} active={pathname === "/model-stripchat"} />
         </aside>
       </>
     );
   }
 
   const items: NavItem[] = [
-    { href: "/", label: "Schichtplan", icon: "🏠" },
-    { href: "/dashboard", label: "Dashboard", icon: "📊" },
+    { href: "/", label: "Schichtplan", Icon: HomeIcon },
+    { href: "/dashboard", label: "Dashboard", Icon: ChartIcon },
   ];
 
   // VNC-based OnlyFans view - admin-only from 2026-07-30 on (explicit user
   // request): chatters now work through OF Inbox (Beta) below instead, no
   // reason for them to reach the old VNC view/its RAM cost anymore.
   if (isAdminTier) {
-    items.push({ href: "/crm-inbox", label: "OnlyFans", icon: "🔮" });
+    items.push({ href: "/crm-inbox", label: "OnlyFans", Icon: SparkleIcon });
   }
   // API-driven inbox, now the intended day-to-day view for chatters (VNC
   // above stays admin/content-manager only, see the /crm-inbox item's own
   // comment) - opened up 2026-07-31 once the core gaps (media loading,
   // sent-by attribution, unread dot) were fixed. Placed right under
   // OnlyFans per the user's original ask, above Stechuhr.
-  if (isAdminTier || hasChatterAccess) items.push({ href: "/of-inbox", label: "OF Inbox (Beta)", icon: "📡" });
+  if (isAdminTier || hasChatterAccess) items.push({ href: "/of-inbox", label: "OF Inbox (Beta)", Icon: SatelliteIcon });
 
   if (!isAdminTier && hasModeratorAccess) {
-    items.push({ href: "/stripchat", label: "Stripchat", icon: "🎬" });
+    items.push({ href: "/stripchat", label: "Stripchat", Icon: FilmIcon });
   }
 
   // Shown for every role (admin/moderator/chatter alike) - matches the old
   // header, which had this in three separate role branches that all did
   // the same thing.
-  items.push({ href: "/chatter", label: "Stechuhr", icon: "⏱️" });
-  items.push({ href: "/abrechnung", label: "Abrechnung", icon: "💰" });
+  items.push({ href: "/chatter", label: "Stechuhr", Icon: ClockIcon });
+  items.push({ href: "/abrechnung", label: "Abrechnung", Icon: CoinIcon });
 
   if (isAdmin) {
-    items.push({ href: "/management", label: "Management", icon: "⚙️" });
+    items.push({ href: "/management", label: "Management", Icon: SettingsIcon });
   }
   if (isAdminTier) {
-    items.push({ href: "/stripchat", label: "Stripchat", icon: "🎬" });
+    items.push({ href: "/stripchat", label: "Stripchat", Icon: FilmIcon });
   }
-  if (canUse("massmessage")) items.push({ href: "/massmessage", label: "Massmessage", icon: "📨" });
-  if (canUse("content-plan")) items.push({ href: "/content-plan", label: "Content Plan", icon: "📅" });
-  if (canUse("buchhaltung")) items.push({ href: "/buchhaltung", label: "Buchhaltung", icon: "🧾" });
+  if (canUse("massmessage")) items.push({ href: "/massmessage", label: "Massmessage", Icon: MailIcon });
+  if (canUse("content-plan")) items.push({ href: "/content-plan", label: "Content Plan", Icon: CalendarIcon });
+  if (canUse("buchhaltung")) items.push({ href: "/buchhaltung", label: "Buchhaltung", Icon: ReceiptIcon });
 
   const onlyFansTools = [
-    { id: "connection", name: "Connection Hub", icon: "🔗", href: "/management/crm-connect", key: "connection-hub" as GrantableFeatureKey },
-    { id: "scripts", name: "Script Vault", icon: "📜", href: "/script-vault", key: "script-vault" as GrantableFeatureKey },
-    { id: "upload", name: "Upload Vault", icon: "📤", href: "/upload-vault", key: "upload-vault" as GrantableFeatureKey },
+    { id: "connection", name: "Connection Hub", Icon: LinkIcon, href: "/management/crm-connect", key: "connection-hub" as GrantableFeatureKey },
+    { id: "scripts", name: "Script Vault", Icon: ScriptIcon, href: "/script-vault", key: "script-vault" as GrantableFeatureKey },
+    { id: "upload", name: "Upload Vault", Icon: UploadIcon, href: "/upload-vault", key: "upload-vault" as GrantableFeatureKey },
   ].filter((t) => canUse(t.key));
 
   return (
@@ -187,20 +183,10 @@ export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatu
         const showOnlyFansSection = item.href === "/crm-inbox" && inOnlyFansSection;
         return (
           <div key={`${item.href}-${i}`}>
-            <Link
-              href={item.href}
-              className={`btn-gold-hover-shimmer flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition ${
-                isActive
-                  ? "bg-[#C9A86A]/20 text-[#C9A86A] border-l-2 border-[#C9A86A]"
-                  : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
-              }`}
-            >
-              <span className="text-lg flex-shrink-0">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
+            <NavLink href={item.href} label={item.label} Icon={item.Icon} active={isActive} />
 
             {showOnlyFansSection && (
-              <div className="ml-3 pl-3 border-l border-[#9C7A3D]/20 mt-1 mb-2 space-y-1">
+              <div className="ml-3 pl-3 border-l border-white/10 mt-1 mb-2 space-y-1">
                 {/* Per-model links used to live here - moved to the
                     persistent ModelTabsBar at the top of the CRM Inbox
                     view itself, so unread badges are visible without
@@ -211,18 +197,7 @@ export default function GlobalSidebar({ role, secondaryRole = null, grantedFeatu
                       Verwaltung
                     </p>
                     {onlyFansTools.map((tool) => (
-                      <Link
-                        key={tool.id}
-                        href={tool.href}
-                        className={`btn-gold-hover-shimmer flex items-center gap-2 px-2 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition ${
-                          pathname === tool.href
-                            ? "bg-[#C9A86A]/20 text-[#C9A86A]"
-                            : "text-slate-400 hover:text-[#E2C48A] hover:bg-[#C9A86A]/10"
-                        }`}
-                      >
-                        <span className="flex-shrink-0">{tool.icon}</span>
-                        <span className="truncate">{tool.name}</span>
-                      </Link>
+                      <NavLink key={tool.id} href={tool.href} label={tool.name} Icon={tool.Icon} active={pathname === tool.href} />
                     ))}
                   </>
                 )}

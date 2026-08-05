@@ -5,6 +5,7 @@ import Image from "next/image";
 import ModelTabsBar from "./ModelTabsBar";
 import { useModelTabsDisplay } from "./ModelTabsContext";
 import ShiftTimerHeader from "./ShiftTimerHeader";
+import { BellIcon, LogoutIcon } from "./GoldIcons";
 
 interface Notification {
   id: number;
@@ -67,7 +68,7 @@ export default function GlobalTopBar({ userId }: { userId?: string }) {
   }, [notifOpen]);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-32 bg-[#0A0A0A]/95 backdrop-blur border-b border-[#9C7A3D]/20">
+    <header className="fixed top-0 left-0 right-0 z-50 h-32 bg-[#0A0A0A]/80 backdrop-blur-xl border-b border-white/5 shadow-[0_1px_20px_rgba(0,0,0,0.4)]">
       {/* Absolutely centered regardless of the logo/model-tabs/actions
           widths on either side - true center of the header, not just
           "whatever's left over" between them. Only shown while clocked in
@@ -117,18 +118,18 @@ export default function GlobalTopBar({ userId }: { userId?: string }) {
             <button
               onClick={() => setNotifOpen((v) => !v)}
               title="Benachrichtigungen"
-              className="relative w-10 h-10 flex items-center justify-center rounded-lg text-lg text-[#C9A86A] hover:bg-[#C9A86A]/10 transition border border-transparent hover:border-[#C9A86A]/30"
+              className="relative w-10 h-10 flex items-center justify-center rounded-xl text-[#C9A86A] hover:bg-white/5 hover:scale-105 transition-all duration-200 border border-transparent hover:border-[#C9A86A]/30"
             >
-              🔔
+              <BellIcon size={19} />
               {notifications.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
+                <span className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold shadow-[0_0_8px_rgba(239,68,68,0.6)]">
                   {notifications.length}
                 </span>
               )}
             </button>
             {notifOpen && (
-              <div className="absolute right-0 top-12 w-72 bg-[#0F0F12] border border-[#C9A86A]/30 rounded-xl shadow-2xl shadow-black/60 py-2 z-50 max-h-96 overflow-auto">
-                <p className="px-4 py-2 text-xs font-bold text-[#C9A86A] uppercase tracking-widest border-b border-[#9C7A3D]/20">
+              <div className="absolute right-0 top-12 w-72 bg-[#0F0F12]/90 backdrop-blur-xl border border-[#C9A86A]/20 rounded-2xl shadow-2xl shadow-black/60 py-2 z-50 max-h-96 overflow-auto">
+                <p className="px-4 py-2 text-xs font-bold text-[#C9A86A] uppercase tracking-widest border-b border-white/5">
                   Benachrichtigungen
                 </p>
                 {notifications.length === 0 ? (
@@ -136,7 +137,7 @@ export default function GlobalTopBar({ userId }: { userId?: string }) {
                     Keine neuen Benachrichtigungen
                   </p>
                 ) : (
-                  <div className="divide-y divide-[#9C7A3D]/10">
+                  <div className="divide-y divide-white/5">
                     {notifications.map((n) => (
                       <button
                         key={n.id}
@@ -159,9 +160,9 @@ export default function GlobalTopBar({ userId }: { userId?: string }) {
             <button
               type="submit"
               title="Abmelden"
-              className="flex items-center gap-1.5 px-3 h-10 rounded-lg text-sm font-bold text-[#C9A86A] hover:bg-red-500/10 hover:text-red-400 transition border border-transparent hover:border-red-500/30"
+              className="flex items-center gap-1.5 px-3 h-10 rounded-xl text-sm font-bold text-[#C9A86A] hover:bg-red-500/10 hover:text-red-400 hover:scale-105 transition-all duration-200 border border-transparent hover:border-red-500/30"
             >
-              <span className="text-lg">🚪</span>
+              <LogoutIcon size={17} />
               <span>Logout</span>
             </button>
           </form>

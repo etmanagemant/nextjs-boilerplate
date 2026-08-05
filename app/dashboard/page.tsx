@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "../../lib/supabaseClient";
 import { hasRole, isAdminTierRole } from "../../lib/roles";
 import { CircularProgress, MiniBarChart } from "@/components/layout/StatViz";
+import { SettingsIcon, MailIcon } from "@/components/layout/GoldIcons";
 
 // Task #85: consistent zero-padded 24h format for the new shift overview,
 // matching this app's convention elsewhere (see app/chatter/page.tsx).
@@ -273,34 +274,34 @@ export default function DashboardPage() {
   // MODERATOR-SPEZIFISCHES DASHBOARD
   if (currentUserRole === "moderator" && moderatorStriptchatStats) {
     return (
-      <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
-        <div className="mb-6 border-b border-[#9C7A3D]/20 pb-4">
-          <h1 className="text-2xl font-black uppercase tracking-wider"><span>🎭</span> <span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Stripchat Dashboard</span></h1>
+      <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-2xl my-6 border border-white/5 shadow-2xl">
+        <div className="mb-6 border-b border-white/5 pb-4">
+          <h1 className="text-2xl font-black uppercase tracking-wider"><span className="bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent">Stripchat Dashboard</span></h1>
           <p className="text-xs text-slate-400 mt-1">Deine persönlichen Stripchat-Session-Daten & Umsätze</p>
         </div>
 
         {/* KPI Boxen */}
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <div className="bg-gradient-to-br from-[#3c2f16]/40 to-[#5e4922]/20 border border-[#9C7A3D]/30 rounded-xl p-5 shadow-lg">
+          <div className="bg-gradient-to-br from-[#3c2f16]/40 to-[#5e4922]/20 border border-[#9C7A3D]/30 rounded-2xl p-5 shadow-lg">
             <div className="text-[10px] font-black text-[#C9A86A] uppercase tracking-widest mb-2">Stripchat Brutto</div>
             <div className="text-2xl font-black text-[#E2C48A]">${moderatorStriptchatStats.striptchatBrutto.toFixed(2)}</div>
             <div className="text-xs text-[#C9A86A] mt-1">Gesamt-Umsatz</div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-950/40 to-green-900/20 border border-green-500/30 rounded-xl p-5 shadow-lg">
+          <div className="bg-gradient-to-br from-green-950/40 to-green-900/20 border border-green-500/30 rounded-2xl p-5 shadow-lg">
             <div className="text-[10px] font-black text-green-300 uppercase tracking-widest mb-2">Stripchat Netto</div>
             <div className="text-2xl font-black text-green-100">${moderatorStriptchatStats.striptchatNetto.toFixed(2)}</div>
             <div className="text-xs text-green-400 mt-1">Nach Plattformgebühr</div>
           </div>
 
-          <div className="bg-gradient-to-br from-[#3c2f16]/40 to-[#5e4922]/20 border border-[#E5C158]/30 rounded-xl p-5 shadow-lg">
+          <div className="bg-gradient-to-br from-[#3c2f16]/40 to-[#5e4922]/20 border border-[#E5C158]/30 rounded-2xl p-5 shadow-lg">
             <div className="text-[10px] font-black text-[#E5C158] uppercase tracking-widest mb-2">Privat-Show Stunden</div>
             <div className="text-2xl font-black text-[#E2C48A]">{moderatorStriptchatStats.totalPrivateShowHours.toFixed(2)}h</div>
             <div className="text-xs text-[#E5C158] mt-1">Gesamt-Zeit</div>
           </div>
         </section>
 
-        <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg flex items-center gap-5">
+        <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 flex items-center gap-5">
           <CircularProgress
             value={moderatorStriptchatStats.striptchatNetto}
             max={moderatorStriptchatStats.striptchatBrutto || 1}
@@ -324,15 +325,15 @@ export default function DashboardPage() {
 
   // ADMIN DASHBOARD (Original)
   return (
-    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-xl my-6 border border-[#9C7A3D]/20 shadow-2xl">
-      <div className="mb-6 border-b border-[#9C7A3D]/20 pb-4">
+    <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-2xl my-6 border border-white/5 shadow-2xl">
+      <div className="mb-6 border-b border-white/5 pb-4">
         <h1 className="text-2xl font-black bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase tracking-wider">Dashboard</h1>
         <p className="text-xs text-slate-400 mt-1">Echtzeit-Umsatzauswertungen & Performancedaten</p>
       </div>
 
       {/* Zuweisungsbox */}
       {isAdmin && unassignedRevenues.length > 0 && (
-        <section className="mb-8 bg-gold-950/20 p-5 rounded-xl border-2 border-[#C9A86A]/40 shadow-xl">
+        <section className="mb-8 bg-gold-950/20 p-5 rounded-2xl border-2 border-[#C9A86A]/40 shadow-xl">
           <h2 className="text-xs font-black text-[#C9A86A] uppercase tracking-widest mb-3"><span>⚠️</span> <span>Offene Einnahmen & Tips Pool ({unassignedRevenues.length})</span></h2>
           <div className="space-y-2">
             {unassignedRevenues.map((r) => (
@@ -362,7 +363,7 @@ export default function DashboardPage() {
 
       {/* Task #85: admin-only overview of the 10 most recent shifts */}
       {isAdmin && recentShifts.length > 0 && (
-        <section className="mb-8 bg-[#050505] p-5 rounded-xl border border-[#9C7A3D]/20 shadow-xl">
+        <section className="mb-8 bg-[#050505] p-5 rounded-2xl border border-white/5 shadow-xl">
           <h2 className="text-xs font-black text-[#C9A86A] uppercase tracking-widest mb-3"><span>📊</span> <span>Letzte 10 Schichten</span></h2>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -393,19 +394,21 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* 🖥️ CRM ADMIN PANEL - MODEL VERBINDUNG & SETTINGS */}
+      {/* CRM ADMIN PANEL - MODEL VERBINDUNG & SETTINGS */}
       {isAdmin && (
-        <section className="mb-8">
+        <section className="mb-6">
           <Link href="/management/crm-connect" className="group block">
-            <div className="bg-gradient-to-br from-[#1a1a1a] to-black p-6 rounded-xl border-2 border-[#C9A86A]/40 shadow-2xl hover:border-[#C9A86A]/80 hover:shadow-[0_0_20px_rgba(201, 168, 106,0.3)] transition-all duration-300 transform hover:scale-102">
+            <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/40 hover:shadow-[0_0_24px_rgba(201,168,106,0.15)] transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-black uppercase tracking-widest transition"><span>🖥️</span> <span className="text-[#C9A86A] group-hover:text-[#E2C48A]">CRM Model-Verbindung & Settings</span></h2>
+                  <h2 className="text-lg font-black uppercase tracking-widest text-[#C9A86A] group-hover:text-[#E2C48A] transition-colors">CRM Model-Verbindung & Settings</h2>
                   <p className="text-xs text-slate-400 mt-2">Verwalte OnlyFans Session-Daten, Script-Bibliotheken und Chatter-Emoji-Konfiguration</p>
                 </div>
-                <div className="text-4xl group-hover:scale-110 transition">⚙️</div>
+                <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center rounded-xl bg-[#C9A86A]/10 text-[#C9A86A] group-hover:scale-110 group-hover:bg-[#C9A86A]/15 transition-all duration-200">
+                  <SettingsIcon size={24} />
+                </div>
               </div>
-              <div className="mt-4 inline-flex items-center gap-2 text-[#C9A86A] font-bold text-sm group-hover:translate-x-2 transition">
+              <div className="mt-4 inline-flex items-center gap-2 text-[#C9A86A] font-bold text-sm group-hover:translate-x-1 transition-transform">
                 Zum Admin-Panel <span>→</span>
               </div>
             </div>
@@ -413,25 +416,27 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* 💬 CRM LIVE INBOX - CHATTER (OnlyFans-only tool - a plain moderator
+      {/* CRM LIVE INBOX - CHATTER (OnlyFans-only tool - a plain moderator
           is Stripchat-only, see hasChatterAccess/Task #80+#72) */}
       {(hasChatterAccess || isAdminTier) && (
         <section className="mb-8">
           <Link href="/crm-inbox" className="group block">
-            <div className="bg-gradient-to-br from-gold-900/30 to-black p-8 rounded-xl border-2 border-[#C9A86A]/60 shadow-2xl hover:border-[#E2C48A]/80 hover:shadow-[0_0_30px_rgba(201, 168, 106,0.5)] transition-all duration-300 transform hover:scale-105">
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#C9A86A]/10 via-white/[0.03] to-black/40 backdrop-blur-xl p-8 rounded-2xl border border-[#C9A86A]/30 shadow-2xl hover:border-[#E2C48A]/60 hover:shadow-[0_0_36px_rgba(201,168,106,0.25)] transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-black uppercase tracking-widest animate-pulse"><span>💬</span> <span className="text-[#E2C48A] group-hover:text-[#C9A86A] transition">Live-Inbox & Chat-Zentrale (CRM)</span></h2>
+                  <h2 className="text-2xl font-black uppercase tracking-widest text-[#E2C48A] group-hover:text-[#C9A86A] transition-colors">Live-Inbox & Chat-Zentrale (CRM)</h2>
                   <p className="text-sm text-slate-300 mt-3 font-semibold">Verwalte Fan-Konversationen{isAdminTier ? " • Injiziere Sales-Scripts" : ""} • Nutze personalisierte Emoji-Leiste</p>
                   <div className="mt-3 flex gap-3 text-xs font-bold text-[#C9A86A]">
-                    <span className="bg-[#C9A86A]/20 px-3 py-1 rounded">📨 Live-Messaging</span>
-                    {isAdminTier && <span className="bg-[#C9A86A]/20 px-3 py-1 rounded">🔥 Script-Injector</span>}
-                    <span className="bg-[#C9A86A]/20 px-3 py-1 rounded">😊 Emoji-Leiste</span>
+                    <span className="bg-[#C9A86A]/15 px-3 py-1 rounded-lg">Live-Messaging</span>
+                    {isAdminTier && <span className="bg-[#C9A86A]/15 px-3 py-1 rounded-lg">Script-Injector</span>}
+                    <span className="bg-[#C9A86A]/15 px-3 py-1 rounded-lg">Emoji-Leiste</span>
                   </div>
                 </div>
-                <div className="text-6xl group-hover:scale-125 transition animate-bounce">📱</div>
+                <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center rounded-2xl bg-[#C9A86A]/10 text-[#C9A86A] group-hover:scale-110 group-hover:bg-[#C9A86A]/15 transition-all duration-200">
+                  <MailIcon size={30} />
+                </div>
               </div>
-              <div className="mt-6 inline-flex items-center gap-2 text-[#C9A86A] font-black text-base group-hover:translate-x-2 transition bg-[#C9A86A]/10 px-4 py-2 rounded-lg border border-[#C9A86A]/30 hover:bg-[#C9A86A]/20">
+              <div className="mt-6 inline-flex items-center gap-2 text-[#C9A86A] font-black text-base group-hover:translate-x-1 transition-transform bg-[#C9A86A]/10 px-4 py-2 rounded-xl border border-[#C9A86A]/20 hover:bg-[#C9A86A]/15">
                 Zur Chat-Zentrale öffnen <span>→</span>
               </div>
             </div>
@@ -441,7 +446,7 @@ export default function DashboardPage() {
 
       {/* Kacheln */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        <div className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg text-center">
+        <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 text-center">
           {isAdmin ? (
             <>
               <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Live Agentur-Umsatz (Admin)</div>
@@ -456,7 +461,7 @@ export default function DashboardPage() {
             </>
           )}
         </div>
-        <div className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg flex items-center justify-center gap-5">
+        <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 flex items-center justify-center gap-5">
           <CircularProgress
             value={userStatsArray.length - (userStatsArray.findIndex(u => u.brutto === chatterBrutto))}
             max={userStatsArray.length || 1}
@@ -471,7 +476,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Rangliste Mitarbeiter */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg mb-8">
+      <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 mb-8">
         <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Mitarbeiter Live-Rangliste</h2>
         {userStatsArray.length > 0 && (
           <div className="mb-5 pb-5 border-b border-[#9C7A3D]/10">
@@ -511,7 +516,7 @@ export default function DashboardPage() {
 
       {/* 👑 NEUE MODEL RANGLISTE (Vollautomatisch basierend auf der Herkunft der Einnahmen!) - Task #72: nur Admin/Content-Manager */}
       {isAdminTier && (
-        <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg mb-8">
+        <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 mb-8">
           <h2 className="text-sm font-bold mb-4 text-[#9C7A3D] uppercase tracking-wider">Model Live-Umsatz-Performance</h2>
           {modelStatsArray.length > 0 && (
             <div className="mb-5 pb-5 border-b border-[#9C7A3D]/10">
@@ -545,7 +550,7 @@ export default function DashboardPage() {
 
       {/* ⚠️ UNVOLLSTÄNDIGE BEWERBUNGEN (ABBRÜCHE) */}
       {abandonedLeads.length > 0 && (
-        <section className="bg-black/40 p-6 rounded-xl border border-gold-600/30 shadow-lg">
+        <section className="bg-black/40 p-6 rounded-2xl border border-gold-600/30 shadow-lg">
           <h2 className="text-sm font-bold mb-4 text-gold-500 uppercase tracking-wider"><span>⚠️</span> <span>Unvollständige Bewerbungen (Abbrüche) ({abandonedLeads.length})</span></h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
