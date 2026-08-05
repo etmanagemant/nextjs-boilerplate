@@ -1416,94 +1416,103 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             ))}
           </div>
 
-          <div className="w-[380px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden flex flex-col h-full">
-            <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
+          <div className="w-[380px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl flex flex-col h-full">
+            <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between relative">
               <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Chats</span>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 text-[#C9A86A]">
                 {isAdmin && (
-                  <div className="relative">
-                    <button onClick={() => openPanel("stats")} title="Massmessage-Statistik" className={activePanel === "stats" ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
-                      <ChartIcon size={16} />
-                    </button>
-                    {activePanel === "stats" && (
-                      <div className="absolute top-full right-0 mt-2 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 w-96 max-h-[500px]">
-                        <div className="p-3 border-b border-[#9C7A3D]/20 sticky top-0 bg-[#0A0A0A]">
-                          <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Statistik</span>
-                        </div>
-                        {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
-                        {panelError && <div className="p-3 text-xs text-red-400">{panelError}</div>}
-                        {!panelLoading && stats?.overview?.massMessages && (
-                          <>
-                            <div className="p-3 grid grid-cols-2 gap-3">
-                              <div>
-                                <div className="text-[10px] text-slate-500 uppercase">Massnachrichten (30 Tage)</div>
-                                <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.count?.total ?? 0}</div>
-                              </div>
-                              <div>
-                                <div className="text-[10px] text-slate-500 uppercase">Views</div>
-                                <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.views?.total ?? 0}</div>
-                              </div>
-                              <div className="col-span-2">
-                                <div className="text-[10px] text-slate-500 uppercase">Einnahmen</div>
-                                <div className="text-lg font-black text-[#C9A86A]">${stats.overview.massMessages.earnings?.total ?? 0}</div>
-                              </div>
-                            </div>
-                            {Array.isArray(stats.top?.purchases) && stats.top.purchases.length > 0 && (
-                              <div className="p-3 border-t border-[#9C7A3D]/10">
-                                <div className="text-[10px] text-slate-500 uppercase mb-2">Top-Nachrichten</div>
-                                {stats.top.purchases.slice(0, 5).map((p: any, i: number) => (
-                                  <div key={i} className="text-xs text-slate-300 mb-1 truncate">{stripHtmlPreview(p.text || "")}</div>
-                                ))}
-                              </div>
-                            )}
-                            {/* CONFIRMED LIVE 2026-08-05: gleiche Tabelle wie
-                                echtes OnlyFans Statistiken->Verlobung->
-                                Massen-Nachrichten, inkl. "Rückgängig machen"
-                                (DELETE /messages/queue/{id}, live getestet). */}
-                            <div className="border-t border-[#9C7A3D]/10">
-                              <div className="p-3 text-[10px] text-slate-500 uppercase">Letzte Massennachrichten</div>
-                              {massmessageList.length === 0 && (
-                                <div className="px-3 pb-3 text-xs text-slate-500">Keine Massennachrichten (30 Tage)</div>
-                              )}
-                              <div className="divide-y divide-[#9C7A3D]/10">
-                                {massmessageList.map((m: any) => (
-                                  <div key={m.id} className="px-3 py-2">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-xs text-slate-300 truncate">{stripHtmlPreview(m.text || "") || "(Medien)"}</span>
-                                      <span className="text-[10px] text-slate-500 flex-shrink-0">{m.date ? new Date(m.date).toLocaleDateString("de-DE") : ""}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between mt-1">
-                                      <span className="text-[10px] text-slate-500">
-                                        Gesendet: {m.sentCount ?? 0} · Betrachtet: {m.viewedCount ?? 0}
-                                        {typeof m.price === "number" && m.price > 0 && <> · ${m.price}</>}
-                                      </span>
-                                      {m.isCanceled ? (
-                                        <span className="text-[10px] text-red-400">Zurückgezogen</span>
-                                      ) : m.canUnsend ? (
-                                        <button
-                                          onClick={() => deleteMassmessage(m.id)}
-                                          disabled={mmDeletingId === m.id}
-                                          className="text-[10px] font-bold uppercase text-slate-400 hover:text-red-400"
-                                        >
-                                          {mmDeletingId === m.id ? "…" : "Rückgängig"}
-                                        </button>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <button onClick={() => openPanel("stats")} title="Massmessage-Statistik" className={`hover:scale-110 transition ${activePanel === "stats" ? "scale-110" : ""}`}>
+                    <ChartIcon size={22} />
+                  </button>
                 )}
                 {isAdmin && (
-                  <button onClick={openMassmessageCompose} title="Massmessage erstellen" className="text-slate-400 hover:text-[#E2C48A] text-base leading-none font-bold">+</button>
+                  <button onClick={openMassmessageCompose} title="Massmessage erstellen" className="hover:scale-110 transition text-xl leading-none font-bold">+</button>
                 )}
-                <button onClick={() => loadChats()} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
+                <button onClick={() => loadChats()} title="Aktualisieren" className="hover:scale-110 transition text-base leading-none">↻</button>
               </div>
+              {/* Eigene Ebene außerhalb der scrollbaren Chatliste (kein
+                  overflow-hidden mehr auf dem äußeren Panel, das hat das
+                  Popup vorher sichtbar abgeschnitten). */}
+              {activePanel === "stats" && (
+                <div className="absolute top-full right-3 mt-2 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 w-96 max-h-[500px]">
+                  <div className="p-3 border-b border-[#9C7A3D]/20 sticky top-0 bg-[#0A0A0A]">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Statistik</span>
+                  </div>
+                  {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
+                  {panelError && <div className="p-3 text-xs text-red-400">{panelError}</div>}
+                  {!panelLoading && (
+                    <>
+                      {stats?.overview?.massMessages && (
+                        <>
+                          <div className="p-3 grid grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-[10px] text-slate-500 uppercase">Massnachrichten (30 Tage)</div>
+                              <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.count?.total ?? 0}</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-slate-500 uppercase">Views</div>
+                              <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.views?.total ?? 0}</div>
+                            </div>
+                            <div className="col-span-2">
+                              <div className="text-[10px] text-slate-500 uppercase">Einnahmen</div>
+                              <div className="text-lg font-black text-[#C9A86A]">${stats.overview.massMessages.earnings?.total ?? 0}</div>
+                            </div>
+                          </div>
+                          {Array.isArray(stats.top?.purchases) && stats.top.purchases.length > 0 && (
+                            <div className="p-3 border-t border-[#9C7A3D]/10">
+                              <div className="text-[10px] text-slate-500 uppercase mb-2">Top-Nachrichten</div>
+                              {stats.top.purchases.slice(0, 5).map((p: any, i: number) => (
+                                <div key={i} className="text-xs text-slate-300 mb-1 truncate">{stripHtmlPreview(p.text || "")}</div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {/* CONFIRMED LIVE 2026-08-05: gleiche Tabelle wie
+                          echtes OnlyFans Statistiken->Verlobung->
+                          Massen-Nachrichten, inkl. "Rückgängig machen"
+                          (DELETE /messages/queue/{id}, live getestet).
+                          Bugfix: hing vorher fälschlich an der massMessages-
+                          Bedingung oben - eine leere Übersicht ließ die
+                          Liste+Löschen komplett verschwinden, obwohl sie
+                          unabhängig davon eigene Daten hat. */}
+                      <div className="border-t border-[#9C7A3D]/10">
+                        <div className="p-3 text-[10px] text-slate-500 uppercase">Letzte Massennachrichten</div>
+                        {massmessageList.length === 0 && (
+                          <div className="px-3 pb-3 text-xs text-slate-500">Keine Massennachrichten (30 Tage)</div>
+                        )}
+                        <div className="divide-y divide-[#9C7A3D]/10">
+                          {massmessageList.map((m: any) => (
+                            <div key={m.id} className="px-3 py-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs text-slate-300 truncate">{stripHtmlPreview(m.text || "") || "(Medien)"}</span>
+                                <span className="text-[10px] text-slate-500 flex-shrink-0">{m.date ? new Date(m.date).toLocaleDateString("de-DE") : ""}</span>
+                              </div>
+                              <div className="flex items-center justify-between mt-1">
+                                <span className="text-[10px] text-slate-500">
+                                  Gesendet: {m.sentCount ?? 0} · Betrachtet: {m.viewedCount ?? 0}
+                                  {typeof m.price === "number" && m.price > 0 && <> · ${m.price}</>}
+                                </span>
+                                {m.isCanceled ? (
+                                  <span className="text-[10px] text-red-400">Zurückgezogen</span>
+                                ) : m.canUnsend ? (
+                                  <button
+                                    onClick={() => deleteMassmessage(m.id)}
+                                    disabled={mmDeletingId === m.id}
+                                    className="text-[10px] font-bold uppercase text-slate-400 hover:text-red-400"
+                                  >
+                                    {mmDeletingId === m.id ? "…" : "Rückgängig"}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             {chatsLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
             {chatsError && <div className="p-3 text-xs text-red-400">{chatsError}</div>}
