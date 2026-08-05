@@ -511,23 +511,47 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [chatsHasMore, setChatsHasMore] = useState(true);
   const [chatsLoadingMore, setChatsLoadingMore] = useState(false);
   const chatOffsetRef = useRef(0);
+  // Task: "schneller für Chatter" - ein bereits in dieser Session
+  // besuchter Model-Tab zeigt beim Zurückwechseln SOFORT die zuletzt
+  // geladenen Daten (kein leerer "Lade…"-Zustand), während im Hintergrund
+  // trotzdem neu geladen wird. Bewusst NUR für schon besuchte Models, kein
+  // Eager-Prefetch aller verbundenen Models beim Start - die Puppeteer-
+  // Session pro Model auf der VPS ist teuer (2 vCPU/4GB, max 3 gleich-
+  // zeitig), unnötig viele Sessions parallel wachzuhalten wäre riskant.
+  const chatsCacheRef = useRef<Record<string, { chats: ChatListItem[]; userDetails: Record<string, UserDetail>; hasMore: boolean; nextOffset: number }>>({});
 
   const loadChats = useCallback(async (opts: { more?: boolean } = {}) => {
     if (!modelId) return;
     const offset = opts.more ? chatOffsetRef.current : 0;
-    if (opts.more) setChatsLoadingMore(true);
-    else { setChatsLoading(true); chatOffsetRef.current = 0; setChatsHasMore(true); }
+    const cached = !opts.more ? chatsCacheRef.current[modelId] : undefined;
+    if (cached) {
+      // Sofort anzeigen, Ladeanzeige nur noch dezent (kein Full-Reset).
+      setChats(cached.chats);
+      setUserDetails((prev) => ({ ...prev, ...cached.userDetails }));
+      setChatsHasMore(cached.hasMore);
+      chatOffsetRef.current = cached.nextOffset;
+      setChatsLoading(false);
+    } else if (opts.more) {
+      setChatsLoadingMore(true);
+    } else {
+      setChatsLoading(true);
+      chatOffsetRef.current = 0;
+      setChatsHasMore(true);
+    }
     setChatsError("");
     try {
       const res = await fetch(`/api/crm/of-inbox/chats?modelId=${encodeURIComponent(modelId)}&offset=${offset}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
       const list: ChatListItem[] = data.data?.list || [];
-      setChatsHasMore(!!data.data?.hasMore);
-      chatOffsetRef.current = typeof data.data?.nextOffset === "number" ? data.data.nextOffset : offset + list.length;
+      const hasMore = !!data.data?.hasMore;
+      const nextOffset = typeof data.data?.nextOffset === "number" ? data.data.nextOffset : offset + list.length;
+      setChatsHasMore(hasMore);
+      chatOffsetRef.current = nextOffset;
       setChats((prev) => (opts.more ? [...prev, ...list] : list));
 
       const fanIds = list.map((c) => String(c.withUser.id));
+      let userDetailsMap: Record<string, UserDetail> = {};
       if (fanIds.length > 0) {
         // Names/Avatare kommen jetzt direkt in der /chats-Antwort mit
         // (data.userDetails, server-seitig im selben VPS-Request geholt) -
@@ -536,11 +560,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
         // hat. Gleiche Response-Form wie vorher (Objekt-Map nach Fan-ID).
         const raw = data.userDetails;
         const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
-        const map: Record<string, UserDetail> = {};
         arr.forEach((u: any) => {
-          if (u && u.id != null) map[String(u.id)] = { name: u.name || u.displayName, username: u.username, avatar: u.avatar || null, subscribedByData: u.subscribedByData || undefined };
+          if (u && u.id != null) userDetailsMap[String(u.id)] = { name: u.name || u.displayName, username: u.username, avatar: u.avatar || null, subscribedByData: u.subscribedByData || undefined };
         });
-        setUserDetails((prev) => ({ ...prev, ...map }));
+        setUserDetails((prev) => ({ ...prev, ...userDetailsMap }));
 
         fetch("/api/crm/fan-spend-overlay", {
           method: "POST",
@@ -552,8 +575,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
           .catch(() => {});
       }
 
+      const prevCache = chatsCacheRef.current[modelId];
+      chatsCacheRef.current[modelId] = {
+        chats: opts.more ? [...(prevCache?.chats || []), ...list] : list,
+        userDetails: { ...(prevCache?.userDetails || {}), ...userDetailsMap },
+        hasMore,
+        nextOffset,
+      };
     } catch (e: any) {
-      setChatsError(e.message || "Fehler beim Laden der Chats");
+      if (!cached) setChatsError(e.message || "Fehler beim Laden der Chats");
     } finally {
       setChatsLoading(false);
       setChatsLoadingMore(false);
@@ -569,7 +599,6 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   }
 
   useEffect(() => {
-    setChats([]);
     setActiveFanId(null);
     setMessages([]);
     loadChats();
@@ -1338,7 +1367,6 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             {(isAdmin
               ? [
                   { Icon: CalendarIcon, key: "schedules" as const, label: "Kalender" },
-                  { Icon: ChartIcon, key: "stats" as const, label: "Statistik" },
                   { Icon: ReceiptIcon, key: "earnings" as const, label: "Auszahlungen" },
                 ]
               : []
@@ -1358,70 +1386,6 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                       </div>
                       {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
                       {panelError && <div className="p-3 text-xs text-red-400">{panelError}</div>}
-
-                      {key === "stats" && !panelLoading && stats?.overview?.massMessages && (
-                        <>
-                          <div className="p-3 grid grid-cols-2 gap-3">
-                            <div>
-                              <div className="text-[10px] text-slate-500 uppercase">Massnachrichten (30 Tage)</div>
-                              <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.count?.total ?? 0}</div>
-                            </div>
-                            <div>
-                              <div className="text-[10px] text-slate-500 uppercase">Views</div>
-                              <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.views?.total ?? 0}</div>
-                            </div>
-                            <div className="col-span-2">
-                              <div className="text-[10px] text-slate-500 uppercase">Einnahmen</div>
-                              <div className="text-lg font-black text-[#C9A86A]">${stats.overview.massMessages.earnings?.total ?? 0}</div>
-                            </div>
-                          </div>
-                          {Array.isArray(stats.top?.purchases) && stats.top.purchases.length > 0 && (
-                            <div className="p-3 border-t border-[#9C7A3D]/10">
-                              <div className="text-[10px] text-slate-500 uppercase mb-2">Top-Nachrichten</div>
-                              {stats.top.purchases.slice(0, 5).map((p: any, i: number) => (
-                                <div key={i} className="text-xs text-slate-300 mb-1 truncate">{stripHtmlPreview(p.text || "")}</div>
-                              ))}
-                            </div>
-                          )}
-                          {/* CONFIRMED LIVE 2026-08-05: gleiche Tabelle wie
-                              echtes OnlyFans Statistiken->Verlobung->
-                              Massen-Nachrichten, inkl. "Rückgängig machen"
-                              (DELETE /messages/queue/{id}, live getestet). */}
-                          <div className="border-t border-[#9C7A3D]/10">
-                            <div className="p-3 text-[10px] text-slate-500 uppercase">Letzte Massennachrichten</div>
-                            {massmessageList.length === 0 && (
-                              <div className="px-3 pb-3 text-xs text-slate-500">Keine Massennachrichten (30 Tage)</div>
-                            )}
-                            <div className="divide-y divide-[#9C7A3D]/10">
-                              {massmessageList.map((m: any) => (
-                                <div key={m.id} className="px-3 py-2">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-xs text-slate-300 truncate">{stripHtmlPreview(m.text || "") || "(Medien)"}</span>
-                                    <span className="text-[10px] text-slate-500 flex-shrink-0">{m.date ? new Date(m.date).toLocaleDateString("de-DE") : ""}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between mt-1">
-                                    <span className="text-[10px] text-slate-500">
-                                      Gesendet: {m.sentCount ?? 0} · Betrachtet: {m.viewedCount ?? 0}
-                                      {typeof m.price === "number" && m.price > 0 && <> · ${m.price}</>}
-                                    </span>
-                                    {m.isCanceled ? (
-                                      <span className="text-[10px] text-red-400">Zurückgezogen</span>
-                                    ) : m.canUnsend ? (
-                                      <button
-                                        onClick={() => deleteMassmessage(m.id)}
-                                        disabled={mmDeletingId === m.id}
-                                        className="text-[10px] font-bold uppercase text-slate-400 hover:text-red-400"
-                                      >
-                                        {mmDeletingId === m.id ? "…" : "Rückgängig"}
-                                      </button>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </>
-                      )}
 
                       {key === "schedules" && !panelLoading && (
                         <div className="divide-y divide-[#9C7A3D]/10">
@@ -1450,15 +1414,96 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   )}
                 </div>
             ))}
-            {isAdmin && (
-              <button onClick={openMassmessageCompose} title="Massmessage erstellen" className="hover:scale-110 transition text-2xl leading-none font-bold">+</button>
-            )}
           </div>
 
           <div className="w-[380px] flex-shrink-0 border border-[#9C7A3D]/20 rounded-xl overflow-hidden flex flex-col h-full">
             <div className="p-3 border-b border-[#9C7A3D]/20 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Chats</span>
-              <button onClick={() => loadChats()} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
+              <div className="flex items-center gap-3">
+                {isAdmin && (
+                  <div className="relative">
+                    <button onClick={() => openPanel("stats")} title="Massmessage-Statistik" className={activePanel === "stats" ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
+                      <ChartIcon size={16} />
+                    </button>
+                    {activePanel === "stats" && (
+                      <div className="absolute top-full right-0 mt-2 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl z-30 w-96 max-h-[500px]">
+                        <div className="p-3 border-b border-[#9C7A3D]/20 sticky top-0 bg-[#0A0A0A]">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Statistik</span>
+                        </div>
+                        {panelLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
+                        {panelError && <div className="p-3 text-xs text-red-400">{panelError}</div>}
+                        {!panelLoading && stats?.overview?.massMessages && (
+                          <>
+                            <div className="p-3 grid grid-cols-2 gap-3">
+                              <div>
+                                <div className="text-[10px] text-slate-500 uppercase">Massnachrichten (30 Tage)</div>
+                                <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.count?.total ?? 0}</div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-500 uppercase">Views</div>
+                                <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.views?.total ?? 0}</div>
+                              </div>
+                              <div className="col-span-2">
+                                <div className="text-[10px] text-slate-500 uppercase">Einnahmen</div>
+                                <div className="text-lg font-black text-[#C9A86A]">${stats.overview.massMessages.earnings?.total ?? 0}</div>
+                              </div>
+                            </div>
+                            {Array.isArray(stats.top?.purchases) && stats.top.purchases.length > 0 && (
+                              <div className="p-3 border-t border-[#9C7A3D]/10">
+                                <div className="text-[10px] text-slate-500 uppercase mb-2">Top-Nachrichten</div>
+                                {stats.top.purchases.slice(0, 5).map((p: any, i: number) => (
+                                  <div key={i} className="text-xs text-slate-300 mb-1 truncate">{stripHtmlPreview(p.text || "")}</div>
+                                ))}
+                              </div>
+                            )}
+                            {/* CONFIRMED LIVE 2026-08-05: gleiche Tabelle wie
+                                echtes OnlyFans Statistiken->Verlobung->
+                                Massen-Nachrichten, inkl. "Rückgängig machen"
+                                (DELETE /messages/queue/{id}, live getestet). */}
+                            <div className="border-t border-[#9C7A3D]/10">
+                              <div className="p-3 text-[10px] text-slate-500 uppercase">Letzte Massennachrichten</div>
+                              {massmessageList.length === 0 && (
+                                <div className="px-3 pb-3 text-xs text-slate-500">Keine Massennachrichten (30 Tage)</div>
+                              )}
+                              <div className="divide-y divide-[#9C7A3D]/10">
+                                {massmessageList.map((m: any) => (
+                                  <div key={m.id} className="px-3 py-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs text-slate-300 truncate">{stripHtmlPreview(m.text || "") || "(Medien)"}</span>
+                                      <span className="text-[10px] text-slate-500 flex-shrink-0">{m.date ? new Date(m.date).toLocaleDateString("de-DE") : ""}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between mt-1">
+                                      <span className="text-[10px] text-slate-500">
+                                        Gesendet: {m.sentCount ?? 0} · Betrachtet: {m.viewedCount ?? 0}
+                                        {typeof m.price === "number" && m.price > 0 && <> · ${m.price}</>}
+                                      </span>
+                                      {m.isCanceled ? (
+                                        <span className="text-[10px] text-red-400">Zurückgezogen</span>
+                                      ) : m.canUnsend ? (
+                                        <button
+                                          onClick={() => deleteMassmessage(m.id)}
+                                          disabled={mmDeletingId === m.id}
+                                          className="text-[10px] font-bold uppercase text-slate-400 hover:text-red-400"
+                                        >
+                                          {mmDeletingId === m.id ? "…" : "Rückgängig"}
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {isAdmin && (
+                  <button onClick={openMassmessageCompose} title="Massmessage erstellen" className="text-slate-400 hover:text-[#E2C48A] text-base leading-none font-bold">+</button>
+                )}
+                <button onClick={() => loadChats()} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
+              </div>
             </div>
             {chatsLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
             {chatsError && <div className="p-3 text-xs text-red-400">{chatsError}</div>}
