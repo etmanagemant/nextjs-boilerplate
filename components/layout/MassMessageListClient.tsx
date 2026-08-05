@@ -25,9 +25,9 @@ export default function MassMessageListClient({ aktuelleWoche, archivierteMonate
   const renderKarten = (nachrichtenListe: any[]) => (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {nachrichtenListe.map((n) => (
-        <div key={n.id} className="bg-black/30 border border-[#9C7A3D]/20 rounded-xl p-4 flex flex-col justify-between hover:border-[#C9A86A]/40 transition relative group">
+        <div key={n.id} className="bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-lg shadow-black/20 rounded-2xl p-4 flex flex-col justify-between hover:border-[#C9A86A]/40 transition-colors duration-300 relative group">
           <div>
-            <div className="flex justify-between items-center border-b border-[#9C7A3D]/10 pb-2 mb-2">
+            <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-2">
               <span className="text-xs font-black text-[#C9A86A] uppercase tracking-wide">Model: {n.model_name}</span>
               <span className="text-[10px] text-slate-500 font-semibold">{n.datum}</span>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -79,13 +79,13 @@ export default function MassMessageListClient({ aktuelleWoche, archivierteMonate
           {Object.entries(archivierteMonate).map(([monat, liste]) => {
             const isOpen = !!openMonate[monat];
             return (
-              <div key={monat} className="border border-[#9C7A3D]/10 rounded-xl bg-black/10 overflow-hidden">
+              <div key={monat} className="border border-white/10 rounded-2xl bg-white/[0.02] backdrop-blur-xl overflow-hidden">
                 {/* Klickbarer Header für die Staffelung */}
-                <button type="button" onClick={() => toggleMonat(monat)} className="w-full flex justify-between items-center px-4 py-3 bg-[#050505] hover:bg-black/40 text-xs font-bold text-slate-200 uppercase tracking-wide transition outline-none cursor-pointer">
-                  <span>🗓️ {monat} ({liste.length} Nachrichten)</span>
+                <button type="button" onClick={() => toggleMonat(monat)} className="w-full flex justify-between items-center px-4 py-3 bg-transparent hover:bg-white/5 text-xs font-bold text-slate-200 uppercase tracking-wide transition outline-none cursor-pointer">
+                  <span>{monat} ({liste.length} Nachrichten)</span>
                   <span className="text-[#C9A86A] font-mono text-sm">{isOpen ? "▲" : "▼"}</span>
                 </button>
-                {isOpen && <div className="p-4 bg-[#0A0A0A] border-t border-[#9C7A3D]/10">{renderKarten(liste)}</div>}
+                {isOpen && <div className="p-4 border-t border-white/10">{renderKarten(liste)}</div>}
               </div>
             );
           })}

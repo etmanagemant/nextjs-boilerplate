@@ -473,7 +473,7 @@ export default function ModeratorStriptchatShift({
   if (!shiftState) {
     // SHIFT NOT ACTIVE - Model Selection mit Checkboxes
     return (
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg space-y-4">
+      <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 space-y-4">
         <h2 className="text-sm font-bold text-[#C9A86A] uppercase tracking-wider">
           🎭 Stripchat Schicht starten
         </h2>
@@ -567,7 +567,7 @@ export default function ModeratorStriptchatShift({
 
   // SHIFT ACTIVE
   return (
-    <section className="bg-black/40 p-6 rounded-xl border border-emerald-500/30 shadow-lg space-y-4">
+    <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-emerald-500/30 shadow-xl shadow-black/20 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold text-emerald-400 uppercase tracking-wider">
           🟢 Schicht aktiv - {shiftState.selectedModelNames.join(", ")}

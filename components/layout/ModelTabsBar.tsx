@@ -169,7 +169,7 @@ export default function ModelTabsBar({ models, activeModelId, chatterId, basePat
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          className="fixed bg-[#1A1A1A] border border-[#C9A86A]/30 rounded-lg shadow-2xl z-50 py-1"
+          className="fixed bg-[#1A1A1A]/90 backdrop-blur-xl border border-[#C9A86A]/30 rounded-xl shadow-2xl z-50 py-1"
           style={{ left: `${Math.max(8, contextMenu.x - 140)}px`, top: `${contextMenu.y}px`, minWidth: "220px" }}
         >
           <button

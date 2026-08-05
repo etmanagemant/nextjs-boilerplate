@@ -304,7 +304,7 @@ export default function ContentPlanClient({
       {/* ========================================
           COMMUNITY MANAGER
           ======================================== */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg">
+      <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20">
         <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">
           📌 Community-Manager
         </h2>
@@ -347,7 +347,7 @@ export default function ContentPlanClient({
       {/* ========================================
           CONTENT PLAN POSTS (EXPLORER GRID)
           ======================================== */}
-      <section className="bg-black/40 p-6 rounded-xl border border-[#9C7A3D]/10 shadow-lg">
+      <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20">
         <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">
           🖼️ Content-Fotos & Plan
         </h2>

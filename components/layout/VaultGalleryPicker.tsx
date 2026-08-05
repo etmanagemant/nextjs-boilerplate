@@ -77,8 +77,8 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl max-h-[85vh] bg-[#0A0A0A] border-2 border-[#C9A86A]/40 rounded-xl shadow-2xl overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-[#9C7A3D]/20 flex-shrink-0">
+      <div className="w-full max-w-3xl max-h-[85vh] bg-[#0A0A0A]/90 backdrop-blur-xl border-2 border-[#C9A86A]/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-white/10 flex-shrink-0">
           <h3 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">📁 Tresor - Medien auswählen</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">
             ✕
@@ -156,7 +156,7 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3 p-4 border-t border-[#9C7A3D]/20 flex-shrink-0">
+        <div className="flex items-center justify-between gap-3 p-4 border-t border-white/10 flex-shrink-0">
           <span className="text-xs text-slate-500">{selected.length} ausgewählt</span>
           <button
             type="button"

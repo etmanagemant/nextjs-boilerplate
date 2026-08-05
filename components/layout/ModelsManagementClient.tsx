@@ -198,7 +198,7 @@ export default function ModelsManagementClient({
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-lg shadow-2xl max-w-md w-full p-6">
+          <div className="bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl max-w-md w-full p-6">
             <div className="text-center">
               <div className="text-4xl mb-3">⚠️</div>
               <h3 className="text-lg font-bold text-[#C9A86A] mb-3">ACHTUNG</h3>

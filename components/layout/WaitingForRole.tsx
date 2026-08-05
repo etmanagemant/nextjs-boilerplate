@@ -37,7 +37,7 @@ export default function WaitingForRole({ userId }: { userId: string }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl shadow-black/80 p-8 text-center">
+      <div className="max-w-md w-full bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-black/80 p-8 text-center">
         {!role ? (
           <>
             <div className="animate-spin mx-auto mb-4 text-3xl w-fit">⏳</div>
@@ -62,7 +62,7 @@ export default function WaitingForRole({ userId }: { userId: string }) {
           </>
         )}
 
-        <form action="/api/logout" method="POST" className="mt-6 pt-5 border-t border-[#9C7A3D]/20">
+        <form action="/api/logout" method="POST" className="mt-6 pt-5 border-t border-white/10">
           <button
             type="submit"
             className="text-xs font-bold text-slate-500 hover:text-red-400 transition uppercase tracking-wider"

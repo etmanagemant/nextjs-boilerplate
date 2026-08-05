@@ -59,7 +59,7 @@ export default function LoginPage() {
         {isRegister ? "Registrieren" : "Login"}
       </h1>
       
-      <form onSubmit={onSubmit} className="space-y-4 bg-[#0A0A0A] border border-[#9C7A3D]/30 p-6 rounded-xl shadow-2xl shadow-black/80">
+      <form onSubmit={onSubmit} className="space-y-4 bg-white/[0.03] backdrop-blur-xl border border-white/10 p-6 rounded-2xl shadow-2xl shadow-black/80">
         <div>
           <label className="text-xs uppercase font-bold tracking-wider text-slate-400 block mb-1">E-Mail Adresse</label>
           <input 

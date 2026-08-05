@@ -156,7 +156,7 @@ export default function ScriptLibraryManager({
 
       {/* Add/Edit Form */}
       {(isAddingScript || editingId !== null) && (
-        <div className="bg-black/40 p-6 rounded-xl border border-[#C9A86A]/20 space-y-4">
+        <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-[#C9A86A]/20 shadow-xl shadow-black/20 space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
               Script Title
@@ -264,14 +264,14 @@ export default function ScriptLibraryManager({
       {/* Scripts List */}
       <div className="space-y-3">
         {globalScripts.length === 0 ? (
-          <div className="bg-black/40 p-8 rounded-xl border border-[#9C7A3D]/10 text-center text-slate-400">
+          <div className="bg-white/[0.03] backdrop-blur-xl p-8 rounded-2xl border border-white/10 shadow-xl shadow-black/20 text-center text-slate-400">
             <p className="text-sm">No scripts in library yet. Create one to get started!</p>
           </div>
         ) : (
           globalScripts.map((script) => (
             <div
               key={script.id}
-              className="bg-black/40 p-4 rounded-lg border border-[#9C7A3D]/10 space-y-3"
+              className="bg-white/[0.03] backdrop-blur-xl p-4 rounded-xl border border-white/10 shadow-lg shadow-black/20 space-y-3"
             >
               <div className="flex justify-between items-start gap-4">
                 <div className="flex-1">

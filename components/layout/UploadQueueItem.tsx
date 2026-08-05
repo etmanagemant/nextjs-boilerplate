@@ -55,7 +55,7 @@ export default function UploadQueueItem({
   const size = compact ? "w-12 h-12" : "w-14 h-14";
 
   return (
-    <div className="flex items-center gap-3 bg-black/40 p-2.5 rounded-xl border border-[#9C7A3D]/10">
+    <div className="flex items-center gap-3 bg-white/[0.03] backdrop-blur-xl p-2.5 rounded-xl border border-white/10">
       <div className={`relative ${size} flex-shrink-0 rounded-lg overflow-hidden bg-black/60 border border-[#9C7A3D]/20 flex items-center justify-center`}>
         {isAudio ? (
           <span className="text-xl">🎙️</span>

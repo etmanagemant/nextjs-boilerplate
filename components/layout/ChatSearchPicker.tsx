@@ -81,7 +81,7 @@ export function ChatSearchPicker({ modelId, onSelect, onClose }: ChatSearchPicke
   return (
     <div
       ref={containerRef}
-      className="absolute left-0 top-full z-30 mt-2 w-80 max-w-full bg-[#0A0A0A] border border-[#C9A86A]/40 rounded-xl shadow-2xl p-3"
+      className="absolute left-0 top-full z-30 mt-2 w-80 max-w-full bg-[#0A0A0A]/90 backdrop-blur-xl border border-[#C9A86A]/40 rounded-2xl shadow-2xl p-3"
     >
       <input
         autoFocus

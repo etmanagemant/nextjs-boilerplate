@@ -91,7 +91,7 @@ export default function EmojiBar({ onPick }: { onPick: (emoji: string) => void }
     <div className="relative">
       {/* Always-visible favorites bar right above the input, per the
           user's explicit ask - not hidden behind a button. */}
-      <div className="flex items-center gap-1 mb-2 bg-black/30 border border-[#9C7A3D]/20 rounded-lg px-2 py-1.5 overflow-x-auto scrollbar-hide">
+      <div className="flex items-center gap-1 mb-2 bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-xl px-2 py-1.5 overflow-x-auto scrollbar-hide">
         {favorites.map((e) => (
           <button key={e} onClick={() => onPick(e)} className="text-lg hover:scale-125 transition flex-shrink-0">
             {e}
@@ -107,7 +107,7 @@ export default function EmojiBar({ onPick }: { onPick: (emoji: string) => void }
       </div>
 
       {pickerOpen && (
-        <div className="absolute bottom-full left-0 mb-1 w-80 max-h-80 overflow-y-auto scrollbar-hide bg-[#0A0A0A] border border-[#9C7A3D]/30 rounded-xl shadow-2xl p-3 z-20">
+        <div className="absolute bottom-full left-0 mb-1 w-80 max-h-80 overflow-y-auto scrollbar-hide bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-3 z-20">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}

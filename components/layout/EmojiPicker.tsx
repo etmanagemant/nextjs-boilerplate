@@ -26,8 +26,8 @@ export default function EmojiPicker({
   const category = EMOJI_CATEGORIES[activeCategory];
 
   return (
-    <div className="absolute bottom-full mb-2 left-0 right-0 z-30 bg-[#0A0A0A] border border-[#C9A86A]/40 rounded-xl shadow-2xl shadow-black/60 flex flex-col max-h-80 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#9C7A3D]/20">
+    <div className="absolute bottom-full mb-2 left-0 right-0 z-30 bg-[#0A0A0A]/90 backdrop-blur-xl border border-[#C9A86A]/40 rounded-2xl shadow-2xl shadow-black/60 flex flex-col max-h-80 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
         <div className="flex gap-1 overflow-x-auto">
           {EMOJI_CATEGORIES.map((cat, idx) => (
             <button
