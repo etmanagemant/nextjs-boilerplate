@@ -4096,8 +4096,9 @@ app.post('/insert-script-step', async (req, res) => {
       // Bugfix (real production report, 2026-08-05): 3s was too short for
       // a video (needs processing time before the price popup's input
       // exists at all) - same fix as /upload-to-vault-fan's identical
-      // check, bumped to a flat generous wait since this path handles one
-      // attachment at a time (no batch size to scale by).
+      // check. No guessed cap at all now (timeout:0 = Puppeteer's real
+      // "wait forever"), matching the user's explicit ask rather than
+      // picking a bigger number and still risking the same failure.
       const priceFocused = await page
         .waitForFunction(
           () => {
@@ -4108,7 +4109,7 @@ app.post('/insert-script-step', async (req, res) => {
             input.dispatchEvent(new Event('input', { bubbles: true }));
             return true;
           },
-          { timeout: 20000 }
+          { timeout: 0 }
         )
         .then(() => true)
         .catch(() => false);
@@ -4928,13 +4929,22 @@ async function handleUploadToVaultFan(req, res) {
     // disables Send while attachments are still processing) instead of
     // guessing a fixed duration - scaled ceiling gives large batches
     // realistic room without making a single file wait needlessly long.
+    // Bugfix (real production report, 2026-08-05): a large video can take
+    // much longer than any guessed cap to finish processing on OnlyFans'
+    // side before Send even becomes clickable, and neither we nor the
+    // user actually know that real duration up front - per the user's
+    // explicit ask, wait for the real DOM state with no arbitrary cutoff
+    // (timeout:0 is Puppeteer's own "no timeout" value) rather than
+    // guess a number and risk repeating the exact "Preisfeld nicht
+    // gefunden" failure this is fixing. The Node HTTP server's own
+    // request timeout is disabled to match (see app.listen() below).
     await page
       .waitForFunction(
         () => {
           var btn = document.querySelector('[at-attr="send_btn"]');
           return !!(btn && !btn.disabled);
         },
-        { timeout: Math.min(90000, 5000 + filePaths.length * 3000) }
+        { timeout: 0 }
       )
       .catch(() => {});
 
@@ -4964,9 +4974,11 @@ async function handleUploadToVaultFan(req, res) {
       // fine for photos but not videos - OnlyFans needs real time to
       // process/transcode a video before the price popup's input even
       // exists, so every video in a batch failed with "Preisfeld nicht
-      // gefunden" while photos in the exact same flow worked fine. Scaled
-      // by batch size, same reasoning as the existing attach-button-ready
-      // wait a few lines up.
+      // gefunden" while photos in the exact same flow worked fine. Per
+      // the user's explicit ask: no guessed cap at all - price only ever
+      // gets set once the field genuinely exists, however long that takes
+      // for a given file. timeout:0 is Puppeteer's real "wait forever"
+      // value, not a very large number standing in for one.
       const priceFocused = await page
         .waitForFunction(
           () => {
@@ -4977,7 +4989,7 @@ async function handleUploadToVaultFan(req, res) {
             input.dispatchEvent(new Event('input', { bubbles: true }));
             return true;
           },
-          { timeout: Math.min(60000, 8000 + filePaths.length * 4000) }
+          { timeout: 0 }
         )
         .then(() => true)
         .catch(() => false);
@@ -5028,6 +5040,10 @@ async function handleUploadToVaultFan(req, res) {
     // wasn't, is exactly the failure mode this guards against. OnlyFans
     // resets the compose box (attachments + price badge cleared) once a
     // send actually completes - polling for that is the proxy used here.
+    // Bugfix (real production report, 2026-08-05): same "no guessed cap"
+    // fix as the two waits above - a real send (especially a large video
+    // batch) only ever gets reported done once the compose box genuinely
+    // resets, however long OnlyFans actually takes.
     const sendConfirmed = await page
       .waitForFunction(
         () => {
@@ -5035,7 +5051,7 @@ async function handleUploadToVaultFan(req, res) {
           var stillHasPriceBadge = priceInput && priceInput.value && priceInput.value.trim() !== '';
           return !stillHasPriceBadge;
         },
-        { timeout: Math.min(180000, 15000 + filePaths.length * 6000) }
+        { timeout: 0 }
       )
       .then(() => true)
       .catch(() => false);
@@ -5753,6 +5769,18 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   // immediately regardless of how long restoring N models' sessions takes.
   autoReconnectAllModels().catch((e) => console.error('[AUTO-RECONNECT] Unexpected error:', e.message));
 });
+// Bugfix (real production report, 2026-08-05): Node 18+ kills any request
+// still open after 5 minutes by default (server.requestTimeout) - a large
+// video's real Upload Vault send (attach + price + confirm, each now
+// waiting indefinitely inside Puppeteer, see /upload-to-vault-fan) could
+// easily run longer than that on its own merits, and Node would cut the
+// connection out from under a send that was genuinely still in progress
+// and going to succeed. Disabled (0 = no limit) to match "wait as long as
+// it actually takes, never guess a cutoff" - this route already never
+// reports success without confirming the real DOM state, so there's no
+// risk of hanging on a truly broken case pretending to be fine.
+server.requestTimeout = 0;
+server.headersTimeout = 0;
 
 // Close every browser promptly on shutdown so systemd doesn't have to wait
 // out the full stop timeout and SIGKILL us (which used to take ~90s and
