@@ -3352,6 +3352,25 @@ app.delete('/of-fan-block', async (req, res) => {
   }
 });
 
+// DELETE /of-chat-delete { modelId, fanId } - CONFIRMED LIVE 2026-08-07:
+// DELETE /chats/{fanId}, kein Body. Loescht den Chat aus der Liste (wie
+// der "x"-Button neben jedem Chat im echten OnlyFans).
+app.delete('/of-chat-delete', async (req, res) => {
+  const { modelId, fanId } = req.body || {};
+  if (!modelId || !fanId) return res.status(400).json({ error: 'Missing modelId or fanId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'DELETE' });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-CHAT-DELETE] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST/DELETE /of-list-membership { modelId, fanId, listId } - CONFIRMED
 // LIVE 2026-07-31: generic "add/remove fan from a list" endpoint - covers
 // BOTH the star ("Zu Favoriten und anderen Listen hinzufügen") AND muting

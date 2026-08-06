@@ -1504,6 +1504,26 @@ export default function OfInboxClient({
   // auf - aber nur von der Profilseite aus möglich, nicht mehr aus dem Chat
   // selbst (Chat existiert dort ja nicht mehr). isBlocked wird deshalb rein
   // lokal getrackt statt aus /chats gelesen.
+  // CONFIRMED LIVE 2026-08-07: DELETE /chats/{fanId} - derselbe "x"-Button
+  // wie neben jedem Chat im echten OnlyFans, Chat verschwindet aus der
+  // Liste (kein Block, der Fan kann weiter schreiben).
+  async function deleteChat(fanId: number) {
+    if (!modelId) return;
+    if (!window.confirm("Diesen Chat wirklich löschen?")) return;
+    try {
+      const res = await fetch("/api/crm/of-inbox/chat-delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, fanId }),
+      });
+      if (!res.ok) throw new Error("Löschen fehlgeschlagen");
+      setChats((prev) => prev.filter((c) => c.withUser.id !== fanId));
+      if (activeFanId === fanId) setActiveFanId(null);
+    } catch {
+      window.alert("Chat löschen fehlgeschlagen.");
+    }
+  }
+
   async function blockFan() {
     if (!modelId || !activeFanId) return;
     if (!window.confirm("Diesen Fan wirklich blockieren? Der Chat verschwindet danach aus deiner Liste.")) return;
@@ -2117,35 +2137,43 @@ export default function OfInboxClient({
             {chatsError && <div className="p-3 text-xs text-red-400">{chatsError}</div>}
             <div className="divide-y divide-white/5 flex-1 min-h-0 overflow-y-auto scrollbar-hide" onScroll={handleChatListScroll}>
               {chats.map((c) => (
-                <button
+                <div
                   key={c.withUser.id}
-                  onClick={() => openChat(c.withUser.id)}
-                  className={`w-full text-left p-3.5 hover:bg-black/30 transition flex items-center gap-3 ${activeFanId === c.withUser.id ? "bg-[#C9A86A]/10" : ""}`}
+                  className={`group relative w-full flex items-center gap-3 transition ${activeFanId === c.withUser.id ? "bg-[#C9A86A]/10" : "hover:bg-black/30"}`}
                 >
-                  <Avatar fanId={c.withUser.id} size={52} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 justify-between">
-                      <span className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-base font-bold text-white truncate">{displayName(c.withUser.id)}</span>
-                        {c.isMutedNotifications && <MuteIcon size={14} />}
-                        {c.canSendMessage === false && (
-                          <span title={c.canNotSendReason || "Kann diesem Fan nicht mehr schreiben"} className="text-xs">🚫</span>
+                  <button onClick={() => openChat(c.withUser.id)} className="flex-1 min-w-0 text-left p-3.5 flex items-center gap-3">
+                    <Avatar fanId={c.withUser.id} size={52} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 justify-between">
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-base font-bold text-white truncate">{displayName(c.withUser.id)}</span>
+                          {c.isMutedNotifications && <MuteIcon size={14} />}
+                          {c.canSendMessage === false && (
+                            <span title={c.canNotSendReason || "Kann diesem Fan nicht mehr schreiben"} className="text-xs">🚫</span>
+                          )}
+                        </span>
+                        {/* Bugfix (gemeldet 2026-08-07): stummgeschaltete Chats zeigten
+                            trotzdem die "1 ungelesen"-Zahl - widerspricht dem Sinn von
+                            stummschalten, echtes OnlyFans zeigt dort auch keine Zahl. */}
+                        {c.unreadMessagesCount > 0 && !c.isMutedNotifications && (
+                          <span className="text-xs bg-[#C9A86A] text-black font-bold px-2 py-0.5 rounded-full ml-1 flex-shrink-0">{c.unreadMessagesCount}</span>
                         )}
-                      </span>
-                      {/* Bugfix (gemeldet 2026-08-07): stummgeschaltete Chats zeigten
-                          trotzdem die "1 ungelesen"-Zahl - widerspricht dem Sinn von
-                          stummschalten, echtes OnlyFans zeigt dort auch keine Zahl. */}
-                      {c.unreadMessagesCount > 0 && !c.isMutedNotifications && (
-                        <span className="text-xs bg-[#C9A86A] text-black font-bold px-2 py-0.5 rounded-full ml-1 flex-shrink-0">{c.unreadMessagesCount}</span>
+                      </div>
+                      {c.lastMessage && (
+                        <div className="text-sm text-slate-400 mt-0.5 truncate pr-5">
+                          {stripHtmlPreview(c.lastMessage.text)}
+                        </div>
                       )}
                     </div>
-                    {c.lastMessage && (
-                      <div className="text-sm text-slate-400 mt-0.5 truncate">
-                        {stripHtmlPreview(c.lastMessage.text)}
-                      </div>
-                    )}
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    onClick={() => deleteChat(c.withUser.id)}
+                    title="Chat löschen"
+                    className="absolute top-3 right-3 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                  >
+                    <CloseIcon size={14} />
+                  </button>
+                </div>
               ))}
               {chatsLoadingMore && <div className="p-3 text-xs text-slate-500 italic text-center">Lade weitere…</div>}
             </div>
