@@ -179,7 +179,7 @@ app.use((req, res, next) => {
   // browser (see OnlyFansViewer.tsx/BrowserLoginStreamComponent.tsx),
   // which can't attach a custom header - same reasoning and same signed,
   // model-scoped token mechanism as /public-upload-to-vault-fan below.
-  if (req.path === '/health' || req.path === '/public-upload-to-vault-fan' || req.path === '/audio-stream') return next();
+  if (req.path === '/health' || req.path === '/public-upload-to-vault-fan' || req.path === '/audio-stream' || req.path === '/public-media-proxy' || req.path === '/public-vault-thumbnail') return next();
   const expected = process.env.VPS_SHARED_SECRET;
   if (!expected) return next(); // not configured - fail open rather than lock everyone out
   if (req.headers['x-vps-secret'] !== expected) {
@@ -3756,6 +3756,44 @@ app.get('/of-media-proxy', async (req, res) => {
   }
 });
 
+// Same as /of-media-proxy above, but reachable DIRECTLY from a CRM user's
+// own browser (verifyUploadToken instead of the shared secret) - lets
+// chat image/video viewing skip Next.js's serverless function entirely,
+// since streaming every media byte through it twice was eating the app's
+// Vercel Fast Origin Transfer quota (Task, 2026-08-06). Token is minted
+// by POST /api/crm/media-token.
+app.get('/public-media-proxy', verifyUploadToken, async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url' });
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Invalid url' });
+  }
+  if (!/(^|\.)onlyfans\.com$/.test(parsed.hostname)) {
+    return res.status(400).json({ error: 'Host not allowed' });
+  }
+  try {
+    const upstream = await fetch(url, req.headers.range ? { headers: { Range: req.headers.range } } : undefined);
+    res.status(upstream.status);
+    for (const h of ['content-type', 'content-length', 'accept-ranges', 'content-range']) {
+      const v = upstream.headers.get(h);
+      if (v) res.setHeader(h, v);
+    }
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    if (!upstream.body) return res.end();
+    for await (const chunk of upstream.body) {
+      res.write(chunk);
+    }
+    res.end();
+  } catch (error) {
+    console.error('[PUBLIC-MEDIA-PROXY] Error:', error.message);
+    if (!res.headersSent) res.status(502).json({ error: error.message });
+    else res.end();
+  }
+});
+
 // Hands a CRM user's browser what it needs to open a real VNC connection -
 // the password itself, since VNC auth happens client-side via noVNC. Used
 // for both the admin login flow and the CRM Inbox live view (both connect
@@ -5614,6 +5652,30 @@ app.get('/vault-thumbnail', async (req, res) => {
     res.end(buffer);
   } catch (error) {
     console.error('[VAULT-THUMBNAIL] Error:', error.message);
+    res.status(502).end();
+  }
+});
+
+// Same as /vault-thumbnail above, but reachable DIRECTLY from a CRM
+// user's own browser (verifyUploadToken instead of the shared secret) -
+// see /public-media-proxy above for why. Token is minted by POST
+// /api/crm/media-token.
+app.get('/public-vault-thumbnail', verifyUploadToken, async (req, res) => {
+  const url = req.query.url;
+  if (!url || typeof url !== 'string' || !url.startsWith('https://cdn')) {
+    return res.status(400).json({ error: 'Missing or invalid url' });
+  }
+  try {
+    const upstream = await fetch(url);
+    if (!upstream.ok) {
+      return res.status(upstream.status).end();
+    }
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.end(buffer);
+  } catch (error) {
+    console.error('[PUBLIC-VAULT-THUMBNAIL] Error:', error.message);
     res.status(502).end();
   }
 });

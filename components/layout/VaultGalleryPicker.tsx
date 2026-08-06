@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useMediaProxyUrl } from "@/lib/useMediaProxyUrl";
 
 interface MediaRef {
   label: string;
@@ -36,6 +37,7 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
   const [selected, setSelected] = useState<MediaRef[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const mediaProxyUrl = useMediaProxyUrl(modelId);
 
   const keyOf = (m: MediaRef) => m.thumbnailUrl || m.label;
   const isSelected = (m: MediaRef) => selected.some((s) => keyOf(s) === keyOf(m));
@@ -135,7 +137,7 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
                       // them directly here would just 403.
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={`/api/crm/vault-thumbnail?url=${encodeURIComponent(item.thumbnailUrl)}`}
+                        src={mediaProxyUrl(item.thumbnailUrl, "thumbnail")}
                         alt={item.label}
                         className="w-full h-full object-cover"
                       />

@@ -6,6 +6,7 @@ import { FanCrmPanel } from "@/components/FanCrmPanel";
 import EmojiBar from "@/components/layout/EmojiBar";
 import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
+import { useMediaProxyUrl } from "@/lib/useMediaProxyUrl";
 import {
   HomeIcon, BellIcon, ChatIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon,
   NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon, CloseIcon, HeartIcon, BookmarkIcon, ArrowLeftIcon, ScriptIcon,
@@ -79,7 +80,7 @@ type Shift = { id: number; shift_date: string; notes: string };
 // Block bei JEDEM Tastendruck im Tippfeld mit (draft-State betrifft die
 // ganze Komponente) - memo hält ihn stabil, solange sich attachedMedia
 // selbst nicht ändert, das war das gemeldete Flackern pro Buchstabe.
-const AttachedMediaPreview = memo(function AttachedMediaPreview({ media, onRemove }: { media: any[]; onRemove: (m: any) => void }) {
+const AttachedMediaPreview = memo(function AttachedMediaPreview({ media, onRemove, mediaProxyUrl }: { media: any[]; onRemove: (m: any) => void; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string }) {
   return (
     <>
       {media.map((m) => {
@@ -90,7 +91,7 @@ const AttachedMediaPreview = memo(function AttachedMediaPreview({ media, onRemov
               <div className="w-12 h-12 rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={16} /></div>
             ) : url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-12 h-12 object-cover rounded" alt="" />
+              <img src={mediaProxyUrl(url)} className="w-12 h-12 object-cover rounded" alt="" />
             ) : (
               <div className="w-12 h-12 rounded bg-black/40" />
             )}
@@ -113,14 +114,14 @@ const AttachedMediaPreview = memo(function AttachedMediaPreview({ media, onRemov
 // stable regardless of what triggers a parent re-render. Task #44's
 // media-proxy comment (CDN urls IP-locked to the VPS, not the browser)
 // still applies unchanged.
-function MessageMedia({ media }: { media?: MediaItem[] }) {
+function MessageMedia({ media, mediaProxyUrl }: { media?: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string }) {
   if (!media || media.length === 0) return null;
   return (
     <div className="flex flex-col gap-2 mb-2">
       {media.map((m, i) => {
         const url = m.files?.full?.url || m.files?.preview?.url;
         if (!url) return null;
-        const proxied = `/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`;
+        const proxied = mediaProxyUrl(url);
         if (m.type === "photo" || m.type === "gif") {
           // eslint-disable-next-line @next/next/no-img-element
           return <img key={i} src={proxied} alt="" className="max-w-full rounded-lg max-h-80 object-contain" />;
@@ -141,6 +142,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const searchParams = useSearchParams();
   const modelFromUrl = searchParams.get("model");
   const [modelId, setModelId] = useState(modelFromUrl || "");
+  const mediaProxyUrl = useMediaProxyUrl(modelId);
 
   // Follows the URL like /crm-inbox's tabs do - clicking a tab in the
   // header (a real navigation, not local state) updates ?model=, which
@@ -1777,7 +1779,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               <div className="w-full aspect-square rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={16} /></div>
                             ) : (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full aspect-square object-cover rounded" alt="" />
+                              <img src={mediaProxyUrl(url)} className="w-full aspect-square object-cover rounded" alt="" />
                             )}
                             {m.type === "video" && <span className="absolute bottom-0.5 left-0.5 text-[8px] font-bold bg-black/70 text-white px-1 rounded">▶</span>}
                             {isPaid && (
@@ -1891,7 +1893,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                                 {isOwn && Number(m.price) > 0 && (
                                   <div className="flex items-center gap-1 text-[10px] text-[#C9A86A] mb-1"><PriceTagIcon size={12} /> PPV ${m.price}</div>
                                 )}
-                                <MessageMedia media={m.media} />
+                                <MessageMedia media={m.media} mediaProxyUrl={mediaProxyUrl} />
                               </>
                             )}
                             {m.text && <div dangerouslySetInnerHTML={{ __html: m.text }} />}
@@ -1926,7 +1928,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   {sendError && <div className="text-xs text-red-400 mb-2">{sendError}</div>}
                   {attachedMedia.length > 0 && (
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <AttachedMediaPreview media={attachedMedia} onRemove={toggleAttachMedia} />
+                      <AttachedMediaPreview media={attachedMedia} onRemove={toggleAttachMedia} mediaProxyUrl={mediaProxyUrl} />
                       <input
                         value={attachPrice}
                         onChange={(e) => setAttachPrice(e.target.value.replace(/[^0-9.]/g, ""))}
@@ -2143,7 +2145,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               <div className="w-full h-full rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={20} /></div>
                             ) : (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`} className="w-full h-full object-cover rounded" alt="" />
+                              <img src={mediaProxyUrl(url)} className="w-full h-full object-cover rounded" alt="" />
                             )}
                             {m.type === "video" && <span className="absolute bottom-1 right-1 text-[8px] font-bold bg-black/70 text-white px-1 rounded">▶</span>}
                             {m.isPurchased ? (
@@ -2294,7 +2296,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                           <div className="w-full aspect-square rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={16} /></div>
                         ) : (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={`/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(m.files.thumb.url)}`} className="w-full aspect-square object-cover rounded" alt="" />
+                          <img src={mediaProxyUrl(m.files.thumb.url)} className="w-full aspect-square object-cover rounded" alt="" />
                         )}
                         <button onClick={() => setMmMedia((prev) => prev.filter((x) => x.id !== m.id))} className="absolute -top-1 -right-1 bg-black/80 rounded-full text-white">
                           <CloseIcon size={14} />
@@ -2342,7 +2344,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             {(() => {
               const url = lightboxMedia.files?.full?.url || lightboxMedia.files?.preview?.url || lightboxMedia.files?.thumb?.url;
               if (!url) return null;
-              const proxied = `/api/crm/of-inbox/media-proxy?url=${encodeURIComponent(url)}`;
+              const proxied = mediaProxyUrl(url);
               if (lightboxMedia.type === "video") return <video src={proxied} controls autoPlay className="max-w-full max-h-[85vh] rounded-lg" />;
               if (lightboxMedia.type === "audio") return <audio src={proxied} controls autoPlay className="w-96" />;
               // eslint-disable-next-line @next/next/no-img-element
