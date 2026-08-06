@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "../../lib/supabaseClient";
 import { hasRole, isAdminTierRole } from "../../lib/roles";
 import { CircularProgress, MiniBarChart } from "@/components/layout/StatViz";
+import { RevenueChart } from "@/components/layout/RevenueChart";
 import { SettingsIcon, MailIcon } from "@/components/layout/GoldIcons";
 
 // Task #85: consistent zero-padded 24h format for the new shift overview,
@@ -339,6 +340,12 @@ export default function DashboardPage() {
         <p className="text-xs text-slate-400 mt-1">Echtzeit-Umsatzauswertungen & Performancedaten - Umsatz und Arbeitszeit zeigen nur heute</p>
       </div>
 
+      {/* Explizit gewuenscht (2026-08-07): Umsatz-Verlauf statt reiner
+          "heute"-Zahl, als erstes auf der Seite. Chatter sehen nur ihren
+          eigenen Umsatz (userId gesetzt), Admin ohne userId den
+          Agentur-Gesamtumsatz. */}
+      <RevenueChart userId={isAdmin ? undefined : currentUserId} isAdmin={isAdmin} />
+
       {/* Zuweisungsbox */}
       {isAdmin && unassignedRevenues.length > 0 && (
         <section className="mb-8 bg-gold-950/20 p-5 rounded-2xl border-2 border-[#C9A86A]/40 shadow-xl">
@@ -452,24 +459,10 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* Kacheln */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 text-center">
-          {isAdmin ? (
-            <>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Agentur-Umsatz heute (Admin)</div>
-              <div className="text-3xl font-black text-[#C9A86A] mt-2 font-mono">${gesamtBruttoAgentur.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Brutto</span></div>
-              <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">${gesamtNettoAgentur.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Netto</span></div>
-            </>
-          ) : (
-            <>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Deine Umsatz-Leistung heute</div>
-              <div className="text-3xl font-black text-[#C9A86A] mt-2 font-mono">${chatterBrutto.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Brutto</span></div>
-              <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">${chatterNetto.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Netto</span></div>
-            </>
-          )}
-        </div>
-        <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 flex items-center justify-center gap-5">
+      {/* Ranglisten-Platz-Kachel (reine "heute"-Zahl-Kachel wurde durch den
+          RevenueChart oben ersetzt, 2026-08-07) */}
+      <div className="mb-8">
+        <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 flex items-center justify-center gap-5 max-w-md">
           <CircularProgress
             value={userStatsArray.length - (userStatsArray.findIndex(u => u.brutto === chatterBrutto))}
             max={userStatsArray.length || 1}
