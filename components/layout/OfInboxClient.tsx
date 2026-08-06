@@ -645,6 +645,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [scripts, setScripts] = useState<any[]>([]);
   const [scriptsLoading, setScriptsLoading] = useState(false);
   const [scriptsError, setScriptsError] = useState("");
+  // Task (gemeldet 2026-08-06): Library war eine kleine Liste, die beim
+  // Klick sofort ALLE Schritte eines Scripts auf einmal in den Entwurf
+  // gemischt hat - bei Scripts mit vielen Schritten unbrauchbar. Jetzt
+  // zweistufig: Liste -> Script öffnen -> Schritte einzeln nacheinander
+  // auswählen. null = Listenansicht, sonst das gerade offene Script.
+  const [scriptDetailOpen, setScriptDetailOpen] = useState<any | null>(null);
   const [attachedMedia, setAttachedMedia] = useState<any[]>([]);
   const [attachPrice, setAttachPrice] = useState("");
   const [sending, setSending] = useState(false);
@@ -1039,13 +1045,30 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   }
 
   function toggleScriptPanel() {
-    if (scriptPanelOpen) { setScriptPanelOpen(false); return; }
+    if (scriptPanelOpen) { setScriptPanelOpen(false); setScriptDetailOpen(null); return; }
     setScriptPanelOpen(true);
+    setScriptDetailOpen(null);
     setVaultModalMode(null);
     // Fix: lud vorher nur beim allerersten Öffnen (scripts.length>0-Check),
     // ein danach gespeicherter neuer Schritt tauchte deshalb nie auf ohne
     // Seiten-Neuladen. Jetzt bei jedem Öffnen frisch.
     loadScripts();
+  }
+
+  // Erkennt, ob ein Schritt in DIESEM Chat schon wirklich gesendet wurde -
+  // vergleicht gegen die echten eigenen Nachrichten (isOwn), nicht gegen
+  // einen separaten Merker, der leicht aus dem Tritt geraten könnte (z.B.
+  // wenn ein anderer Chatter denselben Schritt schon geschickt hat). m.text
+  // ist HTML (dangerouslySetInnerHTML), daher beide Seiten vor dem
+  // Vergleich strippen.
+  function isStepSent(stepText: string): boolean {
+    const target = (stepText || "").replace(/<[^>]*>/g, "").trim();
+    if (!target) return false;
+    return messages.some((m) => {
+      const isOwn = String(m.fromUser?.id) !== String(activeFanId);
+      if (!isOwn) return false;
+      return (m.text || "").replace(/<[^>]*>/g, "").trim() === target;
+    });
   }
 
   // Fix: media_refs eines Scripts trägt doch eine echte Tresor-Medien-ID
@@ -1054,16 +1077,13 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   // unserer neuen signierten Route) - vorher fälschlich angenommen, das
   // wäre nur ein VNC-Label ohne echte ID. Jetzt an den Tresor angebunden:
   // Medien werden mit übernommen, Preis vom ersten PPV-Schritt auch.
-  function insertScript(script: any) {
-    const text = (script.steps || [])
-      .filter((s: any) => s.message_text)
-      .map((s: any) => s.message_text)
-      .join("\n\n");
-    if (text) setDraft((d) => (d ? `${d}\n${text}` : text));
+  // Fügt EINEN Schritt in den Entwurf ein (statt wie früher das ganze
+  // Script auf einmal) - Panel bleibt offen, damit der nächste Schritt
+  // direkt danach ausgewählt werden kann.
+  function insertScriptStep(step: any) {
+    if (step.message_text) setDraft((d) => (d ? `${d}\n${step.message_text}` : step.message_text));
 
-    const mediaWithId = (script.steps || [])
-      .flatMap((s: any) => s.media_refs || [])
-      .filter((m: any) => m.id != null && !Number.isNaN(Number(m.id)));
+    const mediaWithId = (step.media_refs || []).filter((m: any) => m.id != null && !Number.isNaN(Number(m.id)));
     if (mediaWithId.length > 0) {
       setAttachedMedia((prev) => {
         const existingIds = new Set(prev.map((m) => m.id));
@@ -1073,10 +1093,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
         return [...prev, ...toAdd];
       });
     }
-    const priceStep = (script.steps || []).find((s: any) => s.price);
-    if (priceStep?.price) setAttachPrice(String(priceStep.price));
-
-    setScriptPanelOpen(false);
+    if (step.price) setAttachPrice(String(step.price));
   }
 
   // Bugfix: useCallback statt einer plain function - AttachedMediaPreview
@@ -2106,35 +2123,84 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                         <ScriptIcon size={20} />
                       </button>
                       {scriptPanelOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 w-72 max-h-72 overflow-y-auto scrollbar-hide bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30">
-                          <div className="p-2.5 border-b border-white/10 flex items-center justify-between">
-                            <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Script Vault</span>
-                            <button onClick={loadScripts} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
-                          </div>
-                          {scriptsLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
-                          {scriptsError && <div className="p-3 text-xs text-red-400">{scriptsError}</div>}
-                          {!scriptsLoading && !scriptsError && scripts.length === 0 && (
-                            <div className="p-3 text-xs text-slate-500">
-                              Keine Scripts für dieses Model
-                              <div className="text-[9px] text-slate-600 mt-1 select-all">modelId: {modelId}</div>
-                            </div>
-                          )}
-                          <div className="divide-y divide-white/5">
-                            {scripts.map((s) => {
-                              const mediaCount = (s.steps || []).flatMap((st: any) => st.media_refs || []).length;
-                              const price = (s.steps || []).find((st: any) => st.price)?.price;
-                              return (
-                                <button key={s.id} onClick={() => insertScript(s)} className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-[#C9A86A]/10 flex items-center justify-between">
-                                  <span>{s.title}</span>
-                                  <span className="text-[10px] text-slate-500 flex-shrink-0 ml-2 flex items-center gap-1.5">
-                                    {mediaCount > 0 && (
-                                      <span className="flex items-center gap-0.5"><ImageIcon size={10} />{mediaCount}</span>
-                                    )}
-                                    {price ? <span className="text-[#C9A86A] font-bold">${price}</span> : null}
-                                  </span>
+                        <div className="absolute bottom-full left-0 mb-2 w-96 max-h-[32rem] flex flex-col overflow-hidden bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30">
+                          <div className="p-2.5 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+                            {scriptDetailOpen ? (
+                              <>
+                                <button onClick={() => setScriptDetailOpen(null)} className="text-xs font-bold text-[#C9A86A] hover:text-[#E2C48A] flex items-center gap-1 min-w-0">
+                                  <span>‹</span> <span className="truncate">{scriptDetailOpen.title}</span>
                                 </button>
-                              );
-                            })}
+                                <button onClick={() => { setScriptPanelOpen(false); setScriptDetailOpen(null); }} className="text-xs text-slate-400 hover:text-[#E2C48A] flex-shrink-0 ml-2">✕</button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Script Vault</span>
+                                <button onClick={loadScripts} className="text-xs text-slate-400 hover:text-[#E2C48A]">↻</button>
+                              </>
+                            )}
+                          </div>
+                          <div className="flex-1 overflow-y-auto scrollbar-hide">
+                            {scriptsLoading && <div className="p-3 text-xs text-slate-500 italic">Lade…</div>}
+                            {scriptsError && <div className="p-3 text-xs text-red-400">{scriptsError}</div>}
+                            {!scriptDetailOpen ? (
+                              <>
+                                {!scriptsLoading && !scriptsError && scripts.length === 0 && (
+                                  <div className="p-3 text-xs text-slate-500">
+                                    Keine Scripts für dieses Model
+                                    <div className="text-[9px] text-slate-600 mt-1 select-all">modelId: {modelId}</div>
+                                  </div>
+                                )}
+                                <div className="divide-y divide-white/5">
+                                  {scripts.map((s) => {
+                                    const mediaCount = (s.steps || []).flatMap((st: any) => st.media_refs || []).length;
+                                    const price = (s.steps || []).find((st: any) => st.price)?.price;
+                                    return (
+                                      <button key={s.id} onClick={() => setScriptDetailOpen(s)} className="w-full text-left px-3 py-2.5 text-xs text-slate-300 hover:bg-[#C9A86A]/10 flex items-center justify-between">
+                                        <span className="truncate">{s.title}</span>
+                                        <span className="text-[10px] text-slate-500 flex-shrink-0 ml-2 flex items-center gap-1.5">
+                                          <span>{(s.steps || []).length} Schritte</span>
+                                          {mediaCount > 0 && (
+                                            <span className="flex items-center gap-0.5"><ImageIcon size={10} />{mediaCount}</span>
+                                          )}
+                                          {price ? <span className="text-[#C9A86A] font-bold">${price}</span> : null}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="divide-y divide-white/5">
+                                {/* Schritte einzeln antippen statt wie früher alles auf
+                                    einmal - bereits in DIESEM Chat gesendete Schritte
+                                    (Abgleich gegen die echten eigenen Nachrichten) sind
+                                    durchgestrichen, bleiben aber klickbar (erneut senden
+                                    ist ein legitimer Fall). */}
+                                {(scriptDetailOpen.steps || []).map((step: any, i: number) => {
+                                  const sent = isStepSent(step.message_text);
+                                  const mediaCount = (step.media_refs || []).length;
+                                  return (
+                                    <button
+                                      key={i}
+                                      onClick={() => insertScriptStep(step)}
+                                      className={`w-full text-left px-3 py-2.5 text-xs hover:bg-[#C9A86A]/10 flex items-start gap-2 ${sent ? "opacity-50" : "text-slate-300"}`}
+                                    >
+                                      <span className="text-[10px] font-bold text-slate-500 flex-shrink-0 mt-0.5">{i + 1}.</span>
+                                      <span className="flex-1 min-w-0">
+                                        <span className={`block truncate ${sent ? "line-through" : ""}`}>
+                                          {step.message_text || (mediaCount > 0 ? "(nur Medien)" : "(leer)")}
+                                        </span>
+                                        <span className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500">
+                                          {sent && <span className="text-emerald-400 font-bold">✓ Gesendet</span>}
+                                          {mediaCount > 0 && <span className="flex items-center gap-0.5"><ImageIcon size={10} />{mediaCount}</span>}
+                                          {step.price ? <span className="text-[#C9A86A] font-bold">${step.price}</span> : null}
+                                        </span>
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
