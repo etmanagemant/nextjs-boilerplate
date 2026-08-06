@@ -32,6 +32,15 @@ const ADMIN_USER_ID = "35498c92-2c4d-4720-a6f7-cc187a4c5fc4";
  * run it in Supabase's SQL editor first if it hasn't been already) so
  * re-syncing the same recent transactions every cycle is safe - existing
  * ones are just skipped, never duplicated.
+ *
+ * Also fires the resolved chatter's own crm_notifications bell (2026-08-06,
+ * explicit ask) - replaces /api/crm/ppv-purchased's old VNC-injected
+ * detector as the trigger for that same personal notification, since that
+ * detector only ever runs if someone happens to have the live VNC view of
+ * this exact model open at the moment of purchase (unreliable, arrives for
+ * whoever's watching, not necessarily the chatter who gets the credit).
+ * This runs unconditionally every sync cycle instead, so it fires no
+ * matter who's online.
  * POST /api/vps/sync-revenue?secret=YOUR_SECRET
  * Body: { modelId, transactions: [{ id, amount, net, createdAt, type: "ppv_unlock"|"tip", fanId }] }
  */
@@ -62,6 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const rows = [];
+    const notifyUserIds: { userId: string; type: "tip" | "ppv_unlock"; amount: number }[] = [];
     for (const t of newTxns) {
       let resolvedUserId: string | null = null;
       if (t.fanId) {
@@ -85,6 +95,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const transactionType = t.type === "tip" ? "tip" : "ppv_unlock";
       rows.push({
         user_id: resolvedUserId || ADMIN_USER_ID,
         model_id: modelId,
@@ -92,17 +103,35 @@ export async function POST(request: NextRequest) {
         amount: Number(t.net) || 0,
         platform: "onlyfans",
         transaction_id: String(t.id),
-        transaction_type: t.type === "tip" ? "tip" : "ppv_unlock",
+        transaction_type: transactionType,
         assigned_to_chatter: !!resolvedUserId,
         chatter_found: !!resolvedUserId,
         created_at: t.createdAt || new Date().toISOString(),
       });
+      if (resolvedUserId) {
+        notifyUserIds.push({ userId: resolvedUserId, type: transactionType, amount: Number(t.amount) || 0 });
+      }
     }
 
     const { error } = await supabase.from("chatter_revenues").insert(rows);
     if (error) {
       console.error("[SYNC-REVENUE] Insert error:", error.message);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (notifyUserIds.length > 0) {
+      const { data: modelRow } = await supabase.from("models").select("name").eq("id", modelId).maybeSingle();
+      const modelName = modelRow?.name || "ein Model";
+      const notifRows = notifyUserIds.map((n) => ({
+        message: n.type === "tip"
+          ? `💰 Tip erhalten: $${n.amount} bei ${modelName}!`
+          : `💰 Dein PPV bei ${modelName} wurde gekauft ($${n.amount})!`,
+        model_id: modelId,
+        recipient_user_id: n.userId,
+        type: "ppv_purchased",
+      }));
+      const { error: notifError } = await supabase.from("crm_notifications").insert(notifRows);
+      if (notifError) console.error("[SYNC-REVENUE] Notification insert error:", notifError.message);
     }
 
     return NextResponse.json({ status: "success", inserted: rows.length });
