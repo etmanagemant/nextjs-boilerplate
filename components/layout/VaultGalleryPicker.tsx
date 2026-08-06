@@ -20,15 +20,21 @@ interface VaultGalleryPickerProps {
   onClose: () => void;
 }
 
+const VAULT_TYPE_LABEL: Record<string, string> = { photo: "Foto", video: "Video", gif: "GIF", audio: "Audio" };
+
 /**
  * A real thumbnail grid of the model's actual OnlyFans Vault, built
  * entirely in our own UI - no live/VNC view of OnlyFans at all, so
  * clicking a thumbnail here can never trigger OnlyFans' own native
  * multi-select mode (move/delete etc.) the way clicking inside an
- * embedded live view did. Data comes from sniffing the real request
- * OnlyFans' own Vault page makes when it loads (see /vault-media on the
- * VPS) - a request we make ourselves gets rejected, since OnlyFans signs
- * these calls with headers only its own front-end code computes.
+ * embedded live view did. Bugfix (gemeldet 2026-08-06): früher über das
+ * alte VNC-Chatterslot-sniffing (/api/crm/vault-media) geladen, das
+ * einen gerade offenen Live-View für dieses Model brauchte - im Script
+ * Vault gibt es den nie, daher immer "Model ist gerade nicht verbunden."
+ * obwohl das Model über OF Inbox Beta längst verbunden war. Nutzt jetzt
+ * dieselben signierten Endpunkte wie OF Inbox Betas eigenes Tresor-
+ * Popup (/api/crm/of-inbox/vault-lists + vault-media), die nur die
+ * ohnehin persistente Model-Session brauchen, keinen VNC-Slot.
  */
 export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryPickerProps) {
   const [items, setItems] = useState<MediaRef[]>([]);
@@ -49,28 +55,38 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/crm/vault-media", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId, listId }),
-      });
+      const res = await fetch(`/api/crm/of-inbox/vault-media?modelId=${encodeURIComponent(modelId)}&offset=0${listId ? `&listId=${encodeURIComponent(listId)}` : ""}`);
       const data = await res.json();
-      if (data.status === "no_slot") {
-        setError("Model ist gerade nicht verbunden.");
-        setItems([]);
-      } else if (data.status === "error") {
+      if (!res.ok || data.status !== "success") {
         setError(data.error || "Fehler beim Laden");
         setItems([]);
-      } else {
-        setItems(data.items || []);
-        if (data.lists && data.lists.length > 0) setLists(data.lists);
+        return;
       }
+      const list = data.data?.list || [];
+      setItems(
+        list.map((m: any) => ({
+          id: String(m.id),
+          label: VAULT_TYPE_LABEL[m.type] || "Medium",
+          thumbnailUrl: m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url,
+        }))
+      );
     } catch {
       setError("Netzwerkfehler");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!modelId) return;
+    fetch(`/api/crm/of-inbox/vault-lists?modelId=${encodeURIComponent(modelId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.status !== "success") return;
+        setLists((data.data?.list || []).map((l: any) => ({ id: String(l.id), name: l.name })));
+      })
+      .catch(() => {});
+  }, [modelId]);
 
   useEffect(() => {
     load(activeListId);
@@ -132,12 +148,12 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
                     }`}
                   >
                     {item.thumbnailUrl ? (
-                      // Proxied through our backend - OnlyFans' thumbnail
+                      // Proxied through our backend - OnlyFans' CDN
                       // URLs are IP-locked to the VPS itself, so loading
                       // them directly here would just 403.
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={mediaProxyUrl(item.thumbnailUrl, "thumbnail")}
+                        src={mediaProxyUrl(item.thumbnailUrl)}
                         alt={item.label}
                         className="w-full h-full object-cover"
                       />
