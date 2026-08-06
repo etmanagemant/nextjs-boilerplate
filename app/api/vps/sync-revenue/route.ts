@@ -30,8 +30,22 @@ const ADMIN_USER_ID = "35498c92-2c4d-4720-a6f7-cc187a4c5fc4";
  *
  * transaction_id has a UNIQUE index (see CHATTER_REVENUES_MIGRATION.sql -
  * run it in Supabase's SQL editor first if it hasn't been already) so
- * re-syncing the same recent transactions every cycle is safe - existing
- * ones are just skipped, never duplicated.
+ * re-syncing the same recent transactions every cycle is safe - already-
+ * ASSIGNED rows are just skipped, never duplicated. Still-unassigned rows
+ * (fell into the "Offene Einnahmen" pool because nobody had reacted yet)
+ * get a fresh attribution attempt every cycle and are upgraded in place
+ * once one succeeds - see the TIP attribution note below for why this
+ * retry matters.
+ *
+ * Attribution differs by type (explicit ask, 2026-08-06): a PPV is
+ * something a chatter actively SENT, so credit goes to whoever sent it
+ * (most recent crm_onlyfans_sent_log entry BEFORE the purchase). A tip is
+ * unprompted from the fan - credit instead goes to whichever chatter
+ * reacts to it FIRST afterwards, by replying OR by liking it (see
+ * /api/crm/of-inbox/message-like, which now also logs a like into the
+ * same table as a synthetic `like:<messageId>` entry). That's why a tip
+ * from the last sync cycle with no reaction yet stays unassigned instead
+ * of guessing - the retry above picks it up correctly once someone reacts.
  *
  * Also fires the resolved chatter's own crm_notifications bell (2026-08-06,
  * explicit ask) - replaces /api/crm/ppv-purchased's old VNC-injected
@@ -61,62 +75,84 @@ export async function POST(request: NextRequest) {
     const ids = transactions.map((t: any) => String(t.id)).filter(Boolean);
     const { data: existing } = await supabase
       .from("chatter_revenues")
-      .select("transaction_id")
+      .select("transaction_id, assigned_to_chatter")
       .in("transaction_id", ids);
-    const existingIds = new Set((existing || []).map((r: any) => r.transaction_id));
+    const existingById = new Map((existing || []).map((r: any) => [r.transaction_id, r]));
 
-    const newTxns = transactions.filter((t: any) => t.id && !existingIds.has(String(t.id)));
-    if (!newTxns.length) {
+    // Already-assigned rows are final - only brand-new transactions and
+    // still-unassigned ones (retry candidates) go through attribution.
+    const txnsToProcess = transactions.filter((t: any) => {
+      const row = t.id ? existingById.get(String(t.id)) : undefined;
+      return t.id && (!row || !row.assigned_to_chatter);
+    });
+    if (!txnsToProcess.length) {
       return NextResponse.json({ status: "success", inserted: 0 });
     }
 
-    const rows = [];
-    const notifyUserIds: { userId: string; type: "tip" | "ppv_unlock"; amount: number }[] = [];
-    for (const t of newTxns) {
-      let resolvedUserId: string | null = null;
-      if (t.fanId) {
-        const { data: sentLogEntry } = await supabase
-          .from("crm_onlyfans_sent_log")
-          .select("chatter_name")
-          .eq("model_id", modelId)
-          .eq("fan_id", String(t.fanId))
-          .lte("sent_at", t.createdAt)
-          .order("sent_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (sentLogEntry?.chatter_name) {
-          const { data: chatterProfile } = await supabase
-            .from("profiles")
-            .select("user_id")
-            .or(`full_name.eq.${sentLogEntry.chatter_name},email.eq.${sentLogEntry.chatter_name}`)
-            .limit(1)
-            .maybeSingle();
-          if (chatterProfile?.user_id) resolvedUserId = chatterProfile.user_id;
-        }
-      }
+    async function resolveChatter(fanId: string, createdAt: string, isTip: boolean): Promise<string | null> {
+      let query = supabase
+        .from("crm_onlyfans_sent_log")
+        .select("chatter_name")
+        .eq("model_id", modelId)
+        .eq("fan_id", fanId);
+      query = isTip
+        ? query.gte("sent_at", createdAt).order("sent_at", { ascending: true })
+        : query.lte("sent_at", createdAt).order("sent_at", { ascending: false });
+      const { data: sentLogEntry } = await query.limit(1).maybeSingle();
+      if (!sentLogEntry?.chatter_name) return null;
+      const { data: chatterProfile } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .or(`full_name.eq.${sentLogEntry.chatter_name},email.eq.${sentLogEntry.chatter_name}`)
+        .limit(1)
+        .maybeSingle();
+      return chatterProfile?.user_id || null;
+    }
 
+    const newRows = [];
+    const upgradeRows: { transactionId: string; userId: string }[] = [];
+    const notifyUserIds: { userId: string; type: "tip" | "ppv_unlock"; amount: number }[] = [];
+
+    for (const t of txnsToProcess) {
       const transactionType = t.type === "tip" ? "tip" : "ppv_unlock";
-      rows.push({
-        user_id: resolvedUserId || ADMIN_USER_ID,
-        model_id: modelId,
-        gross_amount: Number(t.amount) || 0,
-        amount: Number(t.net) || 0,
-        platform: "onlyfans",
-        transaction_id: String(t.id),
-        transaction_type: transactionType,
-        assigned_to_chatter: !!resolvedUserId,
-        chatter_found: !!resolvedUserId,
-        created_at: t.createdAt || new Date().toISOString(),
-      });
+      const resolvedUserId = t.fanId ? await resolveChatter(String(t.fanId), t.createdAt, transactionType === "tip") : null;
+      const alreadyExists = existingById.has(String(t.id));
+
+      if (alreadyExists) {
+        if (resolvedUserId) upgradeRows.push({ transactionId: String(t.id), userId: resolvedUserId });
+      } else {
+        newRows.push({
+          user_id: resolvedUserId || ADMIN_USER_ID,
+          model_id: modelId,
+          gross_amount: Number(t.amount) || 0,
+          amount: Number(t.net) || 0,
+          platform: "onlyfans",
+          transaction_id: String(t.id),
+          transaction_type: transactionType,
+          assigned_to_chatter: !!resolvedUserId,
+          chatter_found: !!resolvedUserId,
+          created_at: t.createdAt || new Date().toISOString(),
+        });
+      }
       if (resolvedUserId) {
         notifyUserIds.push({ userId: resolvedUserId, type: transactionType, amount: Number(t.amount) || 0 });
       }
     }
 
-    const { error } = await supabase.from("chatter_revenues").insert(rows);
-    if (error) {
-      console.error("[SYNC-REVENUE] Insert error:", error.message);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (newRows.length > 0) {
+      const { error } = await supabase.from("chatter_revenues").insert(newRows);
+      if (error) {
+        console.error("[SYNC-REVENUE] Insert error:", error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+    }
+
+    for (const u of upgradeRows) {
+      const { error } = await supabase
+        .from("chatter_revenues")
+        .update({ user_id: u.userId, assigned_to_chatter: true, chatter_found: true })
+        .eq("transaction_id", u.transactionId);
+      if (error) console.error("[SYNC-REVENUE] Upgrade error:", error.message);
     }
 
     if (notifyUserIds.length > 0) {
@@ -134,7 +170,7 @@ export async function POST(request: NextRequest) {
       if (notifError) console.error("[SYNC-REVENUE] Notification insert error:", notifError.message);
     }
 
-    return NextResponse.json({ status: "success", inserted: rows.length });
+    return NextResponse.json({ status: "success", inserted: newRows.length, upgraded: upgradeRows.length });
   } catch (error: any) {
     console.error("[SYNC-REVENUE] Error:", error.message);
     return NextResponse.json({ error: error.message || "Failed to sync revenue" }, { status: 500 });

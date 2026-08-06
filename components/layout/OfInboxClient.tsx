@@ -50,6 +50,13 @@ type Message = {
   canPurchase?: boolean;
   isLiked?: boolean;
   isPinned?: boolean;
+  // Task (gemeldet 2026-08-06, "Tips werden nicht sichtbar angezeigt"):
+  // CONFIRMED LIVE echte Felder auf einer Tip-Nachricht - text ist nur der
+  // generische "Ich habe dir einen $X.00 Tipp geschickt"-Hinweis, tipText
+  // ist die eigentliche Nachricht des Fans dazu.
+  isTip?: boolean;
+  tipAmount?: number;
+  tipText?: string;
 };
 
 type UserDetail = {
@@ -2274,7 +2281,15 @@ export default function OfInboxClient({
                                 nur bei !isOwn sperren, sonst würde der
                                 Chatter seine eigene verschickte PPV auch nie
                                 zu sehen bekommen. */}
-                            {!isOwn && Number(m.price) > 0 && m.canPurchase ? (
+                            {m.isTip ? (
+                              <div className="flex items-center gap-2 py-1 px-1 text-[#E2C48A]">
+                                <TipIcon size={20} />
+                                <div>
+                                  <div className="text-sm font-bold text-[#C9A86A]">${m.tipAmount} Tip erhalten</div>
+                                  {m.tipText && <div className="text-xs text-slate-300 mt-0.5" dangerouslySetInnerHTML={{ __html: m.tipText }} />}
+                                </div>
+                              </div>
+                            ) : !isOwn && Number(m.price) > 0 && m.canPurchase ? (
                               <div className="flex items-center gap-2 py-2 px-1 text-[#E2C48A]">
                                 <PriceTagIcon size={20} />
                                 <div>
@@ -2295,7 +2310,7 @@ export default function OfInboxClient({
                                 <MessageMedia media={m.media} mediaProxyUrl={mediaProxyUrl} onMediaLoad={stickMessagesToBottom} />
                               </>
                             )}
-                            {m.text && <div dangerouslySetInnerHTML={{ __html: m.text }} />}
+                            {!m.isTip && m.text && <div dangerouslySetInnerHTML={{ __html: m.text }} />}
                             {isOwn && (
                               <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-400">
                                 {sentBy && <span className="opacity-60">gesendet von {sentBy}</span>}
