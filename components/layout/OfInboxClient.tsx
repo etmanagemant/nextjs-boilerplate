@@ -2356,14 +2356,24 @@ export default function OfInboxClient({
                               </div>
                             ) : (
                               <>
-                                {isOwn && Number(m.price) > 0 && (
-                                  // Wie im echten OnlyFans: Preis-Zeile zeigt direkt, ob
-                                  // der Fan schon bezahlt hat (m.canPurchase bei eigener
-                                  // PPV = Fan noch nicht bezahlt, siehe Kommentar oben).
-                                  <div className={`flex items-center gap-1 text-[10px] font-semibold mb-1 ${m.canPurchase ? "text-slate-400" : "text-emerald-400"}`}>
-                                    <PriceTagIcon size={12} /> ${m.price} {m.canPurchase ? "noch nicht bezahlt" : "bezahlt ✓"}
-                                  </div>
-                                )}
+                                {isOwn && Number(m.price) > 0 && (() => {
+                                  // Bugfix (gemeldet 2026-08-06, live bestaetigt): canPurchase
+                                  // wird bei eigener PPV faelschlich als "Fan hat bezahlt"
+                                  // gelesen, sobald es false ist - aber canPurchase wird
+                                  // z.B. auch false wenn der Fan uns blockiert hat (Fan
+                                  // blockierte einen PPV-Empfaenger, zeigte trotzdem
+                                  // "bezahlt ✓"). isOpened ist das eigentliche "wurde
+                                  // wirklich freigeschaltet"-Feld - nur DAS als "bezahlt"
+                                  // werten, sonst neutral "nicht verfuegbar" statt faelschlich
+                                  // Geld zu behaupten.
+                                  const label = m.isOpened ? "bezahlt ✓" : m.canPurchase ? "noch nicht bezahlt" : "nicht verfügbar";
+                                  const color = m.isOpened ? "text-emerald-400" : m.canPurchase ? "text-slate-400" : "text-slate-500";
+                                  return (
+                                    <div className={`flex items-center gap-1 text-[10px] font-semibold mb-1 ${color}`}>
+                                      <PriceTagIcon size={12} /> ${m.price} {label}
+                                    </div>
+                                  );
+                                })()}
                                 <MessageMedia media={m.media} mediaProxyUrl={mediaProxyUrl} onMediaLoad={stickMessagesToBottom} />
                               </>
                             )}

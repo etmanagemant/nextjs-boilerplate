@@ -2663,8 +2663,15 @@ async function syncOnlyFansRevenue(modelId, page) {
     return;
   }
 
+  // Bugfix (gemeldet 2026-08-06, live bestaetigt): ein echter $5-Tip stand
+  // bei OnlyFans selbst >1h auf status:"loading" statt "done" - nur "done"
+  // zu akzeptieren liess ihn komplett unsichtbar im Dashboard verschwinden,
+  // bis OnlyFans irgendwann intern abschliesst (kein fester Zeitrahmen).
+  // "loading" jetzt mit aufnehmen: Geld taucht sofort auf statt stundenlang
+  // zu fehlen - das Risiko einer sehr seltenen spaeteren Stornierung ist
+  // kleiner als tagelang unsichtbares echtes Geld.
   const transactions = result.json.list
-    .filter((t) => t.status === 'done' && t.descriptionDetails && (t.descriptionDetails.type === 'message' || t.descriptionDetails.type === 'tips'))
+    .filter((t) => (t.status === 'done' || t.status === 'loading') && t.descriptionDetails && (t.descriptionDetails.type === 'message' || t.descriptionDetails.type === 'tips'))
     .map((t) => ({
       id: t.id,
       amount: t.amount,
@@ -2674,7 +2681,14 @@ async function syncOnlyFansRevenue(modelId, page) {
       fanId: t.user && t.user.id,
     }));
 
-  if (!transactions.length) return;
+  // Bugfix (gemeldet 2026-08-06): vorher war jeder erfolgreiche Zyklus ohne
+  // NEUE Transaktion komplett stumm - unmoeglich zu unterscheiden ob der
+  // Sync lief und nichts Neues fand, oder ob er kaputt war. Jetzt immer
+  // eine Zeile pro Zyklus, auch wenn inserted:0.
+  if (!transactions.length) {
+    console.log(`[REVENUE-SYNC] ${modelId}: 0 relevante Transaktionen (von ${result.json.list.length} total)`);
+    return;
+  }
   if (!APP_URL || !CRON_SECRET) {
     console.warn('[REVENUE-SYNC] Skipped posting - NEXT_PUBLIC_APP_URL or CRON_SECRET not set');
     return;
@@ -2686,7 +2700,7 @@ async function syncOnlyFansRevenue(modelId, page) {
       body: JSON.stringify({ modelId, transactions }),
     });
     const data = await res.json().catch(() => ({}));
-    if (data.inserted) console.log(`[REVENUE-SYNC] ${modelId}: ${data.inserted} new transaction(s) synced`);
+    console.log(`[REVENUE-SYNC] ${modelId}: ${transactions.length} geprueft, ${data.inserted || 0} neu, ${data.upgraded || 0} nachtraeglich zugeordnet`);
   } catch (e) {
     console.warn(`[REVENUE-SYNC] ${modelId}: failed to post`, e.message);
   }
@@ -2711,6 +2725,14 @@ async function runRevenueSyncCycle() {
 // laeuft der normale 15-Minuten-Rhythmus unveraendert weiter.
 setTimeout(runRevenueSyncCycle, 45 * 1000);
 setInterval(runRevenueSyncCycle, REVENUE_SYNC_INTERVAL_MS);
+
+// Manueller Trigger zum Debuggen (gleiche X-VPS-Secret-Absicherung wie
+// jede andere Route hier) - loest exakt denselben Zyklus aus, keine neue
+// Faehigkeit, nur auf Abruf statt nur alle 15 Minuten.
+app.post('/trigger-revenue-sync', async (req, res) => {
+  await runRevenueSyncCycle();
+  res.json({ status: 'success' });
+});
 
 // ============================================================================
 // ROUTES
