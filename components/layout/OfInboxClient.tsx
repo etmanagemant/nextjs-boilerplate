@@ -117,9 +117,9 @@ const AttachedMediaPreview = memo(function AttachedMediaPreview({ media, onRemov
 // stable regardless of what triggers a parent re-render. Task #44's
 // media-proxy comment (CDN urls IP-locked to the VPS, not the browser)
 // still applies unchanged.
-function MessageMedia({ media, mediaProxyUrl }: { media?: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string }) {
+function MessageMedia({ media, mediaProxyUrl, onMediaLoad }: { media?: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string; onMediaLoad?: () => void }) {
   if (!media || media.length === 0) return null;
-  return <MessageMediaCarousel media={media} mediaProxyUrl={mediaProxyUrl} />;
+  return <MessageMediaCarousel media={media} mediaProxyUrl={mediaProxyUrl} onMediaLoad={onMediaLoad} />;
 }
 
 // Bugfix (gemeldet 2026-08-06): mehrere Dateien in einer Nachricht wurden
@@ -128,7 +128,7 @@ function MessageMedia({ media, mediaProxyUrl }: { media?: MediaItem[]; mediaProx
 // sichtbar mit Pfeilen zum Durchblättern (X/Y-Zähler), wie ein Karussell -
 // eigener eigener Index-State pro Nachricht, da jede MessageMedia-Instanz
 // unabhängig durchgeblättert werden soll.
-function MessageMediaCarousel({ media, mediaProxyUrl }: { media: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string }) {
+function MessageMediaCarousel({ media, mediaProxyUrl, onMediaLoad }: { media: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string; onMediaLoad?: () => void }) {
   const [index, setIndex] = useState(0);
   const safeIndex = Math.min(index, media.length - 1);
   const m = media[safeIndex];
@@ -139,11 +139,11 @@ function MessageMediaCarousel({ media, mediaProxyUrl }: { media: MediaItem[]; me
     <div className="relative mb-2">
       {proxied && (m.type === "photo" || m.type === "gif") ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={proxied} alt="" className="max-w-full rounded-lg max-h-80 object-contain" />
+        <img src={proxied} alt="" className="max-w-full rounded-lg max-h-80 object-contain" onLoad={onMediaLoad} />
       ) : proxied && m.type === "video" ? (
-        <video src={proxied} controls className="max-w-full rounded-lg max-h-80" />
+        <video src={proxied} controls className="max-w-full rounded-lg max-h-80" onLoadedMetadata={onMediaLoad} />
       ) : proxied && m.type === "audio" ? (
-        <audio src={proxied} controls className="max-w-full" />
+        <audio src={proxied} controls className="max-w-full" onLoadedMetadata={onMediaLoad} />
       ) : null}
       {media.length > 1 && (
         <>
@@ -1036,7 +1036,7 @@ export default function OfInboxClient({
   // hat (>150px vom Ende weg), damit kein absichtliches Lesen alter
   // Nachrichten mitten im Zeitfenster weggerissen wird.
   function stickMessagesToBottom() {
-    const delays = [0, 150, 400, 900, 1800];
+    const delays = [0, 150, 400, 900, 1800, 3500];
     delays.forEach((ms) => {
       setTimeout(() => {
         const el = messagesContainerRef.current;
@@ -2292,7 +2292,7 @@ export default function OfInboxClient({
                                     <PriceTagIcon size={12} /> ${m.price} {m.canPurchase ? "noch nicht bezahlt" : "bezahlt ✓"}
                                   </div>
                                 )}
-                                <MessageMedia media={m.media} mediaProxyUrl={mediaProxyUrl} />
+                                <MessageMedia media={m.media} mediaProxyUrl={mediaProxyUrl} onMediaLoad={stickMessagesToBottom} />
                               </>
                             )}
                             {m.text && <div dangerouslySetInnerHTML={{ __html: m.text }} />}

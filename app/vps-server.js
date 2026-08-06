@@ -234,9 +234,15 @@ const IDLE_TIMEOUT_MS = 90 * 24 * 60 * 60 * 1000; // close a session after 90 da
 // assignSlot below for the resume side.
 const CHATTER_IDLE_PAUSE_MS = 30 * 60 * 1000;
 
-// Your Vultr box (ETMANAGEMENT, 80.240.30.188) has 1GB RAM - a single headful
-// Chromium session already uses 300-500MB, so default to ONE at a time.
-// Bump via MAX_CONCURRENT_SESSIONS env var if you upgrade the VPS.
+// Upgraded to 2 vCPU / 4GB (2026-07-30, see VPS_SHARED_SECRET-adjacent env
+// vars on the systemd unit) - the old "1GB RAM, default to ONE" comment
+// here was stale. With OF Inbox Beta now covering most day-to-day chatting
+// via signed API calls (no per-chatter Chrome session needed at all, every
+// chatter shares the one persistent main session below), the real ceiling
+// on this number is just how many models need a persistent MAIN session
+// logged in at once, not how many people are actively using VNC - that's
+// now admin/content-manager-only, occasional use. Set via env var, not
+// hardcoded here.
 const MAX_CONCURRENT_SESSIONS = Number(process.env.MAX_CONCURRENT_SESSIONS || 1);
 
 // CONFIRMED LIVE (2026-07-29): /tmp gets wiped on a real VPS reboot (a
