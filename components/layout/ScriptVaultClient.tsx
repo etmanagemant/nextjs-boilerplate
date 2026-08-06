@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 import { VaultGalleryPicker } from "@/components/layout/VaultGalleryPicker";
+import EmojiBar from "@/components/layout/EmojiBar";
 import { isAdminTierRole } from "@/lib/roles";
 
 interface MediaRef {
@@ -312,6 +313,7 @@ export default function ScriptVaultClient({
                       rows={2}
                       className="w-full bg-[#0A0A0A] border border-[#9C7A3D]/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-[#C9A86A]"
                     />
+                    <EmojiBar onPick={(emoji) => updateDraftStep(i, { message_text: step.message_text + emoji })} />
                     <div className="flex items-center gap-2 flex-wrap relative">
                       <button
                         type="button"
