@@ -71,3 +71,45 @@ export async function updateModelNotes(modelId: string, notes: string) {
     );
   }
 }
+
+/**
+ * No-Go-Liste - strukturiert getrennt von den freien Notizen (2026-08-07,
+ * explizit gewuenscht). Gleiches Whole-Array-Replace-Muster wie Fan CRM's
+ * preferences: einfacher als einzelne Insert/Delete-Endpunkte fuer eine
+ * Liste, die eh nur ein Admin pflegt.
+ */
+export async function fetchModelNoGoList(modelId: string): Promise<string[]> {
+  const supabase = await createClient();
+
+  try {
+    const { data, error } = await supabase
+      .from("models")
+      .select("no_go_list")
+      .eq("id", modelId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.no_go_list || [];
+  } catch (err) {
+    console.error("Error fetching model no-go list:", err);
+    return [];
+  }
+}
+
+export async function updateModelNoGoList(modelId: string, list: string[]) {
+  const supabase = await createClient();
+
+  try {
+    const { error } = await supabase
+      .from("models")
+      .update({ no_go_list: list })
+      .eq("id", modelId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    throw new Error(
+      err instanceof Error ? err.message : "Failed to update model no-go list"
+    );
+  }
+}

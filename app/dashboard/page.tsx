@@ -41,7 +41,18 @@ export default function DashboardPage() {
   const [chatterNetto, setChatterNetto] = useState<number>(0);
   const [userStatsArray, setUserStatsArray] = useState<any[]>([]);
   const [modelStatsArray, setModelStatsArray] = useState<any[]>([]);
-  
+
+  // Explizit gewuenscht (2026-08-07): Mitarbeiter-Rangliste + Model-
+  // Performance sollen Monat fuer Monat durchblaetterbar sein (auch fuer
+  // Chatter, nicht nur Admin) statt fest auf "heute" zu stehen - eigener
+  // State, unabhaengig von den "heute"-Kacheln/Ranglisten-Platz-Anzeige
+  // oben, die weiterhin "heute" bleiben.
+  const [rankingMonthOffset, setRankingMonthOffset] = useState(0);
+  const [rankingMonthLabel, setRankingMonthLabel] = useState("");
+  const [rankingUserStats, setRankingUserStats] = useState<any[]>([]);
+  const [rankingModelStats, setRankingModelStats] = useState<any[]>([]);
+  const [rankingLoading, setRankingLoading] = useState(true);
+
   const [unassignedRevenues, setUnassignedRevenues] = useState<any[]>([]);
   const [selectedChatterForTransfer, setSelectedChatterForTransfer] = useState<Record<number, string>>({});
   const [abandonedLeads, setAbandonedLeads] = useState<any[]>([]);
@@ -255,6 +266,70 @@ export default function DashboardPage() {
     } catch (e) { console.error(e); }
   }
 
+  async function loadRanking(offset: number) {
+    setRankingLoading(true);
+    try {
+      const now = new Date();
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+      const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+      setRankingMonthLabel(monthDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" }));
+
+      const [profilesRes, revenueRes, modelsRes, assignmentsRes] = await Promise.all([
+        supabase.from("profiles").select("user_id, full_name"),
+        supabase.from("chatter_revenues").select("user_id, model_id, amount, gross_amount, platform")
+          .gte("created_at", monthStart.toISOString()).lt("created_at", monthEnd.toISOString()).neq("model_id", TEST_MODEL_ID),
+        supabase.from("models").select("id, name"),
+        supabase.from("shift_assignments").select("chatter_id, user_id, started_at, ended_at")
+          .gte("started_at", monthStart.toISOString()).lt("started_at", monthEnd.toISOString()),
+      ]);
+
+      const profiles = profilesRes.data || [];
+      const revenues = revenueRes.data || [];
+      const models = (modelsRes.data || []).filter((m: any) => m.id !== TEST_MODEL_ID);
+      const assignments = assignmentsRes.data || [];
+
+      const perUser: Record<string, { user_id: string; name: string; hours: number; brutto: number; netto: number }> = {};
+      profiles.forEach((p: any) => { perUser[p.user_id] = { user_id: p.user_id, name: p.full_name || "Mitarbeiter", hours: 0, brutto: 0, netto: 0 }; });
+      assignments.forEach((a: any) => {
+        const id = a.chatter_id || a.user_id;
+        if (id && a.started_at && perUser[id]) {
+          const start = new Date(a.started_at).getTime();
+          const end = a.ended_at ? new Date(a.ended_at).getTime() : Date.now();
+          if (end > start) perUser[id].hours += (end - start) / (1000 * 60 * 60);
+        }
+      });
+
+      const perModel: Record<string, { name: string; brutto: number; netto: number }> = {};
+      models.forEach((m: any) => { perModel[m.id] = { name: m.name || "Unbekannt", brutto: 0, netto: 0 }; });
+
+      revenues.forEach((r: any) => {
+        const bruttoWert = Number(r.gross_amount || r.amount || 0);
+        const nettoWert = Number(r.amount || 0);
+        if (r.user_id && perUser[r.user_id]) {
+          perUser[r.user_id].brutto += bruttoWert;
+          perUser[r.user_id].netto += nettoWert;
+        }
+        if (r.model_id && perModel[r.model_id]) {
+          perModel[r.model_id].brutto += bruttoWert;
+          perModel[r.model_id].netto += nettoWert;
+        }
+      });
+
+      setRankingUserStats(Object.values(perUser).sort((a, b) => b.netto - a.netto));
+      setRankingModelStats(Object.values(perModel).sort((a, b) => b.netto - a.netto));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRankingLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadRanking(rankingMonthOffset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankingMonthOffset]);
+
   useEffect(() => {
     ladeLiveDaten();
     const interval = setInterval(ladeLiveDaten, 5000);
@@ -431,76 +506,103 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Rangliste Mitarbeiter */}
+      {/* Rangliste Mitarbeiter - explizit gewuenscht (2026-08-07): Monat
+          fuer Monat durchblaetterbar, auch fuer Chatter (kein Admin-Gate
+          auf den Pfeilen). */}
       <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 mb-8">
-        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Mitarbeiter-Rangliste heute</h2>
-        {userStatsArray.length > 0 && (
-          <div className="mb-5 pb-5 border-b border-[#9C7A3D]/10">
-            <MiniBarChart items={userStatsArray.map((u: any) => ({ label: u.name, value: u.netto }))} />
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-[#C9A86A] uppercase tracking-wider">Mitarbeiter-Rangliste — {rankingMonthLabel}</h2>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setRankingMonthOffset((o) => o + 1)} title="Vorheriger Monat" className="w-7 h-7 flex items-center justify-center rounded-md border border-white/10 text-slate-400 hover:text-[#E2C48A] hover:border-[#C9A86A]/40">←</button>
+            <button onClick={() => setRankingMonthOffset((o) => Math.max(0, o - 1))} disabled={rankingMonthOffset === 0} title="Nächster Monat" className="w-7 h-7 flex items-center justify-center rounded-md border border-white/10 text-slate-400 hover:text-[#E2C48A] hover:border-[#C9A86A]/40 disabled:opacity-30">→</button>
           </div>
-        )}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
-                <th className="p-3 w-12">Rang</th>
-                <th className="p-3">Mitarbeiter</th>
-                <th className="p-3">Arbeitszeit</th>
-                <th className="p-3 text-gold-200">Umsatz Brutto</th>
-                <th className="p-3 text-emerald-400">Umsatz Netto</th>
-                <th className="p-3 text-slate-400">Ø Netto / h</th>
-              </tr>
-            </thead>
-            <tbody>
-              {userStatsArray.map((user, idx) => {
-                const usdPerHr = user.hours > 0 ? user.netto / user.hours : 0;
-                return (
-                  <tr key={idx} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
-                    <td className="p-3 font-mono font-black text-[#C9A86A]">#{idx + 1}</td>
-                    <td className="p-3 font-semibold text-white tracking-wide">{user.name}</td>
-                    <td className="p-3 font-mono text-slate-400">{user.hours.toFixed(2)} h</td>
-                    <td className="p-3 font-mono text-gold-200/80">${user.brutto.toFixed(2)}</td>
-                    <td className="p-3 font-mono font-bold text-emerald-400">${user.netto.toFixed(2)}</td>
-                    <td className="p-3 font-mono text-slate-300">${usdPerHr.toFixed(2)}/h</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
         </div>
+        {rankingLoading ? (
+          <div className="text-xs text-slate-500 italic py-6 text-center">Lade…</div>
+        ) : (
+          <>
+            {rankingUserStats.length > 0 && (
+              <div className="mb-5 pb-5 border-b border-[#9C7A3D]/10">
+                <MiniBarChart items={rankingUserStats.map((u: any) => ({ label: u.name, value: u.netto }))} />
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
+                    <th className="p-3 w-12">Rang</th>
+                    <th className="p-3">Mitarbeiter</th>
+                    <th className="p-3">Arbeitszeit</th>
+                    <th className="p-3 text-gold-200">Umsatz Brutto</th>
+                    <th className="p-3 text-emerald-400">Umsatz Netto</th>
+                    <th className="p-3 text-slate-400">Ø Netto / h</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rankingUserStats.map((user, idx) => {
+                    const usdPerHr = user.hours > 0 ? user.netto / user.hours : 0;
+                    return (
+                      <tr key={idx} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
+                        <td className="p-3 font-mono font-black text-[#C9A86A]">#{idx + 1}</td>
+                        <td className="p-3 font-semibold text-white tracking-wide">{user.name}</td>
+                        <td className="p-3 font-mono text-slate-400">{user.hours.toFixed(2)} h</td>
+                        <td className="p-3 font-mono text-gold-200/80">${user.brutto.toFixed(2)}</td>
+                        <td className="p-3 font-mono font-bold text-emerald-400">${user.netto.toFixed(2)}</td>
+                        <td className="p-3 font-mono text-slate-300">${usdPerHr.toFixed(2)}/h</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
 
-      {/* 👑 NEUE MODEL RANGLISTE (Vollautomatisch basierend auf der Herkunft der Einnahmen!) - Task #72: nur Admin/Content-Manager */}
+      {/* 👑 MODEL RANGLISTE (Vollautomatisch basierend auf der Herkunft der Einnahmen!) - Task #72: nur Admin/Content-Manager.
+          Explizit gewuenscht (2026-08-07): Monat fuer Monat durchblaetterbar, teilt sich rankingMonthOffset mit der Mitarbeiter-Rangliste oben. */}
       {isAdminTier && (
         <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 mb-8">
-          <h2 className="text-sm font-bold mb-4 text-[#9C7A3D] uppercase tracking-wider">Model-Umsatz-Performance heute</h2>
-          {modelStatsArray.length > 0 && (
-            <div className="mb-5 pb-5 border-b border-[#9C7A3D]/10">
-              <MiniBarChart items={modelStatsArray.map((m: any) => ({ label: m.name, value: m.netto }))} />
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-bold text-[#9C7A3D] uppercase tracking-wider">Model-Umsatz-Performance — {rankingMonthLabel}</h2>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setRankingMonthOffset((o) => o + 1)} title="Vorheriger Monat" className="w-7 h-7 flex items-center justify-center rounded-md border border-white/10 text-slate-400 hover:text-[#E2C48A] hover:border-[#C9A86A]/40">←</button>
+              <button onClick={() => setRankingMonthOffset((o) => Math.max(0, o - 1))} disabled={rankingMonthOffset === 0} title="Nächster Monat" className="w-7 h-7 flex items-center justify-center rounded-md border border-white/10 text-slate-400 hover:text-[#E2C48A] hover:border-[#C9A86A]/40 disabled:opacity-30">→</button>
             </div>
-          )}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#9C7A3D] font-semibold text-xs uppercase tracking-wider">
-                  <th className="p-3 w-12">Platz</th>
-                  <th className="p-3">Model Name</th>
-                  <th className="p-3 text-gold-200">Generiert Brutto</th>
-                  <th className="p-3 text-emerald-400">Netto Account-Eingang</th>
-                </tr>
-              </thead>
-              <tbody>
-                {modelStatsArray.map((model, idx) => (
-                  <tr key={idx} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
-                    <td className="p-3 font-mono font-black text-[#C9A86A]">#{idx + 1}</td>
-                    <td className="p-3 font-semibold text-white tracking-wide">✨ {model.name}</td>
-                    <td className="p-3 font-mono text-gold-200/80">${model.brutto.toFixed(2)}</td>
-                    <td className="p-3 font-mono font-bold text-emerald-400">${model.netto.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
+          {rankingLoading ? (
+            <div className="text-xs text-slate-500 italic py-6 text-center">Lade…</div>
+          ) : (
+            <>
+              {rankingModelStats.length > 0 && (
+                <div className="mb-5 pb-5 border-b border-[#9C7A3D]/10">
+                  <MiniBarChart items={rankingModelStats.map((m: any) => ({ label: m.name, value: m.netto }))} />
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#9C7A3D] font-semibold text-xs uppercase tracking-wider">
+                      <th className="p-3 w-12">Platz</th>
+                      <th className="p-3">Model Name</th>
+                      <th className="p-3 text-gold-200">Generiert Brutto</th>
+                      <th className="p-3 text-emerald-400">Netto Account-Eingang</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rankingModelStats.map((model, idx) => (
+                      <tr key={idx} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition">
+                        <td className="p-3 font-mono font-black text-[#C9A86A]">#{idx + 1}</td>
+                        <td className="p-3 font-semibold text-white tracking-wide">✨ {model.name}</td>
+                        <td className="p-3 font-mono text-gold-200/80">${model.brutto.toFixed(2)}</td>
+                        <td className="p-3 font-mono font-bold text-emerald-400">${model.netto.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </section>
       )}
 
