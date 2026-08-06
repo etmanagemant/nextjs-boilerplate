@@ -723,11 +723,6 @@ export default function OfInboxClient({
   // Task: Script Vault + Tresor direkt in der Compose-Leiste, API-
   // getrieben statt wie bei VNC über sichtbare Klicks mit Verzögerung.
   const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
-  // Explizit gewuenscht (2026-08-07): Model-Notizen (allgemeine Infos +
-  // No-Go-Liste, dasselbe Feld wie im Fan-CRM-Panel) sollen im Leerzustand
-  // ("Chat auswaehlen") komplett sichtbar sein, im offenen Chat aber nur
-  // einklappbar (wenig Platz neben der eigentlichen Konversation).
-  const [modelNotesExpanded, setModelNotesExpanded] = useState(false);
   const [scripts, setScripts] = useState<any[]>([]);
   const [scriptsLoading, setScriptsLoading] = useState(false);
   const [scriptsError, setScriptsError] = useState("");
@@ -2283,13 +2278,6 @@ export default function OfInboxClient({
                       <ImageIcon size={18} />
                     </button>
                     <button
-                      onClick={() => setModelNotesExpanded((v) => !v)}
-                      className={modelNotesExpanded ? "text-[#C9A86A]" : "hover:text-[#E2C48A]"}
-                      title="Model-Infos & No-Go-Liste"
-                    >
-                      🏢
-                    </button>
-                    <button
                       onClick={blockFan}
                       className="hover:text-red-400"
                       title="Fan blockieren"
@@ -2298,11 +2286,6 @@ export default function OfInboxClient({
                     </button>
                   </div>
                 </div>
-                {modelNotesExpanded && (
-                  <div className="p-3 border-b border-white/10 bg-black/20">
-                    <ModelNotesPanel modelId={modelId} isAdmin={isAdmin} compact />
-                  </div>
-                )}
                 {galleryOpen && (
                   <div className="p-3 border-b border-white/10 bg-black/20 max-h-56 overflow-y-auto scrollbar-hide">
                     {galleryLoading && <div className="text-xs text-slate-500 italic">Lade…</div>}

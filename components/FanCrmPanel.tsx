@@ -165,13 +165,33 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
   };
 
   const isSpender = (metadata.lifetime_value || 0) > 0;
+  // Explizit gewuenscht (2026-08-07): kein separates Fenster irgendwo auf
+  // dem Bildschirm - die Model-Notizen poppen GENAU an der Stelle des
+  // Fan-CRM-Kaestchens auf (ersetzen dessen Inhalt), "Zurueck" zeigt wieder
+  // das normale Fan CRM. Ersetzt die vorherige immer-sichtbare Kompakt-
+  // Version am unteren Rand.
+  const [showModelNotes, setShowModelNotes] = useState(false);
 
   return (
     <div className="w-80 flex-shrink-0 h-full bg-[#0A0A0A] overflow-y-auto scrollbar-hide flex flex-col">
       <div className="sticky top-0 bg-[#0A0A0A] p-4 border-b border-[#C9A86A]/20 z-10 flex items-center justify-between">
-        <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">👤 Fan CRM</h2>
+        {showModelNotes ? (
+          <button onClick={() => setShowModelNotes(false)} className="text-sm font-black text-[#C9A86A] uppercase tracking-wider hover:text-[#E2C48A] flex items-center gap-1.5">
+            ← Zurück zum Fan CRM
+          </button>
+        ) : (
+          <h2 className="text-sm font-black text-[#C9A86A] uppercase tracking-wider">👤 Fan CRM</h2>
+        )}
+        <button onClick={() => setShowModelNotes((v) => !v)} title="Model-Infos & No-Go-Liste" className={showModelNotes ? "text-[#C9A86A]" : "text-slate-500 hover:text-[#E2C48A]"}>
+          🏢
+        </button>
       </div>
 
+      {showModelNotes ? (
+        <div className="p-4">
+          <ModelNotesPanel modelId={modelId} isAdmin={isAdmin} />
+        </div>
+      ) : (
       <div className="p-4 space-y-4">
         <div>
           <label className="text-xs text-slate-400 uppercase tracking-widest mb-1 block font-bold">Name</label>
@@ -307,11 +327,8 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
             </p>
           )}
         </div>
-
-        <div className="border-t border-[#9C7A3D]/20 pt-3">
-          <ModelNotesPanel modelId={modelId} isAdmin={isAdmin} compact />
-        </div>
       </div>
+      )}
     </div>
   );
 }
