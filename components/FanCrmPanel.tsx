@@ -1,13 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ModelNotesPanel } from "@/components/ModelNotesPanel";
 
-// Saves on every space/period/comma/Enter, not just on blur - relying on
-// blur alone turned out unreliable here (clicking back into the VNC video
-// to keep chatting doesn't reliably fire it the way clicking a normal form
-// field would).
-const TRIGGER_CHARS = [" ", ".", ",", "\n"];
+// Debounce delay for auto-save while typing (ms).
+const SAVE_DEBOUNCE_MS = 700;
 
 interface FanMetadataFull {
   fan_id: string;
@@ -66,19 +63,36 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
   const [preferences, setPreferences] = useState<string[]>(metadata.preferences || []);
   const [newPreference, setNewPreference] = useState("");
 
-  // Re-syncs whenever the fan changes OR another chatter's save changes the
-  // actual field values - keyed on the field values themselves (not just
-  // fanId) since two chatters can have the same fan open at once and each
-  // needs to see the other's edits, not just whatever was there when they
-  // first opened this chat. Keying on primitives/a stringified array rather
-  // than the metadata object itself avoids re-firing on every ~1s poll tick
-  // when nothing actually changed (a new object is returned every time).
+  // Bugfix (gemeldet 2026-08-06, "hängt, nimmt Getipptes nicht an"): jeder
+  // Space/Punkt/Komma hat sofort gespeichert -> onSaved() -> sofortiger
+  // Refetch der Metadaten -> dieser Effekt hat das Feld dann mit der
+  // Server-Antwort überschrieben, selbst wenn man in der Zwischenzeit
+  // (Netzwerk-Latenz) längst weitergetippt hatte - echter Datenverlust,
+  // kein reines Gefühl. Fix hat zwei Teile: Speichern jetzt debounced statt
+  // pro Wort (siehe scheduleSave unten), UND dieser Sync-Effekt überschreibt
+  // nie ein Feld, in dem der Chatter gerade aktiv tippt (focusedFieldRef) -
+  // die frische Server-Version kommt dann erst beim nächsten Verlassen des
+  // Feldes an, nie mitten im Tippen.
+  const focusedFieldRef = useRef<string | null>(null);
+  const saveTimers = useRef<Partial<Record<string, ReturnType<typeof setTimeout>>>>({});
+  // Wechselt der Fan, waehrend noch ein Debounce-Timer laeuft (z.B.
+  // Notizen fuer Fan A getippt, sofort zu Fan B gewechselt), wuerde der
+  // sonst verspaetet auf Fan B feuern und dessen Feld ueberschreiben -
+  // alle offenen Timer verwerfen (nicht flushen) und den Fokus-Merker
+  // zuruecksetzen, sobald sich der Fan aendert.
   useEffect(() => {
-    setRealName(metadata.real_name || "");
-    setLocation(metadata.location || "");
-    setAge(metadata.age || "");
-    setCameFrom(metadata.came_from || "");
-    setNotes(metadata.notes || "");
+    focusedFieldRef.current = null;
+    return () => {
+      Object.values(saveTimers.current).forEach((t) => t && clearTimeout(t));
+      saveTimers.current = {};
+    };
+  }, [fanId]);
+  useEffect(() => {
+    if (focusedFieldRef.current !== "real_name") setRealName(metadata.real_name || "");
+    if (focusedFieldRef.current !== "location") setLocation(metadata.location || "");
+    if (focusedFieldRef.current !== "age") setAge(metadata.age || "");
+    if (focusedFieldRef.current !== "came_from") setCameFrom(metadata.came_from || "");
+    if (focusedFieldRef.current !== "notes") setNotes(metadata.notes || "");
     setPreferences(metadata.preferences || []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -104,18 +118,35 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
     }
   };
 
-  // Wires up an <input>/<textarea> to save immediately after a trigger
-  // character, in addition to the onBlur fallback below - typing a whole
-  // sentence and then clicking straight back into the OnlyFans video
-  // (rather than into another form field) doesn't reliably fire blur.
+  // Debounced statt pro Tastendruck/Wort zu speichern - vorher hat jeder
+  // Space/Punkt/Komma eine eigene Netzwerk-Anfrage ausgelöst, spürbar
+  // ruckelig bei flüssigem Tippen. Ein Timer pro Feld, onBlur räumt ihn
+  // auf und speichert sofort (siehe flushSave).
+  const scheduleSave = (field: string, value: unknown) => {
+    const existing = saveTimers.current[field];
+    if (existing) clearTimeout(existing);
+    saveTimers.current[field] = setTimeout(() => {
+      delete saveTimers.current[field];
+      saveField({ [field]: value });
+    }, SAVE_DEBOUNCE_MS);
+  };
+  const flushSave = (field: string, value: unknown) => {
+    const existing = saveTimers.current[field];
+    if (existing) { clearTimeout(existing); delete saveTimers.current[field]; }
+    saveField({ [field]: value });
+  };
+
   const withAutoSave = (setter: (v: string) => void, field: string) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const value = e.target.value;
     setter(value);
-    if (TRIGGER_CHARS.includes(value.slice(-1))) {
-      saveField({ [field]: value });
-    }
+    scheduleSave(field, value);
+  };
+  const withFocusTracking = (field: string) => () => { focusedFieldRef.current = field; };
+  const withBlurSave = (field: string, value: unknown) => () => {
+    focusedFieldRef.current = null;
+    flushSave(field, value);
   };
 
   const handleAddPreference = () => {
@@ -148,7 +179,8 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
             type="text"
             value={realName}
             onChange={withAutoSave(setRealName, "real_name")}
-            onBlur={() => saveField({ real_name: realName })}
+            onFocus={withFocusTracking("real_name")}
+            onBlur={withBlurSave("real_name", realName)}
             placeholder="Name eingeben..."
             className="w-full bg-black/60 border border-[#C9A86A]/30 rounded px-2 py-1.5 text-sm text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A]"
           />
@@ -161,7 +193,8 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
               type="text"
               value={location}
               onChange={withAutoSave(setLocation, "location")}
-              onBlur={() => saveField({ location })}
+              onFocus={withFocusTracking("location")}
+              onBlur={withBlurSave("location", location)}
               placeholder="-"
               className="w-full bg-black/60 border border-[#C9A86A]/30 rounded px-2 py-1.5 text-sm text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A]"
             />
@@ -172,7 +205,8 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
               type="text"
               value={age}
               onChange={withAutoSave(setAge, "age")}
-              onBlur={() => saveField({ age })}
+              onFocus={withFocusTracking("age")}
+              onBlur={withBlurSave("age", age)}
               placeholder="-"
               className="w-full bg-black/60 border border-[#C9A86A]/30 rounded px-2 py-1.5 text-sm text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A]"
             />
@@ -230,7 +264,8 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
           <textarea
             value={notes}
             onChange={withAutoSave(setNotes, "notes")}
-            onBlur={() => saveField({ notes })}
+            onFocus={withFocusTracking("notes")}
+            onBlur={withBlurSave("notes", notes)}
             placeholder="Notizen zu diesem Fan..."
             className="w-full h-20 bg-black/60 border border-[#C9A86A]/30 rounded p-2 text-xs text-[#E2C48A] placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A] resize-none"
           />
@@ -260,7 +295,8 @@ export function FanCrmPanel({ modelId, fanId, metadata, lastEditedBy, onSaved, i
               type="text"
               value={cameFrom}
               onChange={withAutoSave(setCameFrom, "came_from")}
-              onBlur={() => saveField({ came_from: cameFrom })}
+              onFocus={withFocusTracking("came_from")}
+              onBlur={withBlurSave("came_from", cameFrom)}
               placeholder="-"
               className="w-24 bg-black/60 border border-[#C9A86A]/20 rounded px-1.5 py-0.5 text-xs text-[#E2C48A] text-right placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#C9A86A]"
             />
