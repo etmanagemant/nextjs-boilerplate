@@ -3432,6 +3432,28 @@ app.get('/of-notifications', async (req, res) => {
   }
 });
 
+// GET /of-notifications-count?modelId=X - real unread-count for the
+// bell-icon badge (gemeldet 2026-08-06: Glocke im Beta zeigt nie eine
+// Zahl, weil dieser Endpunkt nie angebunden war - die Liste selbst
+// wurde schon geladen, nur der Zähler nicht). Endpoint itself already
+// CONFIRMED LIVE in an earlier capture session, just never wired.
+app.get('/of-notifications-count', async (req, res) => {
+  const { modelId } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+
+  try {
+    const url = 'https://onlyfans.com/api2/v2/users/notifications/count';
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-NOTIFICATIONS-COUNT] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /of-vault-lists?modelId=X - Tresor-Ordner (Task #50).
 app.get('/of-vault-lists', async (req, res) => {
   const { modelId } = req.query;

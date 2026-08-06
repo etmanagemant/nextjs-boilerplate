@@ -676,6 +676,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [notifLoadingMore, setNotifLoadingMore] = useState(false);
   const notifOffsetRef = useRef(0);
   const NOTIF_PAGE_SIZE = 20;
+  // Bugfix (gemeldet 2026-08-06): Glocke zeigte nie eine Zahl bei neuen
+  // Benachrichtigungen - der echte Count-Endpunkt war nie angebunden,
+  // nur die Liste selbst. "all" ist die echte OnlyFans-Ungelesen-Zahl.
+  const [notifUnreadCount, setNotifUnreadCount] = useState(0);
 
   const loadNotifications = useCallback(async (opts: { more?: boolean } = {}) => {
     if (!modelId) return;
@@ -720,6 +724,17 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     setNotifPanelOpen((v) => {
       const next = !v;
       if (next && notifications.length === 0) loadNotifications();
+      // OnlyFans markiert Benachrichtigungen beim Abrufen der echten Liste
+      // serverseitig als gelesen - kurz danach neu zählen, statt bis zu
+      // 20s auf das nächste Poll-Intervall zu warten.
+      if (next && modelId) {
+        setTimeout(() => {
+          fetch(`/api/crm/of-inbox/notifications-count?modelId=${encodeURIComponent(modelId)}`)
+            .then((r) => r.json())
+            .then((data) => { if (data.status === "success") setNotifUnreadCount(data.data?.all || 0); })
+            .catch(() => {});
+        }, 1500);
+      }
       return next;
     });
   }
@@ -840,6 +855,20 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     const interval = setInterval(() => { loadChats(); }, 20000);
     return () => clearInterval(interval);
   }, [modelId, loadChats]);
+
+  // Glocken-Badge: gleiches 20s-Polling-Muster wie die Chatliste oben.
+  useEffect(() => {
+    if (!modelId) return;
+    const load = () => {
+      fetch(`/api/crm/of-inbox/notifications-count?modelId=${encodeURIComponent(modelId)}`)
+        .then((r) => r.json())
+        .then((data) => { if (data.status === "success") setNotifUnreadCount(data.data?.all || 0); })
+        .catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, 20000);
+    return () => clearInterval(interval);
+  }, [modelId]);
 
   const [messagesHasMore, setMessagesHasMore] = useState(true);
   const [messagesLoadingMore, setMessagesLoadingMore] = useState(false);
@@ -1484,6 +1513,11 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 title="Benachrichtigungen"
               >
                 <BellIcon size={30} />
+                {notifUnreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-[#C9A86A] text-black text-[10px] font-black flex items-center justify-center leading-none">
+                    {notifUnreadCount > 99 ? "99+" : notifUnreadCount}
+                  </span>
+                )}
               </button>
               {notifPanelOpen && (
                 <div className="absolute top-full left-0 mt-2 w-96 max-h-[500px] overflow-y-auto scrollbar-hide bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30" onScroll={handleNotifScroll}>
