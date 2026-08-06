@@ -39,6 +39,17 @@ export default function LoginPage() {
           console.error("Profile creation error:", profileError);
           // Nicht als Fehler anzeigen - Auth war erfolgreich
         }
+
+        // Explizit gewünscht: Admin bekommt eine Benachrichtigung auf der
+        // hauseigenen Glocke, wenn sich jemand neu registriert (statt es
+        // nur über die Warteseite/Management-Liste zu bemerken).
+        // recipientUserId weggelassen = Broadcast, sichtbar für jeden
+        // admin-tier-Account (siehe /api/notifications GET-Logik).
+        fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: `🆕 Neuer Account registriert: ${email} - noch keine Rolle zugewiesen`, type: "new_signup" }),
+        }).catch(() => {});
       }
 
       setSuccessMsg("Erfolgreich! Du kannst dich jetzt einloggen. Ein Admin muss dir noch eine Rolle zuweisen.");

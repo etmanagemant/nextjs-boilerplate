@@ -708,6 +708,15 @@ export default function OfInboxClient({
   const [spendDisplay, setSpendDisplay] = useState<Record<string, string>>({});
   const [fanMetadata, setFanMetadata] = useState<any | null>(null);
   const [fanMetaLastEditedBy, setFanMetaLastEditedBy] = useState<string | null>(null);
+  // Bugfix ("Trägheit im Fan CRM", 2026-08-06): Gesamtausgaben/Fan seit/
+  // Notizen wurden erst ab dem Moment geladen, in dem ein Chatter eine
+  // Konversation öffnete - fühlte sich wie ein Ladeblitz an, obwohl die
+  // Daten für längst geladene Fans meist schon vorher bekannt sein
+  // könnten. Wird jetzt in Bulk für jede geladene Chatliste-Seite
+  // vorgeladen (siehe loadChats), openChat zeigt bei einem Treffer sofort
+  // den Cache statt auf einen frischen Fetch zu warten.
+  const fanMetadataCacheRef = useRef<Record<string, { metadata: any; lastEditedBy: string | null }>>({});
+  const nextPagePrefetchedRef = useRef<Record<string, boolean>>({});
   // Task #32: echte Lifetime-Ausgaben pro Fan (CONFIRMED LIVE 2026-08-01
   // via /users/u{fanId} -> subscribedOnData.totalSumm etc.), ersetzt die
   // vorherige "keine Quelle gefunden"-Lücke.
@@ -838,6 +847,34 @@ export default function OfInboxClient({
   // zeitig), unnötig viele Sessions parallel wachzuhalten wäre riskant.
   const chatsCacheRef = useRef<Record<string, { chats: ChatListItem[]; userDetails: Record<string, UserDetail>; hasMore: boolean; nextOffset: number }>>({});
 
+  // Holt Fan-CRM-Daten (Gesamtausgaben, Fan seit, Notizen, ...) in Bulk
+  // vor und cached sie - überspringt Fans, die schon im Cache stehen
+  // (auch ein "nichts gefunden"-Ergebnis zählt als gecacht, siehe unten,
+  // sonst würde für notizlose Fans bei jedem Aufruf erneut gefragt).
+  function preloadFanMetadata(fanIds: string[]) {
+    if (!modelId || fanIds.length === 0) return;
+    const missing = fanIds.filter((id) => !fanMetadataCacheRef.current[id]);
+    if (missing.length === 0) return;
+    fetch("/api/crm/of-inbox/fan-metadata-bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modelId, fanIds: missing }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.status !== "success") return;
+        missing.forEach((fanId) => {
+          const metadata = d.metadataByFan?.[fanId] || {
+            fan_id: fanId, model_id: modelId, real_name: null, location: null, age: null, came_from: null,
+            preferences: [], notes: "", tags: [], lifetime_value: 0, vip_tier: null,
+            last_subscription_at: null, last_paid_at: null, created_at: null, first_seen_new_at: null,
+          };
+          fanMetadataCacheRef.current[fanId] = { metadata, lastEditedBy: d.lastEditedByFan?.[fanId] || null };
+        });
+      })
+      .catch(() => {});
+  }
+
   const loadChats = useCallback(async (opts: { more?: boolean } = {}) => {
     if (!modelId) return;
     const offset = opts.more ? chatOffsetRef.current : 0;
@@ -891,6 +928,43 @@ export default function OfInboxClient({
           .then((r) => r.json())
           .then((d) => setSpendDisplay((prev) => ({ ...prev, ...(d.display || {}) })))
           .catch(() => {});
+
+        preloadFanMetadata(fanIds);
+
+        // Explizit gewünscht: auch für Fans vorladen, die noch gar nicht
+        // sichtbar sind (die nächste Chatliste-Seite) - einmalig pro
+        // Model-Öffnen (nicht bei jedem 20s-Poll erneut), damit nicht
+        // unnötig zusätzlicher OnlyFans-Traffic bei jedem Tick entsteht.
+        // Lädt NUR Fan-IDs+Metadaten vor (unsere eigene DB), rendert die
+        // Chats selbst nicht - der sichtbare Chat-Listen-Wechsel passiert
+        // weiterhin normal über echtes Scrollen.
+        if (!opts.more && !nextPagePrefetchedRef.current[modelId] && hasMore) {
+          nextPagePrefetchedRef.current[modelId] = true;
+          fetch(vpsPollUrl("public-chats", "/api/crm/of-inbox/chats", { modelId, offset: nextOffset }))
+            .then((r) => r.json())
+            .then((nextData) => {
+              const nextList: ChatListItem[] = nextData.data?.list || [];
+              const nextFanIds = nextList.map((c) => String(c.withUser.id));
+              if (nextFanIds.length === 0) return;
+              const raw = nextData.userDetails;
+              const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : Object.values(raw || {});
+              const nextUserDetails: Record<string, UserDetail> = {};
+              arr.forEach((u: any) => {
+                if (u && u.id != null) nextUserDetails[String(u.id)] = { name: u.displayName || u.name, realName: u.name, username: u.username, avatar: u.avatar || null, subscribedByData: u.subscribedByData || undefined };
+              });
+              setUserDetails((prev) => ({ ...prev, ...nextUserDetails }));
+              fetch("/api/crm/fan-spend-overlay", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ modelId, fanIds: nextFanIds, newFanIds: [] }),
+              })
+                .then((r) => r.json())
+                .then((d) => setSpendDisplay((prev) => ({ ...prev, ...(d.display || {}) })))
+                .catch(() => {});
+              preloadFanMetadata(nextFanIds);
+            })
+            .catch(() => {});
+        }
       }
 
       const prevCache = chatsCacheRef.current[modelId];
@@ -955,6 +1029,24 @@ export default function OfInboxClient({
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const MESSAGES_PAGE_SIZE = 20;
 
+  // Mehrere zeitversetzte Versuche statt nur einem RAF - fängt Fotos/
+  // Videos ab, die ihre Container-Höhe erst nach dem eigentlichen
+  // Nachrichten-Commit nachträglich vergrößern (siehe Kommentar bei den
+  // Aufrufstellen). Bricht ab, sobald der Chatter selbst hochgescrollt
+  // hat (>150px vom Ende weg), damit kein absichtliches Lesen alter
+  // Nachrichten mitten im Zeitfenster weggerissen wird.
+  function stickMessagesToBottom() {
+    const delays = [0, 150, 400, 900, 1800];
+    delays.forEach((ms) => {
+      setTimeout(() => {
+        const el = messagesContainerRef.current;
+        if (!el) return;
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (distanceFromBottom < 150) el.scrollTop = el.scrollHeight;
+      }, ms);
+    });
+  }
+
   const loadMessages = useCallback(async (fanId: number, opts: { more?: boolean } = {}) => {
     if (!modelId) return;
     const offset = opts.more ? messagesOffsetRef.current : 0;
@@ -985,10 +1077,15 @@ export default function OfInboxClient({
         // "mitten in der Konversation reingeworfen". Nach dem ersten
         // Laden explizit ans Ende scrollen; requestAnimationFrame wartet
         // auf den tatsächlichen DOM-Commit der neuen Nachrichten.
-        requestAnimationFrame(() => {
-          const el = messagesContainerRef.current;
-          if (el) el.scrollTop = el.scrollHeight;
-        });
+        //
+        // Bugfix Teil 2 (gemeldet 2026-08-06): ein einziger Scroll direkt
+        // nach dem Commit reichte nicht - Foto-/Video-Nachrichten laden
+        // ihr <img>/<video> asynchron NACH diesem Zeitpunkt nach, wachsen
+        // dann die Container-Höhe nachträglich, und der einmalige Scroll
+        // landet vor diesem Wachstum irgendwo in der Mitte statt unten.
+        // Mehrere zeitversetzte Nach-Scrolls fangen das ab, ohne ein
+        // eigenes Höhen-Beobachtungssystem zu brauchen.
+        stickMessagesToBottom();
       }
     } catch (e: any) {
       setSendError(e.message || "Fehler beim Laden der Nachrichten");
@@ -1015,14 +1112,12 @@ export default function OfInboxClient({
         if (!res.ok) return;
         const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
         const fresh = list.slice().reverse();
-        const el = messagesContainerRef.current;
-        const wasNearBottom = el ? el.scrollHeight - el.scrollTop - el.clientHeight < 150 : false;
         setMessages((prev) => {
           if (prev.length === 0) return prev;
           const existingIds = new Set(prev.map((m) => m.id));
           const newOnes = fresh.filter((m: any) => !existingIds.has(m.id));
           if (newOnes.length === 0) return prev;
-          if (wasNearBottom) requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight; });
+          stickMessagesToBottom();
           return [...prev, ...newOnes];
         });
       } catch {}
@@ -1051,6 +1146,7 @@ export default function OfInboxClient({
       if (res.ok) {
         setFanMetadata(data.metadata);
         setFanMetaLastEditedBy(data.lastEditedBy || null);
+        fanMetadataCacheRef.current[String(fanId)] = { metadata: data.metadata, lastEditedBy: data.lastEditedBy || null };
       }
     } catch {}
   }, [modelId]);
@@ -1071,6 +1167,16 @@ export default function OfInboxClient({
     setAttachPrice("");
     setFanSpend(null);
     loadMessages(fanId);
+    // Bugfix ("Trägheit im Fan CRM"): war dieser Fan schon vorgeladen
+    // (siehe preloadFanMetadata in loadChats), sofort den Cache zeigen
+    // statt auf einen frischen Fetch zu warten - im Hintergrund trotzdem
+    // einmal neu laden, falls ein anderer Chatter zwischenzeitlich was
+    // geändert hat.
+    const cached = fanMetadataCacheRef.current[String(fanId)];
+    if (cached) {
+      setFanMetadata(cached.metadata);
+      setFanMetaLastEditedBy(cached.lastEditedBy);
+    }
     loadFanMetadata(fanId);
     loadFanSpend(fanId);
   }
