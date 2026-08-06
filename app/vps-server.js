@@ -2638,6 +2638,65 @@ setInterval(async () => {
   }
 }, FAN_SPEND_SYNC_INTERVAL_MS);
 
+// REVENUE-SYNC (Task, 2026-08-06): real fix for OnlyFans revenue never
+// reaching the Dashboard (see app/api/vps/sync-revenue/route.ts's own
+// comment for the full "why"). Unlike FAN-SPEND-SYNC above, this uses
+// ONLY callOnlyFansApi (an in-page fetch, no page.goto() navigation at
+// all) - same safety bar as every other /of-* read route, so a much
+// shorter interval is fine here, no live-navigation risk to a real
+// session. Always re-checks the last 50 transactions (not a cursor) -
+// the receiving route's transaction_id UNIQUE index makes re-sending
+// already-synced ones a harmless no-op, and 50 comfortably covers
+// anything that could happen in one interval.
+const REVENUE_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+
+async function syncOnlyFansRevenue(modelId, page) {
+  const result = await callOnlyFansApi(page, 'https://onlyfans.com/api2/v2/payouts/transactions?limit=50&offset=0');
+  if (!result.ok || !result.json || !Array.isArray(result.json.list)) {
+    console.warn(`[REVENUE-SYNC] ${modelId}: bad response, status ${result.status}`);
+    return;
+  }
+
+  const transactions = result.json.list
+    .filter((t) => t.status === 'done' && t.descriptionDetails && (t.descriptionDetails.type === 'message' || t.descriptionDetails.type === 'tips'))
+    .map((t) => ({
+      id: t.id,
+      amount: t.amount,
+      net: t.net,
+      createdAt: t.createdAt,
+      type: t.descriptionDetails.type === 'tips' ? 'tip' : 'ppv_unlock',
+      fanId: t.user && t.user.id,
+    }));
+
+  if (!transactions.length) return;
+  if (!APP_URL || !CRON_SECRET) {
+    console.warn('[REVENUE-SYNC] Skipped posting - NEXT_PUBLIC_APP_URL or CRON_SECRET not set');
+    return;
+  }
+  try {
+    const res = await fetch(`${APP_URL}/api/vps/sync-revenue?secret=${CRON_SECRET}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelId, transactions }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.inserted) console.log(`[REVENUE-SYNC] ${modelId}: ${data.inserted} new transaction(s) synced`);
+  } catch (e) {
+    console.warn(`[REVENUE-SYNC] ${modelId}: failed to post`, e.message);
+  }
+}
+
+setInterval(async () => {
+  for (const [modelId, session] of Object.entries(modelSessions)) {
+    if (!session.loggedInSince) continue;
+    try {
+      await syncOnlyFansRevenue(modelId, session.page);
+    } catch (e) {
+      console.warn(`[REVENUE-SYNC] ${modelId}: error`, e.message);
+    }
+  }
+}, REVENUE_SYNC_INTERVAL_MS);
+
 // ============================================================================
 // ROUTES
 // ============================================================================
@@ -3834,6 +3893,26 @@ app.get('/of-earnings', async (req, res) => {
     res.json({ status: 'success', data: result.json });
   } catch (error) {
     console.error(`[OF-EARNINGS] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /of-payouts-transactions?modelId=X&offset=0 - echte Einzeltransaktionen
+// (Tips/PPV/Abos, mit Fan-Bezug) - Grundlage für die automatische Chatter-
+// Zuordnung im Dashboard (Task, 2026-08-06: OnlyFans-Umsatz landete bisher
+// NIE im Dashboard, nur Stripchat wurde manuell eingetragen).
+app.get('/of-payouts-transactions', async (req, res) => {
+  const { modelId, offset } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/payouts/transactions?limit=50&offset=${Number(offset) || 0}`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-PAYOUTS-TRANSACTIONS] Error for ${modelId}:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });
