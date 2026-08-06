@@ -6,6 +6,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const ADMIN_USER_ID = "35498c92-2c4d-4720-a6f7-cc187a4c5fc4";
+// Testmodel dient nur zum gefahrlosen Live-Pruefen neuer OnlyFans-Endpunkte
+// (siehe HANDOFF_NOTES.md) - erzeugt keinen echten Umsatz und soll nirgends
+// in echten Auswertungen auftauchen.
+const TEST_MODEL_ID = "d7976e92-434e-488a-8ec4-bba92eb31dcf";
 const PERIODS = 12;
 
 function isAdminTier(user: { id: string; email?: string | null }, profile: any) {
@@ -49,7 +53,9 @@ export async function GET(req: NextRequest) {
   const adminTier = isAdminTier(user, profile);
 
   const { searchParams } = new URL(req.url);
-  const granularity = searchParams.get("granularity") === "week" ? "week" : searchParams.get("granularity") === "custom" ? "custom" : "month";
+  const granularityParam = searchParams.get("granularity");
+  const granularity =
+    granularityParam === "week" ? "week" : granularityParam === "day" ? "day" : granularityParam === "custom" ? "custom" : "month";
   const offset = Math.max(0, Number(searchParams.get("offset")) || 0);
   const requestedUserId = searchParams.get("userId");
 
@@ -80,6 +86,18 @@ export async function GET(req: NextRequest) {
       cursor = byDay ? new Date(cursor.getTime() + 86400000) : new Date(cursor.getTime() + 7 * 86400000);
     }
     bucketEnd = end;
+  } else if (granularity === "day") {
+    // Explizit gewuenscht (2026-08-07): "Tage" = letzte 7 Tage, nicht 12 -
+    // eigene Bucket-Anzahl statt der PERIODS-Konstante der anderen Modi.
+    const DAY_PERIODS = 7;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const newestBucketStart = new Date(now.getTime() - offset * DAY_PERIODS * 86400000);
+    for (let i = DAY_PERIODS - 1; i >= 0; i--) {
+      bucketStarts.push(new Date(newestBucketStart.getTime() - i * 86400000));
+    }
+    bucketEnd = new Date(newestBucketStart.getTime() + 86400000);
+    labelFn = dayLabel;
   } else if (granularity === "week") {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -109,7 +127,8 @@ export async function GET(req: NextRequest) {
     .from("chatter_revenues")
     .select("amount, gross_amount, created_at, user_id")
     .gte("created_at", rangeStart.toISOString())
-    .lt("created_at", bucketEnd.toISOString());
+    .lt("created_at", bucketEnd.toISOString())
+    .neq("model_id", TEST_MODEL_ID);
   if (targetUserId) query = query.eq("user_id", targetUserId);
   const { data: rows, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

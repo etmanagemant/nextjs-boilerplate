@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Bucket = { label: string; start: string; gross: number; net: number };
-type Granularity = "week" | "month" | "custom";
+type Granularity = "day" | "week" | "month" | "custom";
 
 const CHART_W = 760;
 const CHART_H = 260;
@@ -68,7 +68,7 @@ export function RevenueChart({ userId, isAdmin }: { userId?: string; isAdmin: bo
   const yTicks = 4;
   const yTickValues = Array.from({ length: yTicks + 1 }, (_, i) => (max / yTicks) * i);
 
-  const isBar = granularity === "week";
+  const isBar = granularity === "week" || granularity === "day";
   const points = buckets.map((b, i) => {
     const x = buckets.length > 1 ? (i / (buckets.length - 1)) * innerW : innerW / 2;
     const y = innerH - (b.net / max) * innerH;
@@ -94,7 +94,7 @@ export function RevenueChart({ userId, isAdmin }: { userId?: string; isAdmin: bo
         </div>
         <div className="flex items-center gap-2">
           <div className="flex bg-black/40 rounded-lg p-1 border border-white/10">
-            {(["week", "month", "custom"] as Granularity[]).map((g) => (
+            {(["day", "week", "month", "custom"] as Granularity[]).map((g) => (
               <button
                 key={g}
                 onClick={() => setGranularity(g)}
@@ -102,7 +102,7 @@ export function RevenueChart({ userId, isAdmin }: { userId?: string; isAdmin: bo
                   granularity === g ? "bg-[#C9A86A] text-black" : "text-slate-400 hover:text-[#E2C48A]"
                 }`}
               >
-                {g === "week" ? "Woche" : g === "month" ? "Monat" : "Zeitraum"}
+                {g === "day" ? "Tage" : g === "week" ? "Woche" : g === "month" ? "Monat" : "Zeitraum"}
               </button>
             ))}
           </div>
@@ -135,7 +135,8 @@ export function RevenueChart({ userId, isAdmin }: { userId?: string; isAdmin: bo
             value={customStart}
             onChange={(e) => setCustomStart(e.target.value)}
             max={customEnd}
-            className="bg-black/40 border border-white/10 rounded px-2 py-1.5 text-slate-300 outline-none focus:border-[#C9A86A]/40"
+            style={{ colorScheme: "dark", accentColor: "#C9A86A" }}
+            className="bg-black/40 border border-white/10 rounded px-2 py-1.5 text-[#E2C48A] outline-none focus:border-[#C9A86A]/40"
           />
           <span className="text-slate-500">bis</span>
           <input
@@ -144,7 +145,8 @@ export function RevenueChart({ userId, isAdmin }: { userId?: string; isAdmin: bo
             onChange={(e) => setCustomEnd(e.target.value)}
             min={customStart}
             max={todayIso()}
-            className="bg-black/40 border border-white/10 rounded px-2 py-1.5 text-slate-300 outline-none focus:border-[#C9A86A]/40"
+            style={{ colorScheme: "dark", accentColor: "#C9A86A" }}
+            className="bg-black/40 border border-white/10 rounded px-2 py-1.5 text-[#E2C48A] outline-none focus:border-[#C9A86A]/40"
           />
         </div>
       )}

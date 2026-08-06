@@ -24,6 +24,13 @@ type ChatListItem = {
   isMutedNotifications?: boolean;
   lastReadMessageId?: number | string;
   lastMessage?: { text: string; createdAt: string; fromUser?: { id: number } };
+  // CONFIRMED LIVE 2026-08-07 (echte /chats-Antwort): canSendMessage:false
+  // + canNotSendReason (z.B. "chat_unavailable") ist OnlyFans' eigenes
+  // Signal fuer "kann diesem Fan nicht mehr schreiben" (u.a. wenn der Fan
+  // uns eingeschraenkt/blockiert hat) - genau das Symbol, das im echten
+  // OnlyFans neben so einem Chat steht.
+  canSendMessage?: boolean;
+  canNotSendReason?: string | null;
 };
 
 type MediaItem = {
@@ -2121,8 +2128,14 @@ export default function OfInboxClient({
                       <span className="flex items-center gap-1.5 min-w-0">
                         <span className="text-base font-bold text-white truncate">{displayName(c.withUser.id)}</span>
                         {c.isMutedNotifications && <MuteIcon size={14} />}
+                        {c.canSendMessage === false && (
+                          <span title={c.canNotSendReason || "Kann diesem Fan nicht mehr schreiben"} className="text-xs">🚫</span>
+                        )}
                       </span>
-                      {c.unreadMessagesCount > 0 && (
+                      {/* Bugfix (gemeldet 2026-08-07): stummgeschaltete Chats zeigten
+                          trotzdem die "1 ungelesen"-Zahl - widerspricht dem Sinn von
+                          stummschalten, echtes OnlyFans zeigt dort auch keine Zahl. */}
+                      {c.unreadMessagesCount > 0 && !c.isMutedNotifications && (
                         <span className="text-xs bg-[#C9A86A] text-black font-bold px-2 py-0.5 rounded-full ml-1 flex-shrink-0">{c.unreadMessagesCount}</span>
                       )}
                     </div>

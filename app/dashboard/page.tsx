@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { createClient } from "../../lib/supabaseClient";
-import { hasRole, isAdminTierRole } from "../../lib/roles";
+import { isAdminTierRole } from "../../lib/roles";
 import { CircularProgress, MiniBarChart } from "@/components/layout/StatViz";
 import { RevenueChart } from "@/components/layout/RevenueChart";
-import { SettingsIcon, MailIcon } from "@/components/layout/GoldIcons";
+
+const TEST_MODEL_ID = "d7976e92-434e-488a-8ec4-bba92eb31dcf";
 
 // Task #85: consistent zero-padded 24h format for the new shift overview,
 // matching this app's convention elsewhere (see app/chatter/page.tsx).
@@ -78,7 +78,7 @@ export default function DashboardPage() {
       const [profilesRes, assignmentsRes, revenueRes, modelsRes, abandonedLeadsRes] = await Promise.all([
         supabase.from("profiles").select("user_id, full_name, email"),
         supabase.from("shift_assignments").select("*").gte("started_at", todayStartIso),
-        supabase.from("chatter_revenues").select("*").gte("created_at", todayStartIso),
+        supabase.from("chatter_revenues").select("*").gte("created_at", todayStartIso).neq("model_id", TEST_MODEL_ID),
         supabase.from("models").select("id, name, platform_type"),
         supabase.from("abandoned_leads").select("*").order("abandoned_at", { ascending: false }).limit(50)
       ]);
@@ -86,7 +86,10 @@ export default function DashboardPage() {
       const profiles = profilesRes.data || [];
       const assignments = assignmentsRes.data || [];
       const revenues = revenueRes.data || [];
-      const models = modelsRes.data || [];
+      // Explizit gewuenscht (2026-08-07): Testmodel dient nur zum
+      // gefahrlosen Live-Pruefen neuer Endpunkte, soll in keiner echten
+      // Auswertung auftauchen (Umsatz oben schon per Query gefiltert).
+      const models = (modelsRes.data || []).filter((m: any) => m.id !== TEST_MODEL_ID);
       const abandoned = abandonedLeadsRes.data || [];
 
       // Task #85: admin-only "last 10 shifts" - reuses the assignments
@@ -328,9 +331,7 @@ export default function DashboardPage() {
   
   // Task #72: "isAdmin" above is only the hardcoded Hauptadmin check -
   // isAdminTier also covers the DB "admin"/"content-manager" roles.
-  // hasChatterAccess covers the chatter+moderator dual-role case (Task #80).
   const isAdminTier = isAdminTierRole(currentUserRole) || isAdmin;
-  const hasChatterAccess = hasRole({ role: currentUserRole, secondary_role: currentSecondaryRole }, "chatter");
 
   // ADMIN DASHBOARD (Original)
   return (
@@ -409,55 +410,9 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* CRM ADMIN PANEL - MODEL VERBINDUNG & SETTINGS */}
-      {isAdmin && (
-        <section className="mb-6">
-          <Link href="/management/crm-connect" className="group block">
-            <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/40 hover:shadow-[0_0_24px_rgba(201,168,106,0.15)] transition-all duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-black uppercase tracking-widest text-[#C9A86A] group-hover:text-[#E2C48A] transition-colors">CRM Model-Verbindung & Settings</h2>
-                  <p className="text-xs text-slate-400 mt-2">Verwalte OnlyFans Session-Daten, Script-Bibliotheken und Chatter-Emoji-Konfiguration</p>
-                </div>
-                <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center rounded-xl bg-[#C9A86A]/10 text-[#C9A86A] group-hover:scale-110 group-hover:bg-[#C9A86A]/15 transition-all duration-200">
-                  <SettingsIcon size={24} />
-                </div>
-              </div>
-              <div className="mt-4 inline-flex items-center gap-2 text-[#C9A86A] font-bold text-sm group-hover:translate-x-1 transition-transform">
-                Zum Admin-Panel <span>→</span>
-              </div>
-            </div>
-          </Link>
-        </section>
-      )}
-
-      {/* CRM LIVE INBOX - CHATTER (OnlyFans-only tool - a plain moderator
-          is Stripchat-only, see hasChatterAccess/Task #80+#72) */}
-      {(hasChatterAccess || isAdminTier) && (
-        <section className="mb-8">
-          <Link href="/crm-inbox" className="group block">
-            <div className="relative overflow-hidden bg-gradient-to-br from-[#C9A86A]/10 via-white/[0.03] to-black/40 backdrop-blur-xl p-8 rounded-2xl border border-[#C9A86A]/30 shadow-2xl hover:border-[#E2C48A]/60 hover:shadow-[0_0_36px_rgba(201,168,106,0.25)] transition-all duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-black uppercase tracking-widest text-[#E2C48A] group-hover:text-[#C9A86A] transition-colors">Live-Inbox & Chat-Zentrale (CRM)</h2>
-                  <p className="text-sm text-slate-300 mt-3 font-semibold">Verwalte Fan-Konversationen{isAdminTier ? " • Injiziere Sales-Scripts" : ""} • Nutze personalisierte Emoji-Leiste</p>
-                  <div className="mt-3 flex gap-3 text-xs font-bold text-[#C9A86A]">
-                    <span className="bg-[#C9A86A]/15 px-3 py-1 rounded-lg">Live-Messaging</span>
-                    {isAdminTier && <span className="bg-[#C9A86A]/15 px-3 py-1 rounded-lg">Script-Injector</span>}
-                    <span className="bg-[#C9A86A]/15 px-3 py-1 rounded-lg">Emoji-Leiste</span>
-                  </div>
-                </div>
-                <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center rounded-2xl bg-[#C9A86A]/10 text-[#C9A86A] group-hover:scale-110 group-hover:bg-[#C9A86A]/15 transition-all duration-200">
-                  <MailIcon size={30} />
-                </div>
-              </div>
-              <div className="mt-6 inline-flex items-center gap-2 text-[#C9A86A] font-black text-base group-hover:translate-x-1 transition-transform bg-[#C9A86A]/10 px-4 py-2 rounded-xl border border-[#C9A86A]/20 hover:bg-[#C9A86A]/15">
-                Zur Chat-Zentrale öffnen <span>→</span>
-              </div>
-            </div>
-          </Link>
-        </section>
-      )}
+      {/* Explizit gewuenscht (2026-08-07): CRM-Model-Verbindung- und
+          Live-Inbox-Kacheln vom Dashboard entfernt - beide ueber die
+          Sidebar-Navigation (Management/OF Inbox Beta) weiter erreichbar. */}
 
       {/* Ranglisten-Platz-Kachel (reine "heute"-Zahl-Kachel wurde durch den
           RevenueChart oben ersetzt, 2026-08-07) */}
