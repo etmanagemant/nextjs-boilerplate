@@ -3473,6 +3473,107 @@ app.get('/of-vault-media', async (req, res) => {
   }
 });
 
+// POST /of-vault-list-create { modelId, name } - CONFIRMED LIVE 2026-08-06
+// via real network capture on a real model (SweetJules) creating a Tresor-
+// Ordner herself: POST /vault/lists body {"name": "..."}, same shape as
+// the already-confirmed /of-list-create for fan-lists.
+app.post('/of-vault-list-create', async (req, res) => {
+  const { modelId, name } = req.body || {};
+  if (!modelId || typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Missing modelId or name' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const result = await callOnlyFansApi(session.page, 'https://onlyfans.com/api2/v2/vault/lists', { method: 'POST', body: { name: name.trim() } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-VAULT-LIST-CREATE] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH /of-vault-list-rename { modelId, listId, name } - CONFIRMED LIVE
+// 2026-08-06 via real network capture: PATCH /vault/lists/{listId} body
+// {"name": "..."}.
+app.patch('/of-vault-list-rename', async (req, res) => {
+  const { modelId, listId, name } = req.body || {};
+  if (!modelId || !listId || typeof name !== 'string') return res.status(400).json({ error: 'Missing modelId, listId, or name' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/vault/lists/${encodeURIComponent(listId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'PATCH', body: { name } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-VAULT-LIST-RENAME] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /of-vault-list-delete { modelId, listId, clearMedia } - CONFIRMED
+// LIVE 2026-08-06 via real network capture: DELETE /vault/lists/{listId}
+// body {"clearMedia": false} - only clearMedia:false observed live
+// (removes the folder, keeps the media in the Tresor itself), so that's
+// the only value wired here for now.
+app.delete('/of-vault-list-delete', async (req, res) => {
+  const { modelId, listId } = req.body || {};
+  if (!modelId || !listId) return res.status(400).json({ error: 'Missing modelId or listId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/vault/lists/${encodeURIComponent(listId)}`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'DELETE', body: { clearMedia: false } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-VAULT-LIST-DELETE] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /of-vault-list-add-media { modelId, listId, mediaIds } - CONFIRMED
+// LIVE 2026-08-06 via real network capture: POST /vault/lists/{listId}/
+// media body {"mediaIds": [...]}. OnlyFans' vault lists are non-exclusive
+// tags (a medium can be in several lists at once), so there is no
+// separate "move" - adding to a new list doesn't remove it from any
+// other. Removing from a specific list was not observed live, not wired.
+app.post('/of-vault-list-add-media', async (req, res) => {
+  const { modelId, listId, mediaIds } = req.body || {};
+  if (!modelId || !listId || !Array.isArray(mediaIds) || mediaIds.length === 0) return res.status(400).json({ error: 'Missing modelId, listId, or mediaIds' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/vault/lists/${encodeURIComponent(listId)}/media`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'POST', body: { mediaIds } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-VAULT-LIST-ADD-MEDIA] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /of-vault-media-hide { modelId, mediaIds } - CONFIRMED LIVE
+// 2026-08-06 via real network capture: this is what the Tresor UI's own
+// "löschen" action actually calls - PUT /vault/media/hidden body
+// {"mediaIds": [...]}, a soft-hide (OnlyFans keeps a hidden/deleted bin),
+// not a hard delete.
+app.put('/of-vault-media-hide', async (req, res) => {
+  const { modelId, mediaIds } = req.body || {};
+  if (!modelId || !Array.isArray(mediaIds) || mediaIds.length === 0) return res.status(400).json({ error: 'Missing modelId or mediaIds' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const result = await callOnlyFansApi(session.page, 'https://onlyfans.com/api2/v2/vault/media/hidden', { method: 'PUT', body: { mediaIds } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-VAULT-MEDIA-HIDE] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /of-lists?modelId=X - Fan-Listen/Segmente (⭐ "zu Liste hinzufügen").
 // relatedUserId=X (optional) - CONFIRMED LIVE 2026-07-31: OnlyFans' own
 // star/"zu Liste hinzufügen" dialog calls /lists?related_user={fanId} to

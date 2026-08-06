@@ -222,6 +222,14 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   const [vaultTypeFilter, setVaultTypeFilter] = useState<string | null>(null);
   const [vaultMediaHasMore, setVaultMediaHasMore] = useState(true);
   const [vaultMediaLoadingMore, setVaultMediaLoadingMore] = useState(false);
+  // Ordner erstellen/umbenennen/löschen + Medien zu Ordner hinzufügen/
+  // löschen - CONFIRMED LIVE 2026-08-06 via echtem Netzwerk-Mitschnitt bei
+  // SweetJules. "Verwalten"-Modus im Tresor-Popup (nur im view-Modus, nicht
+  // beim Anhängen) schaltet den Klick auf ein Medium von "Lightbox öffnen"
+  // auf "auswählen" um.
+  const [vaultManageMode, setVaultManageMode] = useState(false);
+  const [vaultManageSelected, setVaultManageSelected] = useState<Set<number>>(new Set());
+  const [vaultMoveMenuOpen, setVaultMoveMenuOpen] = useState(false);
   const vaultMediaOffsetRef = useRef(0);
   // Ref statt State: openVaultModal setzt vaultModalMode/vaultAttachTarget
   // und ruft im selben Tick loadVaultMedia auf - React-State ist da noch
@@ -309,6 +317,9 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
   }
 
   async function openVaultModal(mode: "view" | "attach", target: "chat" | "massmessage" = "chat") {
+    setVaultManageMode(false);
+    setVaultManageSelected(new Set());
+    setVaultMoveMenuOpen(false);
     if (vaultModalMode === mode) { setVaultModalMode(null); return; }
     setVaultModalMode(mode);
     setVaultAttachTarget(target);
@@ -532,6 +543,89 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     } finally {
       setPanelLoading(false);
     }
+  }
+
+  async function createVaultFolder() {
+    if (!modelId) return;
+    const name = window.prompt("Name des neuen Ordners:");
+    if (!name || !name.trim()) return;
+    try {
+      const res = await fetch("/api/crm/of-inbox/vault-list-create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, name: name.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Fehler beim Erstellen");
+      setVaultLists((prev) => [...prev, data.data]);
+    } catch {}
+  }
+
+  async function renameVaultFolder(listId: string, currentName: string) {
+    if (!modelId) return;
+    const name = window.prompt("Neuer Name für diesen Ordner:", currentName);
+    if (!name || name === currentName) return;
+    setVaultLists((prev) => prev.map((l) => (String(l.id) === listId ? { ...l, name } : l)));
+    try {
+      await fetch("/api/crm/of-inbox/vault-list-rename", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, listId, name }),
+      });
+    } catch {}
+  }
+
+  async function deleteVaultFolder(listId: string) {
+    if (!modelId) return;
+    if (!window.confirm("Diesen Ordner wirklich löschen? Die Medien selbst bleiben im Tresor erhalten.")) return;
+    setVaultLists((prev) => prev.filter((l) => String(l.id) !== listId));
+    if (vaultActiveListId === listId) selectVaultList(null);
+    try {
+      await fetch("/api/crm/of-inbox/vault-list-delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, listId }),
+      });
+    } catch {}
+  }
+
+  function toggleVaultManageSelect(mediaId: number) {
+    setVaultManageSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(mediaId)) next.delete(mediaId);
+      else next.add(mediaId);
+      return next;
+    });
+  }
+
+  async function addSelectedVaultMediaToFolder(listId: string) {
+    if (!modelId || vaultManageSelected.size === 0) return;
+    const mediaIds = Array.from(vaultManageSelected);
+    setVaultMoveMenuOpen(false);
+    try {
+      const res = await fetch("/api/crm/of-inbox/vault-list-add-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, listId, mediaIds }),
+      });
+      if (!res.ok) throw new Error();
+      setVaultManageSelected(new Set());
+    } catch {}
+  }
+
+  async function deleteSelectedVaultMedia() {
+    if (!modelId || vaultManageSelected.size === 0) return;
+    if (!window.confirm(`${vaultManageSelected.size} Medien wirklich löschen?`)) return;
+    const mediaIds = Array.from(vaultManageSelected);
+    setVaultMedia((prev) => prev.filter((m) => !vaultManageSelected.has(m.id)));
+    setVaultManageSelected(new Set());
+    try {
+      await fetch("/api/crm/of-inbox/vault-media-hide", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, mediaIds }),
+      });
+    } catch {}
   }
 
   const [chats, setChats] = useState<ChatListItem[]>([]);
@@ -2101,7 +2195,10 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             <div className="w-56 flex-shrink-0 border-r border-white/10 flex flex-col overflow-hidden">
               <div className="p-3 border-b border-white/10 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Tresor</span>
-                <SearchIcon size={14} />
+                <div className="flex items-center gap-2.5">
+                  <button onClick={createVaultFolder} title="Neuen Ordner erstellen" className="text-slate-400 hover:text-[#E2C48A] font-bold text-sm leading-none">+</button>
+                  <SearchIcon size={14} />
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto scrollbar-hide">
                 <button
@@ -2111,19 +2208,28 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   Alle Medien
                 </button>
                 {vaultLists.length > 0 && (
-                  <div className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Custom</div>
+                  <div className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Ordner</div>
                 )}
                 {vaultLists.map((l) => (
-                  <button
+                  <div
                     key={l.id}
-                    onClick={() => selectVaultList(String(l.id))}
-                    className={`w-full text-left px-3 py-2.5 text-xs ${vaultActiveListId === String(l.id) ? "bg-[#C9A86A]/15 text-[#C9A86A] font-bold" : "text-slate-300 hover:bg-[#C9A86A]/10"}`}
+                    className={`w-full flex items-center gap-1 px-3 py-2.5 group ${vaultActiveListId === String(l.id) ? "bg-[#C9A86A]/15 text-[#C9A86A] font-bold" : "text-slate-300 hover:bg-[#C9A86A]/10"}`}
                   >
-                    <div className="truncate">{l.name}</div>
-                    <div className="text-[10px] text-slate-500">
-                      {((l.videosCount || 0) + (l.photosCount || 0) + (l.gifsCount || 0) + (l.audiosCount || 0)) || "leer"}
-                    </div>
-                  </button>
+                    <button onClick={() => selectVaultList(String(l.id))} className="flex-1 min-w-0 text-left text-xs">
+                      <div className="truncate">{l.name}</div>
+                      <div className="text-[10px] text-slate-500">
+                        {((l.videosCount || 0) + (l.photosCount || 0) + (l.gifsCount || 0) + (l.audiosCount || 0)) || "leer"}
+                      </div>
+                    </button>
+                    {l.canUpdate && (
+                      <button onClick={() => renameVaultFolder(String(l.id), l.name)} title="Ordner umbenennen" className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-[#E2C48A]">✏️</button>
+                    )}
+                    {l.canDelete && (
+                      <span onClick={() => deleteVaultFolder(String(l.id))} title="Ordner löschen" className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 cursor-pointer">
+                        <CloseIcon size={12} />
+                      </span>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -2131,7 +2237,17 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             <div className="flex-1 flex flex-col overflow-hidden">
               <div className="p-3 border-b border-white/10 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Alle Medien</span>
-                <button onClick={() => setVaultModalMode(null)} className="text-slate-400 hover:text-[#E2C48A]"><CloseIcon size={16} /></button>
+                <div className="flex items-center gap-3">
+                  {vaultModalMode === "view" && (
+                    <button
+                      onClick={() => { setVaultManageMode((v) => !v); setVaultManageSelected(new Set()); setVaultMoveMenuOpen(false); }}
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${vaultManageMode ? "bg-[#C9A86A] text-black" : "bg-black/30 text-slate-400 hover:text-[#E2C48A]"}`}
+                    >
+                      {vaultManageMode ? "Fertig" : "Verwalten"}
+                    </button>
+                  )}
+                  <button onClick={() => setVaultModalMode(null)} className="text-slate-400 hover:text-[#E2C48A]"><CloseIcon size={16} /></button>
+                </div>
               </div>
               <div className="flex gap-1.5 p-3 border-b border-[#9C7A3D]/10">
                 {[
@@ -2166,14 +2282,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                     lastDateKey = dateKey;
                     const label = !d ? "" : dateKey === today ? "Heute" : dateKey === yesterday ? "Gestern" : d.toLocaleDateString("de-DE", { day: "numeric", month: "long" });
                     const selected = (vaultAttachTarget === "massmessage" ? mmMedia : attachedMedia).some((x) => x.id === m.id);
+                    const manageSelected = vaultManageSelected.has(m.id);
                     const url = m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url;
                     return (
                       <Fragment key={m.id}>
                         {showHeader && <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-3 mb-1.5 first:mt-0">{label}</div>}
                         <div className="inline-block mr-1.5 mb-1.5 align-top">
                           <button
-                            onClick={() => (vaultModalMode === "attach" ? toggleAttachMedia(m) : setLightboxMedia(m))}
-                            className={`relative w-24 h-24 rounded ${selected ? "ring-2 ring-[#C9A86A]" : ""}`}
+                            onClick={() => (vaultManageMode ? toggleVaultManageSelect(m.id) : vaultModalMode === "attach" ? toggleAttachMedia(m) : setLightboxMedia(m))}
+                            className={`relative w-24 h-24 rounded ${selected || manageSelected ? "ring-2 ring-[#C9A86A]" : ""}`}
                           >
                             {m.type === "audio" || !url ? (
                               <div className="w-full h-full rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={20} /></div>
@@ -2191,7 +2308,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                                 <span className="text-[10px] font-black bg-slate-600 text-white px-2 py-0.5 rounded shadow-lg">SENT</span>
                               </span>
                             ) : null}
-                            {selected && <span className="absolute top-1 right-1 bg-[#C9A86A] rounded-full p-0.5"><CheckIcon size={10} /></span>}
+                            {(selected || manageSelected) && <span className="absolute top-1 right-1 bg-[#C9A86A] rounded-full p-0.5"><CheckIcon size={10} /></span>}
                           </button>
                         </div>
                       </Fragment>
@@ -2200,7 +2317,37 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 })()}
                 {vaultMediaLoadingMore && <div className="text-xs text-slate-500 italic text-center mt-2">Lade weitere…</div>}
               </div>
-              <div className="p-3 border-t border-white/10 flex justify-end">
+              <div className="p-3 border-t border-white/10 flex items-center justify-between">
+                {vaultManageMode && vaultManageSelected.size > 0 ? (
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs text-slate-400">{vaultManageSelected.size} ausgewählt</span>
+                    <div className="relative">
+                      <button
+                        onClick={() => setVaultMoveMenuOpen((v) => !v)}
+                        disabled={vaultLists.length === 0}
+                        className="text-xs font-bold uppercase px-3 py-1.5 rounded bg-[#C9A86A]/15 border border-[#C9A86A]/30 text-[#C9A86A] hover:bg-[#C9A86A]/25 disabled:opacity-40"
+                      >
+                        In Ordner
+                      </button>
+                      {vaultMoveMenuOpen && (
+                        <div className="absolute bottom-full mb-1 left-0 w-48 max-h-56 overflow-y-auto bg-[#0A0A0A] border border-white/10 rounded-lg shadow-2xl z-10">
+                          {vaultLists.map((l) => (
+                            <button
+                              key={l.id}
+                              onClick={() => addSelectedVaultMediaToFolder(String(l.id))}
+                              className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-[#C9A86A]/10 hover:text-[#C9A86A] truncate"
+                            >
+                              {l.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={deleteSelectedVaultMedia} className="text-xs font-bold uppercase px-3 py-1.5 rounded bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500/25">
+                      Löschen
+                    </button>
+                  </div>
+                ) : <div />}
                 <button onClick={() => setVaultModalMode(null)} className="px-4 py-1.5 rounded text-xs font-bold uppercase bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] text-black hover:from-[#E5C158]">
                   Schließen
                 </button>
