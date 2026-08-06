@@ -2332,7 +2332,13 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={mediaProxyUrl(url)} className="w-full h-full object-cover rounded" alt="" />
                             )}
-                            {m.type === "video" && <span className="absolute bottom-1 right-1 text-[8px] font-bold bg-black/70 text-white px-1 rounded">▶</span>}
+                            {m.type === "video" && (
+                              <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <span className="w-9 h-9 rounded-full bg-[#C9A86A] flex items-center justify-center shadow-lg">
+                                  <span className="text-black text-sm ml-0.5">▶</span>
+                                </span>
+                              </span>
+                            )}
                             {m.isPurchased ? (
                               <span className="absolute inset-0 flex items-center justify-center">
                                 <span className="text-[10px] font-black bg-[#C9A86A] text-black px-2 py-0.5 rounded shadow-lg">PAID</span>

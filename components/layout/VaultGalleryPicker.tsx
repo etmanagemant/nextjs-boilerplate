@@ -7,6 +7,10 @@ interface MediaRef {
   label: string;
   thumbnailUrl?: string;
   id?: string;
+  type?: string;
+  // Volle Auflösung für die Vollbild-Vorschau - die Grid-Thumbnails
+  // selbst bleiben bewusst die kleine 300x300-Version.
+  fullUrl?: string;
 }
 
 interface VaultList {
@@ -43,6 +47,7 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
   const [selected, setSelected] = useState<MediaRef[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [lightboxItem, setLightboxItem] = useState<MediaRef | null>(null);
   const mediaProxyUrl = useMediaProxyUrl(modelId);
 
   const keyOf = (m: MediaRef) => m.thumbnailUrl || m.label;
@@ -68,6 +73,8 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
           id: String(m.id),
           label: VAULT_TYPE_LABEL[m.type] || "Medium",
           thumbnailUrl: m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url,
+          fullUrl: m.files?.full?.url || m.files?.preview?.url || m.files?.thumb?.url,
+          type: m.type,
         }))
       );
     } catch {
@@ -138,36 +145,49 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
               {items.map((item, i) => {
                 const active = isSelected(item);
                 return (
-                  <button
+                  <div
                     key={i}
-                    type="button"
-                    onClick={() => toggle(item)}
-                    title={item.label}
                     className={`relative aspect-square rounded-lg overflow-hidden border-2 transition ${
                       active ? "border-[#C9A86A]" : "border-transparent hover:border-[#9C7A3D]/50"
                     }`}
                   >
-                    {item.thumbnailUrl ? (
-                      // Proxied through our backend - OnlyFans' CDN
-                      // URLs are IP-locked to the VPS itself, so loading
-                      // them directly here would just 403.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={mediaProxyUrl(item.thumbnailUrl)}
-                        alt={item.label}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-[#050505] flex items-center justify-center text-[10px] text-slate-500 p-1 text-center">
-                        {item.label}
-                      </div>
-                    )}
-                    {active && (
-                      <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-[#C9A86A] text-black text-xs font-bold flex items-center justify-center">
-                        ✓
-                      </span>
-                    )}
-                  </button>
+                    {/* Klick in die Mitte oeffnet die Vollbild-Vorschau -
+                        Auswaehlen passiert ueber den Kreis oben links,
+                        damit man vorher sehen kann, was man auswaehlt. */}
+                    <button type="button" onClick={() => setLightboxItem(item)} title={item.label} className="w-full h-full block">
+                      {item.thumbnailUrl ? (
+                        // Proxied through our backend, direkt Browser->VPS -
+                        // OnlyFans' CDN-URLs sind IP-gesperrt auf die VPS.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={mediaProxyUrl(item.thumbnailUrl)}
+                          alt={item.label}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-[#050505] flex items-center justify-center text-[10px] text-slate-500 p-1 text-center">
+                          {item.label}
+                        </div>
+                      )}
+                      {item.type === "video" && (
+                        <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <span className="w-9 h-9 rounded-full bg-[#C9A86A] flex items-center justify-center shadow-lg">
+                            <span className="text-black text-sm ml-0.5">▶</span>
+                          </span>
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggle(item)}
+                      title={active ? "Abwählen" : "Auswählen"}
+                      className={`absolute top-1 left-1 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold transition ${
+                        active ? "bg-[#C9A86A] border-[#C9A86A] text-black" : "bg-black/50 border-white/60 text-transparent hover:border-[#C9A86A]"
+                      }`}
+                    >
+                      {active && "✓"}
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -188,6 +208,24 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
           </button>
         </div>
       </div>
+
+      {lightboxItem && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4" onClick={() => setLightboxItem(null)}>
+          <div className="max-w-3xl max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            {lightboxItem.type === "video" ? (
+              <video src={lightboxItem.fullUrl ? mediaProxyUrl(lightboxItem.fullUrl) : undefined} controls autoPlay className="max-w-full max-h-[85vh] rounded-lg" />
+            ) : lightboxItem.type === "audio" ? (
+              <audio src={lightboxItem.fullUrl ? mediaProxyUrl(lightboxItem.fullUrl) : undefined} controls autoPlay className="w-96" />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={lightboxItem.fullUrl ? mediaProxyUrl(lightboxItem.fullUrl) : undefined} alt="" className="max-w-full max-h-[85vh] rounded-lg object-contain" />
+            )}
+          </div>
+          <button onClick={() => setLightboxItem(null)} className="absolute top-4 right-4 text-white/80 hover:text-white text-2xl leading-none">
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
