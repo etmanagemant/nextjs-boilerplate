@@ -1177,9 +1177,17 @@ export default function OfInboxClient({
       const res = await fetch(`/api/crm/of-inbox/fan-metadata?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}`);
       const data = await res.json();
       if (res.ok) {
-        setFanMetadata(data.metadata);
-        setFanMetaLastEditedBy(data.lastEditedBy || null);
+        // Gleiche Race-Condition-Klasse wie bei loadMessages (siehe
+        // latestFanIdRef-Kommentar oben): Cache immer aktualisieren
+        // (harmlos, korrekt eingeordnet), aber das SICHTBARE Fan-CRM-Panel
+        // nur updaten, wenn der Fan beim Antwort-Eintreffen noch der
+        // aktuell offene ist - sonst blieb bei schnellem Chatwechsel
+        // manchmal das Fan-CRM des vorherigen Fans stehen.
         fanMetadataCacheRef.current[String(fanId)] = { metadata: data.metadata, lastEditedBy: data.lastEditedBy || null };
+        if (latestFanIdRef.current === fanId) {
+          setFanMetadata(data.metadata);
+          setFanMetaLastEditedBy(data.lastEditedBy || null);
+        }
       }
     } catch {}
   }, [modelId]);
@@ -1223,7 +1231,15 @@ export default function OfInboxClient({
       const data = await res.json();
       const s = data.data?.subscribedOnData;
       if (s) {
-        setFanSpend({ totalSumm: s.totalSumm || 0, tipsSumm: s.tipsSumm || 0, subscribesSumm: s.subscribesSumm || 0, messagesSumm: s.messagesSumm || 0, postsSumm: s.postsSumm || 0 });
+        // spendDisplay ist ein Cache PRO fanId (Ring-Badges in der
+        // Chatliste) - unproblematisch, auch fuer einen inzwischen
+        // verlassenen Chat zu aktualisieren. fanSpend (Lifetime-Anzeige im
+        // offenen Chat-Header) dagegen nur setzen, wenn der Fan noch aktiv
+        // ist - gleicher Race-Condition-Fix wie bei loadMessages/
+        // loadFanMetadata.
+        if (latestFanIdRef.current === fanId) {
+          setFanSpend({ totalSumm: s.totalSumm || 0, tipsSumm: s.tipsSumm || 0, subscribesSumm: s.subscribesSumm || 0, messagesSumm: s.messagesSumm || 0, postsSumm: s.postsSumm || 0 });
+        }
         // Ring-Badge (spendDisplay) UND "Gesamtausgaben" (FanCrmPanel liest
         // fanMetadata.lifetime_value) hingen bisher am alten VNC-Scrape-
         // Cache, der Lücken hatte - der Server schreibt den echten Wert
