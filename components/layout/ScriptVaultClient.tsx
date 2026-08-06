@@ -2,15 +2,11 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
-import { VaultGalleryPicker } from "@/components/layout/VaultGalleryPicker";
+import { VaultGalleryPicker, type MediaRef } from "@/components/layout/VaultGalleryPicker";
 import EmojiBar from "@/components/layout/EmojiBar";
 import { isAdminTierRole } from "@/lib/roles";
-
-interface MediaRef {
-  label: string;
-  thumbnailUrl?: string;
-  id?: string;
-}
+import { useMediaProxyUrl } from "@/lib/useMediaProxyUrl";
+import { formatDuration } from "@/lib/formatDuration";
 
 interface ScriptStep {
   id: string;
@@ -75,6 +71,7 @@ export default function ScriptVaultClient({
   const [formError, setFormError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [formModelId, setFormModelId] = useState(connectedModels[0]?.id || "");
+  const mediaProxyUrl = useMediaProxyUrl(formModelId);
   const [draftSteps, setDraftSteps] = useState<DraftStep[]>([{ ...EMPTY_STEP }]);
   const [expandedScriptId, setExpandedScriptId] = useState<string | null>(null);
   const [pickerForStep, setPickerForStep] = useState<number | null>(null);
@@ -324,21 +321,35 @@ export default function ScriptVaultClient({
                         📁 Medien hinzufügen
                       </button>
                       {step.media.map((m, mi) => (
-                        <span
-                          key={mi}
-                          className="flex items-center gap-1 bg-[#9C7A3D]/20 text-[#E2C48A] text-[10px] px-2 py-1 rounded"
-                        >
-                          {m.label}
+                        <div key={mi} className="relative w-14 h-14 rounded overflow-hidden border border-[#9C7A3D]/30 flex-shrink-0">
+                          {m.thumbnailUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={mediaProxyUrl(m.thumbnailUrl)} alt={m.label} className="w-full h-full object-cover outline-none" />
+                          ) : (
+                            <div className="w-full h-full bg-black/40 flex items-center justify-center text-[9px] text-slate-400 text-center p-1">{m.label}</div>
+                          )}
+                          {m.type === "video" && (
+                            <>
+                              <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <span className="w-6 h-6 rounded-full bg-[#C9A86A] flex items-center justify-center shadow-lg">
+                                  <span className="text-black text-[10px] ml-0.5">▶</span>
+                                </span>
+                              </span>
+                              {typeof m.duration === "number" && (
+                                <span className="absolute bottom-0.5 right-0.5 text-[8px] font-bold bg-black/70 text-white px-1 rounded">{formatDuration(m.duration)}</span>
+                              )}
+                            </>
+                          )}
                           <button
                             type="button"
                             onClick={() =>
                               updateDraftStep(i, { media: step.media.filter((_, idx) => idx !== mi) })
                             }
-                            className="text-red-400 hover:text-red-300 ml-1"
+                            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-black/80 text-red-400 hover:text-red-300 text-[10px] flex items-center justify-center outline-none"
                           >
                             ✕
                           </button>
-                        </span>
+                        </div>
                       ))}
                       <input
                         type="number"
@@ -453,11 +464,32 @@ export default function ScriptVaultClient({
                               )}
                             </div>
                             <p className="text-slate-300 whitespace-pre-wrap">{step.message_text}</p>
-                            {(step.media_refs || []).map((m, mi) => (
-                              <p key={mi} className="text-slate-500 mt-1">
-                                📁 {m.label}
-                              </p>
-                            ))}
+                            {(step.media_refs || []).length > 0 && (
+                              <div className="flex gap-1.5 flex-wrap mt-1.5">
+                                {step.media_refs.map((m, mi) => (
+                                  <div key={mi} className="relative w-14 h-14 rounded overflow-hidden border border-[#9C7A3D]/30 flex-shrink-0">
+                                    {m.thumbnailUrl ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img src={mediaProxyUrl(m.thumbnailUrl)} alt={m.label} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full bg-black/40 flex items-center justify-center text-[9px] text-slate-400 text-center p-1">{m.label}</div>
+                                    )}
+                                    {m.type === "video" && (
+                                      <>
+                                        <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                          <span className="w-6 h-6 rounded-full bg-[#C9A86A] flex items-center justify-center shadow-lg">
+                                            <span className="text-black text-[10px] ml-0.5">▶</span>
+                                          </span>
+                                        </span>
+                                        {typeof m.duration === "number" && (
+                                          <span className="absolute bottom-0.5 right-0.5 text-[8px] font-bold bg-black/70 text-white px-1 rounded">{formatDuration(m.duration)}</span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

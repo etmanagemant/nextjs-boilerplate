@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useMediaProxyUrl } from "@/lib/useMediaProxyUrl";
+import { formatDuration } from "@/lib/formatDuration";
 
-interface MediaRef {
+export interface MediaRef {
   label: string;
   thumbnailUrl?: string;
   id?: string;
@@ -11,6 +12,8 @@ interface MediaRef {
   // Volle Auflösung für die Vollbild-Vorschau - die Grid-Thumbnails
   // selbst bleiben bewusst die kleine 300x300-Version.
   fullUrl?: string;
+  // Sekunden, nur bei Videos vorhanden (echtes OnlyFans-Feld).
+  duration?: number;
 }
 
 interface VaultList {
@@ -75,6 +78,7 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
           thumbnailUrl: m.files?.thumb?.url || m.files?.preview?.url || m.files?.full?.url,
           fullUrl: m.files?.full?.url || m.files?.preview?.url || m.files?.thumb?.url,
           type: m.type,
+          duration: typeof m.duration === "number" ? m.duration : undefined,
         }))
       );
     } catch {
@@ -154,7 +158,7 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
                     {/* Klick in die Mitte oeffnet die Vollbild-Vorschau -
                         Auswaehlen passiert ueber den Kreis oben links,
                         damit man vorher sehen kann, was man auswaehlt. */}
-                    <button type="button" onClick={() => setLightboxItem(item)} title={item.label} className="w-full h-full block">
+                    <button type="button" onClick={() => setLightboxItem(item)} title={item.label} className="w-full h-full block outline-none">
                       {item.thumbnailUrl ? (
                         // Proxied through our backend, direkt Browser->VPS -
                         // OnlyFans' CDN-URLs sind IP-gesperrt auf die VPS.
@@ -170,18 +174,23 @@ export function VaultGalleryPicker({ modelId, onSelect, onClose }: VaultGalleryP
                         </div>
                       )}
                       {item.type === "video" && (
-                        <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <span className="w-9 h-9 rounded-full bg-[#C9A86A] flex items-center justify-center shadow-lg">
-                            <span className="text-black text-sm ml-0.5">▶</span>
+                        <>
+                          <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="w-9 h-9 rounded-full bg-[#C9A86A] flex items-center justify-center shadow-lg">
+                              <span className="text-black text-sm ml-0.5">▶</span>
+                            </span>
                           </span>
-                        </span>
+                          {typeof item.duration === "number" && (
+                            <span className="absolute bottom-1 right-1 text-[9px] font-bold bg-black/70 text-white px-1 rounded">{formatDuration(item.duration)}</span>
+                          )}
+                        </>
                       )}
                     </button>
                     <button
                       type="button"
                       onClick={() => toggle(item)}
                       title={active ? "Abwählen" : "Auswählen"}
-                      className={`absolute top-1 left-1 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold transition ${
+                      className={`absolute top-1 left-1 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold transition outline-none ${
                         active ? "bg-[#C9A86A] border-[#C9A86A] text-black" : "bg-black/50 border-white/60 text-transparent hover:border-[#C9A86A]"
                       }`}
                     >

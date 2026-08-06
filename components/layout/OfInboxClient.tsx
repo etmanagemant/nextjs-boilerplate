@@ -7,6 +7,7 @@ import EmojiBar from "@/components/layout/EmojiBar";
 import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
 import { useMediaProxyUrl } from "@/lib/useMediaProxyUrl";
+import { formatDuration } from "@/lib/formatDuration";
 import {
   HomeIcon, BellIcon, ChatIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon,
   NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon, CloseIcon, HeartIcon, BookmarkIcon, ArrowLeftIcon, ScriptIcon,
@@ -2178,7 +2179,15 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                                     ist ein legitimer Fall). */}
                                 {(scriptDetailOpen.steps || []).map((step: any, i: number) => {
                                   const sent = isStepSent(step.message_text);
-                                  const mediaCount = (step.media_refs || []).length;
+                                  const mediaRefs = step.media_refs || [];
+                                  const mediaCount = mediaRefs.length;
+                                  const videoCount = mediaRefs.filter((m: any) => m.type === "video").length;
+                                  const photoCount = mediaRefs.filter((m: any) => m.type === "photo" || m.type === "gif").length;
+                                  const audioCount = mediaRefs.filter((m: any) => m.type === "audio").length;
+                                  // Explizit gewünscht: Preis bzw. "Freebie" (Medien ohne
+                                  // Preis, typischerweise der erste Schritt) direkt hinter
+                                  // dem Text in Klammern, statt nur als separates Badge.
+                                  const suffix = step.price ? ` ($${step.price})` : mediaCount > 0 ? " (Freebie)" : "";
                                   return (
                                     <button
                                       key={i}
@@ -2189,11 +2198,13 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                                       <span className="flex-1 min-w-0">
                                         <span className={`block truncate ${sent ? "line-through" : ""}`}>
                                           {step.message_text || (mediaCount > 0 ? "(nur Medien)" : "(leer)")}
+                                          {suffix && <span className="text-slate-500 font-normal">{suffix}</span>}
                                         </span>
                                         <span className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500">
                                           {sent && <span className="text-emerald-400 font-bold">✓ Gesendet</span>}
-                                          {mediaCount > 0 && <span className="flex items-center gap-0.5"><ImageIcon size={10} />{mediaCount}</span>}
-                                          {step.price ? <span className="text-[#C9A86A] font-bold">${step.price}</span> : null}
+                                          {videoCount > 0 && <span className="flex items-center gap-0.5">▶ {videoCount}</span>}
+                                          {photoCount > 0 && <span className="flex items-center gap-0.5"><ImageIcon size={10} />{photoCount}</span>}
+                                          {audioCount > 0 && <span className="flex items-center gap-0.5"><TipIcon size={10} />{audioCount}</span>}
                                         </span>
                                       </span>
                                     </button>
@@ -2390,7 +2401,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                         <div className="inline-block mr-1.5 mb-1.5 align-top">
                           <button
                             onClick={() => (vaultManageMode ? toggleVaultManageSelect(m.id) : vaultModalMode === "attach" ? toggleAttachMedia(m) : setLightboxMedia(m))}
-                            className={`relative w-24 h-24 rounded ${selected || manageSelected ? "ring-2 ring-[#C9A86A]" : ""}`}
+                            className={`relative w-24 h-24 rounded outline-none ${selected || manageSelected ? "ring-2 ring-[#C9A86A]" : ""}`}
                           >
                             {m.type === "audio" || !url ? (
                               <div className="w-full h-full rounded bg-[#C9A86A]/10 border border-[#9C7A3D]/20 flex items-center justify-center"><TipIcon size={20} /></div>
@@ -2399,11 +2410,16 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                               <img src={mediaProxyUrl(url)} className="w-full h-full object-cover rounded" alt="" />
                             )}
                             {m.type === "video" && (
-                              <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <span className="w-9 h-9 rounded-full bg-[#C9A86A] flex items-center justify-center shadow-lg">
-                                  <span className="text-black text-sm ml-0.5">▶</span>
+                              <>
+                                <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                  <span className="w-9 h-9 rounded-full bg-[#C9A86A] flex items-center justify-center shadow-lg">
+                                    <span className="text-black text-sm ml-0.5">▶</span>
+                                  </span>
                                 </span>
-                              </span>
+                                {typeof m.duration === "number" && (
+                                  <span className="absolute bottom-1 right-1 text-[9px] font-bold bg-black/70 text-white px-1 rounded">{formatDuration(m.duration)}</span>
+                                )}
+                              </>
                             )}
                             {m.isPurchased ? (
                               <span className="absolute inset-0 flex items-center justify-center">
