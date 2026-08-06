@@ -179,7 +179,7 @@ app.use((req, res, next) => {
   // browser (see OnlyFansViewer.tsx/BrowserLoginStreamComponent.tsx),
   // which can't attach a custom header - same reasoning and same signed,
   // model-scoped token mechanism as /public-upload-to-vault-fan below.
-  if (req.path === '/health' || req.path === '/public-upload-to-vault-fan' || req.path === '/audio-stream' || req.path === '/public-media-proxy' || req.path === '/public-vault-thumbnail') return next();
+  if (req.path === '/health' || req.path === '/public-upload-to-vault-fan' || req.path === '/audio-stream' || req.path === '/public-media-proxy' || req.path === '/public-vault-thumbnail' || req.path === '/public-chats' || req.path === '/public-messages' || req.path === '/public-notifications-count') return next();
   const expected = process.env.VPS_SHARED_SECRET;
   if (!expected) return next(); // not configured - fail open rather than lock everyone out
   if (req.headers['x-vps-secret'] !== expected) {
@@ -3092,6 +3092,38 @@ app.get('/of-chats', async (req, res) => {
   }
 });
 
+// Same as /of-chats above, but reachable DIRECTLY from a CRM user's own
+// browser (verifyUploadToken instead of the shared secret) - the chat
+// list gets polled every 20s while OF Inbox Beta is open, which was
+// burning Vercel's Fluid Active CPU quota for a plain proxy hop
+// (Task, 2026-08-06). Token minted by POST /api/crm/media-token.
+app.get('/public-chats', verifyUploadToken, async (req, res) => {
+  const { modelId, offset } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+
+  try {
+    const url = `https://onlyfans.com/api2/v2/chats?limit=20&offset=${Number(offset) || 0}&skip_users=all&order=recent`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+
+    const list = (result.json && result.json.list) || [];
+    const fanIds = list.map((c) => c.withUser && c.withUser.id).filter((id) => id != null);
+    let userDetails = null;
+    if (fanIds.length > 0) {
+      const qs = fanIds.map((id) => `cl[]=${encodeURIComponent(id)}`).join('&');
+      const detailsResult = await callOnlyFansApi(session.page, `https://onlyfans.com/api2/v2/users/list?${qs}`);
+      if (detailsResult.ok) userDetails = detailsResult.json;
+    }
+
+    res.json({ status: 'success', data: result.json, userDetails });
+  } catch (error) {
+    console.error(`[PUBLIC-CHATS] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /of-messages?modelId=X&fanId=Y&offset=0 - message history for one
 // conversation.
 // pinned=1 (optional) - CONFIRMED LIVE 2026-07-31: the chat header's pin
@@ -3110,6 +3142,28 @@ app.get('/of-messages', async (req, res) => {
     res.json({ status: 'success', data: result.json });
   } catch (error) {
     console.error(`[OF-MESSAGES] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Same as /of-messages above, but reachable DIRECTLY from a CRM user's
+// own browser (verifyUploadToken instead of the shared secret) - the
+// open chat polls this every 15s (Task, 2026-08-06 - same Vercel Fluid
+// Active CPU reasoning as /public-chats). Token minted by POST
+// /api/crm/media-token.
+app.get('/public-messages', verifyUploadToken, async (req, res) => {
+  const { modelId, fanId, offset, pinned } = req.query;
+  if (!modelId || !fanId) return res.status(400).json({ error: 'Missing modelId or fanId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+
+  try {
+    const url = `https://onlyfans.com/api2/v2/chats/${encodeURIComponent(fanId)}/messages?limit=20&order=desc&skip_users=all${offset ? `&offset=${Number(offset)}` : ''}${pinned ? '&filter=pinned' : ''}`;
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[PUBLIC-MESSAGES] Error for ${modelId}:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -3509,6 +3563,28 @@ app.get('/of-notifications-count', async (req, res) => {
     res.json({ status: 'success', data: result.json });
   } catch (error) {
     console.error(`[OF-NOTIFICATIONS-COUNT] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Same as /of-notifications-count above, but reachable DIRECTLY from a
+// CRM user's own browser (verifyUploadToken instead of the shared
+// secret) - the bell badge polls this every 20s (Task, 2026-08-06 -
+// same Vercel Fluid Active CPU reasoning as /public-chats). Token
+// minted by POST /api/crm/media-token.
+app.get('/public-notifications-count', verifyUploadToken, async (req, res) => {
+  const { modelId } = req.query;
+  if (!modelId) return res.status(400).json({ error: 'Missing modelId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+
+  try {
+    const url = 'https://onlyfans.com/api2/v2/users/notifications/count';
+    const result = await callOnlyFansApi(session.page, url);
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[PUBLIC-NOTIFICATIONS-COUNT] Error for ${modelId}:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });

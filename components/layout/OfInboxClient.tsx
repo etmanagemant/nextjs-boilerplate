@@ -7,6 +7,7 @@ import EmojiBar from "@/components/layout/EmojiBar";
 import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
 import { useMediaProxyUrl } from "@/lib/useMediaProxyUrl";
+import { useVpsTokenRef } from "@/lib/useVpsToken";
 import { formatDuration } from "@/lib/formatDuration";
 import { hasFeatureAccess, type GrantableFeatureKey } from "@/lib/roles";
 import {
@@ -196,6 +197,30 @@ export default function OfInboxClient({
   const modelFromUrl = searchParams.get("model");
   const [modelId, setModelId] = useState(modelFromUrl || "");
   const mediaProxyUrl = useMediaProxyUrl(modelId);
+  // Vercel-Meldung "75% of Fluid Active CPU used" (2026-08-06): jeder
+  // 15-20s-Poll (Chatliste, Glocke, offener Chat) ging bisher durch eine
+  // Vercel-Function, reine Weiterleitung an die eh schon zustaendige VPS -
+  // kostet trotzdem Vercel-Rechenzeit fuer nichts. Gleiches Token-Prinzip
+  // wie bei den Medien: direkt an die VPS, faellt zurueck auf die alte
+  // Vercel-Route solange kein Token da ist.
+  // Ref statt State bewusst: wird aus loadChats/loadMessages (useCallback,
+  // Deps NUR [modelId]) und aus setInterval-Pollern gelesen - eine
+  // useState-Abhängigkeit hier würde deren Identität bei jedem Token-
+  // Refresh (alle 10min) ändern, und loadChats' Identität löst
+  // andernorts ein Zurücksetzen des offenen Chats aus (siehe useEffect
+  // weiter unten). Ref liest immer den aktuellen Wert, ganz ohne die
+  // Callback-Identitäten anzufassen.
+  const vpsTokenRef = useVpsTokenRef(modelId);
+  const vpsPollUrl = (directPath: string, proxyPath: string, params: Record<string, string | number | undefined>) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined) qs.set(k, String(v)); });
+    const tok = vpsTokenRef.current;
+    if (tok && tok.modelId === modelId) {
+      qs.set("token", tok.token);
+      return `${tok.base}/${directPath}?${qs.toString()}`;
+    }
+    return `${proxyPath}?${qs.toString()}`;
+  };
 
   // Follows the URL like /crm-inbox's tabs do - clicking a tab in the
   // header (a real navigation, not local state) updates ?model=, which
@@ -778,7 +803,7 @@ export default function OfInboxClient({
       // Glocke ging nie auf 0 zurück. Snapshot der aktuellen Rohzahl als
       // neue Baseline beim Öffnen, überlebt auch einen Reload.
       if (next && modelId) {
-        fetch(`/api/crm/of-inbox/notifications-count?modelId=${encodeURIComponent(modelId)}`)
+        fetch(vpsPollUrl("public-notifications-count", "/api/crm/of-inbox/notifications-count", { modelId }))
           .then((r) => r.json())
           .then((data) => {
             if (data.status !== "success") return;
@@ -833,7 +858,7 @@ export default function OfInboxClient({
     }
     setChatsError("");
     try {
-      const res = await fetch(`/api/crm/of-inbox/chats?modelId=${encodeURIComponent(modelId)}&offset=${offset}`);
+      const res = await fetch(vpsPollUrl("public-chats", "/api/crm/of-inbox/chats", { modelId, offset }));
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
       const list: ChatListItem[] = data.data?.list || [];
@@ -914,7 +939,7 @@ export default function OfInboxClient({
   useEffect(() => {
     if (!modelId) return;
     const load = () => {
-      fetch(`/api/crm/of-inbox/notifications-count?modelId=${encodeURIComponent(modelId)}`)
+      fetch(vpsPollUrl("public-notifications-count", "/api/crm/of-inbox/notifications-count", { modelId }))
         .then((r) => r.json())
         .then((data) => { if (data.status === "success") setNotifRawCount(data.data?.all || 0); })
         .catch(() => {});
@@ -942,7 +967,7 @@ export default function OfInboxClient({
         .catch(() => setSentLog([]));
     }
     try {
-      const res = await fetch(`/api/crm/of-inbox/messages?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}&offset=${offset}`);
+      const res = await fetch(vpsPollUrl("public-messages", "/api/crm/of-inbox/messages", { modelId, fanId, offset }));
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
       const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
@@ -985,7 +1010,7 @@ export default function OfInboxClient({
     const fanId = activeFanId;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/crm/of-inbox/messages?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}&offset=0`);
+        const res = await fetch(vpsPollUrl("public-messages", "/api/crm/of-inbox/messages", { modelId, fanId, offset: 0 }));
         const data = await res.json();
         if (!res.ok) return;
         const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
@@ -1469,7 +1494,7 @@ export default function OfInboxClient({
     if (!modelId || !activeFanId) return;
     setPinnedLoading(true);
     try {
-      const res = await fetch(`/api/crm/of-inbox/messages?modelId=${encodeURIComponent(modelId)}&fanId=${activeFanId}&pinned=1`);
+      const res = await fetch(vpsPollUrl("public-messages", "/api/crm/of-inbox/messages", { modelId, fanId: activeFanId!, pinned: 1 }));
       const data = await res.json();
       const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
       setPinnedMessages(list);
