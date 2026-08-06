@@ -709,7 +709,26 @@ export default function OfInboxClient({
   // Bugfix (gemeldet 2026-08-06): Glocke zeigte nie eine Zahl bei neuen
   // Benachrichtigungen - der echte Count-Endpunkt war nie angebunden,
   // nur die Liste selbst. "all" ist die echte OnlyFans-Ungelesen-Zahl.
-  const [notifUnreadCount, setNotifUnreadCount] = useState(0);
+  //
+  // Bugfix Teil 2 (gemeldet 2026-08-06): einfach die rohe "all"-Zahl
+  // anzuzeigen ging nach dem Ansehen nicht auf 0 zurück - GET /users/
+  // notifications markiert serverseitig offenbar NICHT als gelesen (nur
+  // Annahme gewesen, live widerlegt). Jetzt komplett selbst verwaltet:
+  // notifRawCount ist die rohe OnlyFans-Zahl (nur zum Rechnen), notif
+  // Baseline ist der Snapshot beim letzten Öffnen der Glocke (pro Model
+  // in localStorage gemerkt, übersteht auch einen Reload) - angezeigt
+  // wird nur die Differenz, "wie viele NEUE seit dem letzten Ansehen".
+  const [notifRawCount, setNotifRawCount] = useState(0);
+  const [notifBaseline, setNotifBaseline] = useState(0);
+  const notifUnreadCount = Math.max(0, notifRawCount - notifBaseline);
+
+  useEffect(() => {
+    if (!modelId) { setNotifBaseline(0); return; }
+    try {
+      const stored = localStorage.getItem(`etm_notif_baseline_${modelId}`);
+      setNotifBaseline(stored ? Number(stored) : 0);
+    } catch { setNotifBaseline(0); }
+  }, [modelId]);
 
   const loadNotifications = useCallback(async (opts: { more?: boolean } = {}) => {
     if (!modelId) return;
@@ -754,16 +773,21 @@ export default function OfInboxClient({
     setNotifPanelOpen((v) => {
       const next = !v;
       if (next && notifications.length === 0) loadNotifications();
-      // OnlyFans markiert Benachrichtigungen beim Abrufen der echten Liste
-      // serverseitig als gelesen - kurz danach neu zählen, statt bis zu
-      // 20s auf das nächste Poll-Intervall zu warten.
+      // Bugfix (gemeldet 2026-08-06): GET /users/notifications markiert bei
+      // OnlyFans serverseitig NICHT als gelesen (live widerlegt) - die
+      // Glocke ging nie auf 0 zurück. Snapshot der aktuellen Rohzahl als
+      // neue Baseline beim Öffnen, überlebt auch einen Reload.
       if (next && modelId) {
-        setTimeout(() => {
-          fetch(`/api/crm/of-inbox/notifications-count?modelId=${encodeURIComponent(modelId)}`)
-            .then((r) => r.json())
-            .then((data) => { if (data.status === "success") setNotifUnreadCount(data.data?.all || 0); })
-            .catch(() => {});
-        }, 1500);
+        fetch(`/api/crm/of-inbox/notifications-count?modelId=${encodeURIComponent(modelId)}`)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.status !== "success") return;
+            const raw = data.data?.all || 0;
+            setNotifRawCount(raw);
+            setNotifBaseline(raw);
+            try { localStorage.setItem(`etm_notif_baseline_${modelId}`, String(raw)); } catch {}
+          })
+          .catch(() => {});
       }
       return next;
     });
@@ -892,7 +916,7 @@ export default function OfInboxClient({
     const load = () => {
       fetch(`/api/crm/of-inbox/notifications-count?modelId=${encodeURIComponent(modelId)}`)
         .then((r) => r.json())
-        .then((data) => { if (data.status === "success") setNotifUnreadCount(data.data?.all || 0); })
+        .then((data) => { if (data.status === "success") setNotifRawCount(data.data?.all || 0); })
         .catch(() => {});
     };
     load();
