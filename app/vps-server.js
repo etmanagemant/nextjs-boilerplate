@@ -2692,7 +2692,7 @@ async function syncOnlyFansRevenue(modelId, page) {
   }
 }
 
-setInterval(async () => {
+async function runRevenueSyncCycle() {
   for (const [modelId, session] of Object.entries(modelSessions)) {
     if (!session.loggedInSince) continue;
     try {
@@ -2701,7 +2701,16 @@ setInterval(async () => {
       console.warn(`[REVENUE-SYNC] ${modelId}: error`, e.message);
     }
   }
-}, REVENUE_SYNC_INTERVAL_MS);
+}
+
+// Bugfix (gemeldet 2026-08-06): setInterval zaehlt erst ab Prozessstart -
+// jeder systemctl restart (auch fuer voellig unabhaengige Aenderungen)
+// hat den 15-Minuten-Timer komplett neu gestartet, echte Umsaetze konnten
+// dadurch stundenlang liegen bleiben statt in 15 Minuten. 45s Verzoegerung
+// nach dem Start reicht den Model-Sessions zum Wiederherstellen, danach
+// laeuft der normale 15-Minuten-Rhythmus unveraendert weiter.
+setTimeout(runRevenueSyncCycle, 45 * 1000);
+setInterval(runRevenueSyncCycle, REVENUE_SYNC_INTERVAL_MS);
 
 // ============================================================================
 // ROUTES
@@ -3283,6 +3292,40 @@ app.delete('/of-message-like', async (req, res) => {
     res.json({ status: 'success', data: result.json });
   } catch (error) {
     console.error(`[OF-MESSAGE-LIKE] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST/DELETE /of-fan-block { modelId, fanId } - CONFIRMED LIVE 2026-08-06:
+// blocking a fan hides the chat entirely (hideChat:true in the response),
+// unblocking only works from the fan's profile page, not the chat itself.
+app.post('/of-fan-block', async (req, res) => {
+  const { modelId, fanId } = req.body || {};
+  if (!modelId || !fanId) return res.status(400).json({ error: 'Missing modelId or fanId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/users/${encodeURIComponent(fanId)}/block`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'POST', body: { connectedOfAccounts: [] } });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-FAN-BLOCK] Error for ${modelId}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+app.delete('/of-fan-block', async (req, res) => {
+  const { modelId, fanId } = req.body || {};
+  if (!modelId || !fanId) return res.status(400).json({ error: 'Missing modelId or fanId' });
+  const session = await ensureModelSessionForApi(modelId);
+  if (!session) return res.status(404).json({ error: 'No active session for this model' });
+  try {
+    const url = `https://onlyfans.com/api2/v2/users/${encodeURIComponent(fanId)}/block`;
+    const result = await callOnlyFansApi(session.page, url, { method: 'DELETE' });
+    if (!result.ok) return res.status(502).json({ error: 'OnlyFans API error', status: result.status, body: result.json || result.textSample });
+    res.json({ status: 'success', data: result.json });
+  } catch (error) {
+    console.error(`[OF-FAN-BLOCK] Error for ${modelId}:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });

@@ -695,6 +695,23 @@ export default function OfInboxClient({
   // knows the sender), this just reads it back for display.
   const [sentLog, setSentLog] = useState<{ chatter_name: string; message_text: string | null; media_key: string | null }[]>([]);
   const [draft, setDraft] = useState("");
+  const draftInputRef = useRef<HTMLInputElement | null>(null);
+  // Bugfix (gemeldet 2026-08-06): Emojis landeten immer am Ende der
+  // Nachricht statt an der Cursor-Position. selectionStart/End vom Input
+  // selbst lesen (nicht aus React-State - der kennt die Cursor-Position
+  // nicht), Emoji dort einfuegen, Cursor direkt danach wieder setzen.
+  function insertEmojiAtCursor(emoji: string) {
+    const el = draftInputRef.current;
+    const start = el?.selectionStart ?? draft.length;
+    const end = el?.selectionEnd ?? draft.length;
+    setDraft((d) => d.slice(0, start) + emoji + d.slice(end));
+    requestAnimationFrame(() => {
+      if (!el) return;
+      const pos = start + emoji.length;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  }
   // Task: Script Vault + Tresor direkt in der Compose-Leiste, API-
   // getrieben statt wie bei VNC über sichtbare Klicks mit Verzögerung.
   const [scriptPanelOpen, setScriptPanelOpen] = useState(false);
@@ -1034,6 +1051,15 @@ export default function OfInboxClient({
   const [messagesLoadingMore, setMessagesLoadingMore] = useState(false);
   const messagesOffsetRef = useRef(0);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  // Bugfix (gemeldet 2026-08-06): schnell zwischen Chats wechseln zeigte
+  // teils noch die Nachrichten des vorherigen Fans - zwei parallele
+  // loadMessages()-Aufrufe (alter + neuer Chat) konnten in beliebiger
+  // Reihenfolge zurückkommen, der spaetere Response gewinnt IMMER, auch
+  // wenn er zum inzwischen verlassenen Chat gehoert. latestFanIdRef wird
+  // synchron beim Klick gesetzt (openChat), noch bevor der Fetch startet -
+  // eine Antwort fuer einen Fan, der nicht mehr der aktuell angeklickte
+  // ist, wird dann einfach verworfen statt angezeigt.
+  const latestFanIdRef = useRef<number | null>(null);
   const MESSAGES_PAGE_SIZE = 20;
 
   // Mehrere zeitversetzte Versuche statt nur einem RAF - fängt Fotos/
@@ -1069,6 +1095,7 @@ export default function OfInboxClient({
       const res = await fetch(vpsPollUrl("public-messages", "/api/crm/of-inbox/messages", { modelId, fanId, offset }));
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fehler beim Laden");
+      if (!opts.more && latestFanIdRef.current !== fanId) return;
       const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
       setMessagesHasMore(list.length >= MESSAGES_PAGE_SIZE);
       messagesOffsetRef.current = offset + list.length;
@@ -1095,10 +1122,9 @@ export default function OfInboxClient({
         stickMessagesToBottom();
       }
     } catch (e: any) {
-      setSendError(e.message || "Fehler beim Laden der Nachrichten");
+      if (opts.more || latestFanIdRef.current === fanId) setSendError(e.message || "Fehler beim Laden der Nachrichten");
     } finally {
-      setMessagesLoading(false);
-      setMessagesLoadingMore(false);
+      if (opts.more || latestFanIdRef.current === fanId) { setMessagesLoading(false); setMessagesLoadingMore(false); }
     }
   }, [modelId]);
 
@@ -1159,7 +1185,9 @@ export default function OfInboxClient({
   }, [modelId]);
 
   function openChat(fanId: number) {
+    latestFanIdRef.current = fanId;
     setActiveFanId(fanId);
+    setMessages([]);
     setSendError("");
     setMessageSearch(null);
     setListsPanelOpen(false);
@@ -1440,6 +1468,28 @@ export default function OfInboxClient({
         body: JSON.stringify({ modelId, fanId: activeFanId, listId: "muted" }),
       });
     } catch {}
+  }
+
+  // CONFIRMED LIVE 2026-08-06: POST /users/{fanId}/block blockiert (Chat
+  // verschwindet sofort aus der Liste, hideChat:true), DELETE hebt es wieder
+  // auf - aber nur von der Profilseite aus möglich, nicht mehr aus dem Chat
+  // selbst (Chat existiert dort ja nicht mehr). isBlocked wird deshalb rein
+  // lokal getrackt statt aus /chats gelesen.
+  async function blockFan() {
+    if (!modelId || !activeFanId) return;
+    if (!window.confirm("Diesen Fan wirklich blockieren? Der Chat verschwindet danach aus deiner Liste.")) return;
+    try {
+      const res = await fetch("/api/crm/of-inbox/fan-block", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelId, fanId: activeFanId }),
+      });
+      if (!res.ok) throw new Error("Block fehlgeschlagen");
+      setChats((prev) => prev.filter((c) => c.withUser.id !== activeFanId));
+      setActiveFanId(null);
+    } catch {
+      window.alert("Blockieren fehlgeschlagen.");
+    }
   }
 
   // Task: der Stern-Button ("Zu Favoriten und anderen Listen hinzufügen")
@@ -2162,6 +2212,13 @@ export default function OfInboxClient({
                     >
                       <ImageIcon size={18} />
                     </button>
+                    <button
+                      onClick={blockFan}
+                      className="hover:text-red-400"
+                      title="Fan blockieren"
+                    >
+                      <CloseIcon size={18} />
+                    </button>
                   </div>
                 </div>
                 {galleryOpen && (
@@ -2351,7 +2408,7 @@ export default function OfInboxClient({
                       />
                     </div>
                   )}
-                  <EmojiBar onPick={(e) => setDraft((d) => d + e)} />
+                  <EmojiBar onPick={insertEmojiAtCursor} />
                   <div className="flex gap-2 items-center">
                     <div className="relative">
                       {canUse("of-script-vault") && (
@@ -2458,6 +2515,7 @@ export default function OfInboxClient({
                     </button>
                     )}
                     <input
+                      ref={draftInputRef}
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
