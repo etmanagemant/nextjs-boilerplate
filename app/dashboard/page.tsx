@@ -66,10 +66,18 @@ export default function DashboardPage() {
       }
       setCurrentSecondaryRole(userProfile?.secondary_role || null);
 
+      // Explizit gewünscht (2026-08-06, "Dashboard aufräumen"): Umsatz und
+      // Arbeitszeit zeigen nur noch HEUUTE, nicht mehr die komplette
+      // All-Time-Summe seit Projektbeginn (inkl. altem Testdaten-Rauschen).
+      // Lokaler Tagesbeginn im Browser des jeweiligen Nutzers, nicht UTC.
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayStartIso = todayStart.toISOString();
+
       const [profilesRes, assignmentsRes, revenueRes, modelsRes, abandonedLeadsRes] = await Promise.all([
         supabase.from("profiles").select("user_id, full_name, email"),
-        supabase.from("shift_assignments").select("*"),
-        supabase.from("chatter_revenues").select("*"),
+        supabase.from("shift_assignments").select("*").gte("started_at", todayStartIso),
+        supabase.from("chatter_revenues").select("*").gte("created_at", todayStartIso),
         supabase.from("models").select("id, name, platform_type"),
         supabase.from("abandoned_leads").select("*").order("abandoned_at", { ascending: false }).limit(50)
       ]);
@@ -328,7 +336,7 @@ export default function DashboardPage() {
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-2xl my-6 border border-white/5 shadow-2xl">
       <div className="mb-6 border-b border-white/5 pb-4">
         <h1 className="text-2xl font-black bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase tracking-wider">Dashboard</h1>
-        <p className="text-xs text-slate-400 mt-1">Echtzeit-Umsatzauswertungen & Performancedaten</p>
+        <p className="text-xs text-slate-400 mt-1">Echtzeit-Umsatzauswertungen & Performancedaten - Umsatz und Arbeitszeit zeigen nur heute</p>
       </div>
 
       {/* Zuweisungsbox */}
@@ -449,13 +457,13 @@ export default function DashboardPage() {
         <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 text-center">
           {isAdmin ? (
             <>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Live Agentur-Umsatz (Admin)</div>
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Agentur-Umsatz heute (Admin)</div>
               <div className="text-3xl font-black text-[#C9A86A] mt-2 font-mono">${gesamtBruttoAgentur.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Brutto</span></div>
               <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">${gesamtNettoAgentur.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Netto</span></div>
             </>
           ) : (
             <>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Deine Umsatz-Leistung</div>
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Deine Umsatz-Leistung heute</div>
               <div className="text-3xl font-black text-[#C9A86A] mt-2 font-mono">${chatterBrutto.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Brutto</span></div>
               <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">${chatterNetto.toFixed(2)} <span className="text-xs text-slate-400 font-normal">Netto</span></div>
             </>
@@ -477,7 +485,7 @@ export default function DashboardPage() {
 
       {/* Rangliste Mitarbeiter */}
       <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 mb-8">
-        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Mitarbeiter Live-Rangliste</h2>
+        <h2 className="text-sm font-bold mb-4 text-[#C9A86A] uppercase tracking-wider">Mitarbeiter-Rangliste heute</h2>
         {userStatsArray.length > 0 && (
           <div className="mb-5 pb-5 border-b border-[#9C7A3D]/10">
             <MiniBarChart items={userStatsArray.map((u: any) => ({ label: u.name, value: u.netto }))} />
@@ -517,7 +525,7 @@ export default function DashboardPage() {
       {/* 👑 NEUE MODEL RANGLISTE (Vollautomatisch basierend auf der Herkunft der Einnahmen!) - Task #72: nur Admin/Content-Manager */}
       {isAdminTier && (
         <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 mb-8">
-          <h2 className="text-sm font-bold mb-4 text-[#9C7A3D] uppercase tracking-wider">Model Live-Umsatz-Performance</h2>
+          <h2 className="text-sm font-bold mb-4 text-[#9C7A3D] uppercase tracking-wider">Model-Umsatz-Performance heute</h2>
           {modelStatsArray.length > 0 && (
             <div className="mb-5 pb-5 border-b border-[#9C7A3D]/10">
               <MiniBarChart items={modelStatsArray.map((m: any) => ({ label: m.name, value: m.netto }))} />
