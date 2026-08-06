@@ -46,6 +46,18 @@ export const GRANTABLE_FEATURES = [
   { key: "script-vault", label: "Script Vault" },
   { key: "upload-vault", label: "Upload Vault" },
   { key: "onlyfans-model-notes-edit", label: "OnlyFans: Model-Notizen bearbeiten" },
+  // OF Inbox Beta Icon-Leiste - gemeldet 2026-08-06 (Task #72 erweitert:
+  // "wo Chatter draufklicken können" sollte genauso steuerbar sein wie
+  // die Seiten-Zugriffe oben, nicht nur hart im Code auf isAdmin verdrahtet).
+  { key: "of-notifications", label: "OnlyFans Beta: Benachrichtigungen (Glocke)" },
+  { key: "of-lists", label: "OnlyFans Beta: Listen" },
+  { key: "of-vault", label: "OnlyFans Beta: Tresor" },
+  { key: "of-fan-search", label: "OnlyFans Beta: Fan suchen" },
+  { key: "of-schedules", label: "OnlyFans Beta: Kalender" },
+  { key: "of-earnings", label: "OnlyFans Beta: Auszahlungen" },
+  { key: "of-massmessage-stats", label: "OnlyFans Beta: Massmessage-Statistik" },
+  { key: "of-massmessage-compose", label: "OnlyFans Beta: Massmessage erstellen" },
+  { key: "of-script-vault", label: "OnlyFans Beta: Script Vault (im Chat)" },
 ] as const;
 
 export type GrantableFeatureKey = (typeof GRANTABLE_FEATURES)[number]["key"];
@@ -58,17 +70,24 @@ export type GrantableFeatureKey = (typeof GRANTABLE_FEATURES)[number]["key"];
 export const PERMISSION_GRID_ROLES = ["chatter", "moderator", "content-manager", "admin"] as const;
 
 /**
- * True if this role can use the given feature. An explicit row in
- * `permissionMap` (true or false) always wins; with no explicit row, an
+ * True if this role/user can use the given feature. Resolution order:
+ * an explicit per-USER row (userPermissionMap) always wins first - lets
+ * the Hauptadmin override a single person without changing their whole
+ * role; then an explicit per-ROLE row (permissionMap); with neither, an
  * admin-tier role defaults to true and everyone else defaults to false.
- * `permissionMap` is this ONE role's feature_key -> enabled rows, fetched
- * once per page/layout render (see lib/getRolePermissions.ts).
+ * Both maps are this ONE role's/user's feature_key -> enabled rows,
+ * fetched once per page/layout render (see lib/getRolePermissions.ts).
  */
 export function hasFeatureAccess(
   role: string | null | undefined,
   featureKey: GrantableFeatureKey,
-  permissionMap: ReadonlyMap<string, boolean> | Record<string, boolean> = new Map()
+  permissionMap: ReadonlyMap<string, boolean> | Record<string, boolean> = new Map(),
+  userPermissionMap?: ReadonlyMap<string, boolean> | Record<string, boolean>
 ): boolean {
+  if (userPermissionMap) {
+    const userMap = userPermissionMap instanceof Map ? userPermissionMap : new Map(Object.entries(userPermissionMap));
+    if (userMap.has(featureKey)) return !!userMap.get(featureKey);
+  }
   const map = permissionMap instanceof Map ? permissionMap : new Map(Object.entries(permissionMap));
   if (map.has(featureKey)) return !!map.get(featureKey);
   return isAdminTierRole(role);

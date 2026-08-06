@@ -8,6 +8,7 @@ import NextShiftsWidget from "@/components/layout/NextShiftsWidget";
 import { usePublishModelTabs } from "@/components/layout/ModelTabsContext";
 import { useMediaProxyUrl } from "@/lib/useMediaProxyUrl";
 import { formatDuration } from "@/lib/formatDuration";
+import { hasFeatureAccess, type GrantableFeatureKey } from "@/lib/roles";
 import {
   HomeIcon, BellIcon, ChatIcon, ImageIcon, CalendarIcon, ChartIcon, ReceiptIcon,
   NewBadgeIcon, PriceTagIcon, TipIcon, CartIcon, SearchIcon, StarIcon, PinIcon, CheckIcon, DoubleCheckIcon, MuteIcon, CloseIcon, HeartIcon, BookmarkIcon, ArrowLeftIcon, ScriptIcon,
@@ -168,7 +169,29 @@ function MessageMediaCarousel({ media, mediaProxyUrl }: { media: MediaItem[]; me
   );
 }
 
-export default function OfInboxClient({ connectedModels, isAdmin, chatterId, userEmail = "", allShifts = [] }: { connectedModels: ConnectedModel[]; isAdmin: boolean; chatterId: string; userEmail?: string; allShifts?: Shift[] }) {
+export default function OfInboxClient({
+  connectedModels,
+  isAdmin,
+  chatterId,
+  userEmail = "",
+  allShifts = [],
+  userRole,
+  rolePermissions = {},
+  userPermissions = {},
+}: {
+  connectedModels: ConnectedModel[];
+  isAdmin: boolean;
+  chatterId: string;
+  userEmail?: string;
+  allShifts?: Shift[];
+  userRole?: string;
+  rolePermissions?: Record<string, boolean>;
+  userPermissions?: Record<string, boolean>;
+}) {
+  // Task #72 erweitert: Icon-Leiste steuerbar ueber das Rechte-
+  // Kontrollzentrum statt hart auf isAdmin verdrahtet - siehe
+  // GRANTABLE_FEATURES in lib/roles.ts fuer die "of-*"-Keys.
+  const canUse = (key: GrantableFeatureKey) => hasFeatureAccess(userRole, key, rolePermissions, userPermissions);
   const searchParams = useSearchParams();
   const modelFromUrl = searchParams.get("model");
   const [modelId, setModelId] = useState(modelFromUrl || "");
@@ -926,6 +949,38 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
     }
   }, [modelId]);
 
+  // Bugfix (gemeldet 2026-08-06): der gerade offene Chat hat NIE von
+  // selbst aktualisiert - eine neue Fan-Nachricht erschien erst nach
+  // Chat-Wechsel oder manuellem Reload. loadMessages() selbst eignet sich
+  // nicht fürs stille Polling (resettet Scroll-Position + zeigt einen
+  // Ladespinner) - dieser Poll holt nur die neueste Seite und hängt
+  // wirklich neue Nachrichten (per echter id dedupliziert) ans Ende an,
+  // ohne die Ansicht zu stören, wenn nichts Neues da ist.
+  useEffect(() => {
+    if (!modelId || !activeFanId) return;
+    const fanId = activeFanId;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/crm/of-inbox/messages?modelId=${encodeURIComponent(modelId)}&fanId=${fanId}&offset=0`);
+        const data = await res.json();
+        if (!res.ok) return;
+        const list = Array.isArray(data.data) ? data.data : data.data?.list || [];
+        const fresh = list.slice().reverse();
+        const el = messagesContainerRef.current;
+        const wasNearBottom = el ? el.scrollHeight - el.scrollTop - el.clientHeight < 150 : false;
+        setMessages((prev) => {
+          if (prev.length === 0) return prev;
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newOnes = fresh.filter((m: any) => !existingIds.has(m.id));
+          if (newOnes.length === 0) return prev;
+          if (wasNearBottom) requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight; });
+          return [...prev, ...newOnes];
+        });
+      } catch {}
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [modelId, activeFanId]);
+
   function handleMessagesScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
     if (messagesLoadingMore || messagesLoading || !messagesHasMore || !activeFanId) return;
@@ -1524,6 +1579,7 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 <HomeIcon size={30} />
               </button>
             )}
+            {canUse("of-notifications") && (
             <div className="relative">
               <button
                 onClick={toggleNotifPanel}
@@ -1595,13 +1651,17 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 </div>
               )}
             </div>
+            )}
             <button title="Nachrichten (aktiv)" className="text-[#C9A86A]"><ChatIcon size={30} /></button>
-            {/* Task: chatter role only ever needs Messages/Bell (above) +
-                Tresor/Listen - Kalender/Statistik/Auszahlungen bleiben
-                admin/content-manager only. Die Galerie gibt's pro Chat im
-                Header (Task #57, echter Endpunkt) - kein eigenes Icon hier
-                mehr nötig/sinnvoll, OnlyFans hat auch keins in der
-                Leiste. */}
+            {/* Task #72: jedes Icon hier einzeln ueber das Rechte-
+                Kontrollzentrum steuerbar (canUse -> hasFeatureAccess),
+                nicht mehr hart auf isAdmin/Rolle verdrahtet - ohne
+                explizite Konfiguration gilt weiterhin: admin-tier sieht
+                alles, alle anderen nichts (hasFeatureAccess-Default), im
+                Management-Grid dann pro Rolle/Nutzer freischaltbar. Die
+                Galerie gibt's pro Chat im Header (Task #57, echter
+                Endpunkt) - kein eigenes Icon hier mehr nötig. */}
+            {canUse("of-lists") && (
             <div className="relative">
               <button
                 onClick={openListsModal}
@@ -1611,6 +1671,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 <BookmarkIcon size={30} />
               </button>
             </div>
+            )}
+            {canUse("of-vault") && (
             <div className="relative">
               <button
                 onClick={() => openVaultModal("view")}
@@ -1620,6 +1682,8 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 <ImageIcon size={30} />
               </button>
             </div>
+            )}
+            {canUse("of-fan-search") && (
             <div className="relative">
               <button
                 onClick={toggleFanSearch}
@@ -1658,12 +1722,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                 </div>
               )}
             </div>
-            {(isAdmin
-              ? [
-                  { Icon: CalendarIcon, key: "schedules" as const, label: "Kalender" },
-                  { Icon: ReceiptIcon, key: "earnings" as const, label: "Auszahlungen" },
-                ]
-              : []
+            )}
+            {(
+              [
+                { Icon: CalendarIcon, key: "schedules" as const, label: "Kalender", featureKey: "of-schedules" as const },
+                { Icon: ReceiptIcon, key: "earnings" as const, label: "Auszahlungen", featureKey: "of-earnings" as const },
+              ].filter((p) => canUse(p.featureKey))
             ).map(({ Icon, key, label }) => (
                 <div className="relative" key={key}>
                   <button
@@ -1714,12 +1778,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
             <div className="p-3 border-b border-white/10 flex items-center justify-between relative">
               <span className="text-xs font-bold uppercase tracking-wider text-[#C9A86A]">Chats</span>
               <div className="flex items-center gap-3 text-[#C9A86A]">
-                {isAdmin && (
+                {canUse("of-massmessage-stats") && (
                   <button onClick={() => openPanel("stats")} title="Massmessage-Statistik" className={`hover:scale-110 transition ${activePanel === "stats" ? "scale-110" : ""}`}>
                     <ChartIcon size={22} />
                   </button>
                 )}
-                {isAdmin && (
+                {canUse("of-massmessage-compose") && (
                   <button onClick={openMassmessageCompose} title="Massmessage erstellen" className="hover:scale-110 transition text-xl leading-none font-bold">+</button>
                 )}
                 <button onClick={() => loadChats()} title="Aktualisieren" className="hover:scale-110 transition text-base leading-none">↻</button>
@@ -2120,9 +2184,11 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                   <EmojiBar onPick={(e) => setDraft((d) => d + e)} />
                   <div className="flex gap-2 items-center">
                     <div className="relative">
+                      {canUse("of-script-vault") && (
                       <button onClick={toggleScriptPanel} title="Script Vault" className={scriptPanelOpen ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
                         <ScriptIcon size={20} />
                       </button>
+                      )}
                       {scriptPanelOpen && (
                         <div className="absolute bottom-full left-0 mb-2 w-96 max-h-[32rem] flex flex-col overflow-hidden bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-30">
                           <div className="p-2.5 border-b border-white/10 flex items-center justify-between flex-shrink-0">
@@ -2216,9 +2282,11 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                         </div>
                       )}
                     </div>
+                    {canUse("of-vault") && (
                     <button onClick={() => openVaultModal("attach", "chat")} title="Aus dem Tresor anhängen" className={vaultModalMode === "attach" ? "text-[#C9A86A]" : "text-slate-400 hover:text-[#E2C48A]"}>
                       <ImageIcon size={20} />
                     </button>
+                    )}
                     <input
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}

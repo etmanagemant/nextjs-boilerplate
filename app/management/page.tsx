@@ -1,11 +1,12 @@
 import { createClient } from "@/utils/supabase/server";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
-import { updateMitarbeiterRolle, updateMitarbeiterZweitrolle, updateMitarbeiterName, deleteMitarbeiter, updateMitarbeiterCompensation, updateRolePermission } from "./actions";
+import { updateMitarbeiterRolle, updateMitarbeiterZweitrolle, updateMitarbeiterName, deleteMitarbeiter, updateMitarbeiterCompensation, updateRolePermission, updateUserPermission } from "./actions";
 import { revalidatePath } from "next/cache";
 import RoleSelect from "@/components/layout/RoleSelect";
 import SecondaryRoleSelect from "@/components/layout/SecondaryRoleSelect";
 import PermissionCheckbox from "@/components/layout/PermissionCheckbox";
+import UserPermissionsPanel from "@/components/layout/UserPermissionsPanel";
 import { GRANTABLE_FEATURES, PERMISSION_GRID_ROLES, hasFeatureAccess } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
@@ -26,10 +27,11 @@ export default async function ManagementPage() {
   if (!isAdmin) { redirect("/"); }
 
   // 🛡️ ERWEITERTES SELECT: Zieht provision_rate + hourly_rate mit aus der Datenbank heraus!
-  const [{ data: profilListe }, { data: alleSchichten }, { data: rolePerms }] = await Promise.all([
+  const [{ data: profilListe }, { data: alleSchichten }, { data: rolePerms }, { data: userPerms }] = await Promise.all([
     supabase.from("profiles").select("user_id, role, secondary_role, email, full_name, provision_rate, hourly_rate"),
     supabase.from("shift_assignments").select("*"),
     supabase.from("crm_role_permissions").select("role, feature_key, enabled"),
+    supabase.from("crm_user_permissions").select("user_id, feature_key, enabled"),
   ]);
 
   const sichereProfile = profilListe || [];
@@ -41,6 +43,28 @@ export default async function ManagementPage() {
     if (!permMap.has(p.role)) permMap.set(p.role, new Map());
     permMap.get(p.role)!.set(p.feature_key, p.enabled);
   });
+
+  // Resolved (incl. admin-tier fallback) role default per feature, so the
+  // per-user panel below can show "Rollen-Standard: ✓/✗" as context next
+  // to each override.
+  const roleDefaults: Record<string, Record<string, boolean>> = {};
+  PERMISSION_GRID_ROLES.forEach((role) => {
+    roleDefaults[role] = {};
+    GRANTABLE_FEATURES.forEach((f) => {
+      roleDefaults[role][f.key] = hasFeatureAccess(role, f.key, permMap.get(role) ?? new Map());
+    });
+  });
+
+  // user_id -> feature_key -> enabled, for the per-user overrides panel
+  const userPermMap: Record<string, Record<string, boolean>> = {};
+  (userPerms || []).forEach((p: any) => {
+    if (!userPermMap[p.user_id]) userPermMap[p.user_id] = {};
+    userPermMap[p.user_id][p.feature_key] = p.enabled;
+  });
+
+  const overridableUsers = sichereProfile
+    .filter((p) => p.role && p.role !== "model")
+    .map((p) => ({ user_id: p.user_id, full_name: p.full_name, email: p.email, role: p.role }));
 
   let gesamtStundenAllerUser = 0;
   sichereSchichten.forEach((s) => {
@@ -205,6 +229,23 @@ export default async function ManagementPage() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      {/* PRO-NUTZER-OVERRIDES: erzwingt eine Funktion AN/AUS für genau
+          eine Person, unabhängig von ihrer Rolle - z.B. ein einzelner
+          Chatter bekommt Massmessage, die anderen nicht. */}
+      <section className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 mb-8">
+        <h2 className="text-sm font-bold mb-1 text-[#C9A86A] uppercase tracking-wider">Individuelle Nutzer-Overrides</h2>
+        <p className="text-[11px] text-slate-500 mb-4">
+          Überschreibt das Rechte-Kontrollzentrum oben für genau eine Person. "Rolle-Standard" entfernt den Override wieder.
+        </p>
+        <UserPermissionsPanel
+          users={overridableUsers}
+          features={GRANTABLE_FEATURES as unknown as { key: string; label: string }[]}
+          userOverrides={userPermMap}
+          roleDefaults={roleDefaults}
+          onUpdateAction={updateUserPermission}
+        />
       </section>
     </main>
   );

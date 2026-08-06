@@ -149,6 +149,29 @@ export async function updateRolePermission(formData: FormData) {
   }
 }
 
+// Per-user override on top of updateRolePermission above - "inherit"
+// removes any override row (falls back to the role's own setting),
+// "on"/"off" force it for this one person regardless of their role.
+// See CRM_USER_PERMISSIONS_SETUP.sql for the table/policies.
+export async function updateUserPermission(formData: FormData) {
+  const userId = formData.get("user_id") as string;
+  const featureKey = formData.get("feature_key") as string;
+  const mode = formData.get("mode") as string;
+
+  if (userId && featureKey && mode) {
+    const supabaseServer = await createClient();
+    if (mode === "inherit") {
+      await supabaseServer.from("crm_user_permissions").delete().eq("user_id", userId).eq("feature_key", featureKey);
+    } else {
+      await supabaseServer.from("crm_user_permissions").upsert(
+        { user_id: userId, feature_key: featureKey, enabled: mode === "on", updated_at: new Date().toISOString() },
+        { onConflict: "user_id,feature_key" }
+      );
+    }
+    revalidatePath("/management");
+  }
+}
+
 // 🟢 CRASH-PROOF VERBINDUNG: Liefert jetzt eine reine, ungestörte JSON-Antwort an das Formular
 export async function addShift(formData: FormData) {
   const chatterId = formData.get("chatter_id") as string; 

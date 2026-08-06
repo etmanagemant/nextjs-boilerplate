@@ -2,6 +2,7 @@ import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import { getCurrentUser, getCurrentProfile } from "@/lib/getCurrentUser";
 import { redirect } from "next/navigation";
 import { hasRole, isAdminTierRole } from "@/lib/roles";
+import { fetchRolePermissionMap, fetchUserPermissionMap } from "@/lib/getRolePermissions";
 import OfInboxClient from "@/components/layout/OfInboxClient";
 
 export const dynamic = "force-dynamic";
@@ -30,13 +31,15 @@ export default async function OfInboxPage() {
   }
 
   const adminSupabase = createSupabaseAdminClient();
-  const [{ data: crm_models }, { data: allShifts }] = await Promise.all([
+  const [{ data: crm_models }, { data: allShifts }, rolePermMap, userPermMap] = await Promise.all([
     adminSupabase
       .from("crm_model_sessions")
       .select("model_id")
       .eq("is_active", true)
       .order("model_id", { ascending: true }),
     adminSupabase.from("shifts").select("*"),
+    fetchRolePermissionMap(adminSupabase, profile?.role),
+    fetchUserPermissionMap(adminSupabase, user.id),
   ]);
 
   const modelIds = (crm_models || []).map((m: any) => m.model_id);
@@ -61,6 +64,9 @@ export default async function OfInboxPage() {
       chatterId={user.id}
       userEmail={user.email || ""}
       allShifts={allShifts || []}
+      userRole={profile?.role}
+      rolePermissions={Object.fromEntries(rolePermMap)}
+      userPermissions={Object.fromEntries(userPermMap)}
     />
   );
 }
