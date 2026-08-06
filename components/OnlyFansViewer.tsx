@@ -261,15 +261,37 @@ export function OnlyFansViewer({
   // on OnlyFans' own page) so the Fan CRM panel can show/save the right
   // fan's data, and switches automatically when the chatter opens a
   // different chat inside OnlyFans itself.
+  //
+  // Bugfix (2026-08-06, Vercel Fluid Active CPU usage): this ran BOTH
+  // Supabase queries on the server on every single 1s tick, even while
+  // sitting in the exact same conversation for minutes - by far the
+  // biggest Vercel-function invocation volume in the whole app (1/s per
+  // open VNC session, vs. 15-20s elsewhere). Now sends the fanId already
+  // known client-side (knownFanIdRef) - the server skips its DB queries
+  // and returns a cheap "unchanged" response when it still matches. A
+  // forced full refresh every ~15 ticks still happens regardless, so a
+  // concurrent edit by another chatter on the same fan is still picked up
+  // within ~15s, not never.
+  const knownFanIdRef = useRef<string | null>(null);
+  const pollTickRef = useRef(0);
   const pollCurrentFan = async () => {
     try {
-      const res = await fetch(`/api/crm/current-fan?modelId=${encodeURIComponent(modelId)}`);
+      pollTickRef.current += 1;
+      const forceRefresh = pollTickRef.current % 15 === 0;
+      const knownFanId = !forceRefresh ? knownFanIdRef.current : null;
+      const qs = `modelId=${encodeURIComponent(modelId)}${knownFanId ? `&knownFanId=${encodeURIComponent(knownFanId)}` : ""}`;
+      const res = await fetch(`/api/crm/current-fan?${qs}`);
       const data = res.ok ? await res.json() : {};
       setModalOpen(!!data.modalOpen);
       setTextareaTop(typeof data.textareaTop === "number" ? data.textareaTop : null);
+      if (data.status === "unchanged") {
+        return; // fanId confirmed still the same - metadata already correct, nothing to update
+      }
       if (data.status === "success" && data.fanId) {
+        knownFanIdRef.current = data.fanId;
         setCurrentFan({ fanId: data.fanId, metadata: data.metadata, lastEditedBy: data.lastEditedBy || null });
       } else {
+        knownFanIdRef.current = null;
         setCurrentFan(null);
       }
     } catch {

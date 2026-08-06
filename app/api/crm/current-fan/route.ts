@@ -12,10 +12,21 @@ export const runtime = "nodejs";
 const CHAT_URL_PATTERN = /\/chats\/chat\/(\d+)/;
 
 /**
- * Polled periodically by the CRM Inbox live view to detect which fan
+ * Polled periodically (1s) by the CRM Inbox live view to detect which fan
  * conversation the current user's chatter slot has open, and load that
  * fan's CRM data (name, notes, preferences, etc.) for the side panel.
- * GET /api/crm/current-fan?modelId=xxx
+ *
+ * Bugfix (2026-08-06, Vercel Fluid Active CPU usage): this used to run
+ * BOTH Supabase queries (crm_fan_metadata + profiles) on every single 1s
+ * tick, even when the chatter had been sitting in the exact same
+ * conversation for minutes - the only thing that actually needs checking
+ * that often is the cheap VPS URL-detection call. The client now sends
+ * the fanId it already has (knownFanId); if the freshly-detected fanId
+ * still matches, the DB queries are skipped entirely and a lightweight
+ * "unchanged" response is returned instead. The client separately forces
+ * a real refresh every ~15s regardless (see OnlyFansViewer.tsx) to still
+ * pick up another chatter's concurrent edits to the same fan.
+ * GET /api/crm/current-fan?modelId=xxx&knownFanId=xxx
  */
 export async function GET(req: NextRequest) {
   try {
@@ -28,6 +39,7 @@ export async function GET(req: NextRequest) {
     if (!modelId) {
       return NextResponse.json({ error: "Missing modelId" }, { status: 400 });
     }
+    const knownFanId = req.nextUrl.searchParams.get("knownFanId");
 
     const pageRes = await vpsFetch(
       `/chatter-slot-page?userId=${encodeURIComponent(user.id)}&modelId=${encodeURIComponent(modelId)}`
@@ -43,6 +55,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ status: "no-fan", modalOpen, textareaTop });
     }
     const fanId = match[1];
+
+    if (knownFanId && knownFanId === fanId) {
+      return NextResponse.json({ status: "unchanged", fanId, modalOpen, textareaTop });
+    }
 
     const { data, error } = await supabase
       .from("crm_fan_metadata")
