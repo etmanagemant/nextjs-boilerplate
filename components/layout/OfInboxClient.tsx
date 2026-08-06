@@ -116,24 +116,53 @@ const AttachedMediaPreview = memo(function AttachedMediaPreview({ media, onRemov
 // still applies unchanged.
 function MessageMedia({ media, mediaProxyUrl }: { media?: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string }) {
   if (!media || media.length === 0) return null;
+  return <MessageMediaCarousel media={media} mediaProxyUrl={mediaProxyUrl} />;
+}
+
+// Bugfix (gemeldet 2026-08-06): mehrere Dateien in einer Nachricht wurden
+// untereinander gestapelt - bei 4-6 Dateien nahm eine einzige Nachricht
+// den halben Chat ein, man musste endlos scrollen. Jetzt nur EIN Medium
+// sichtbar mit Pfeilen zum Durchblättern (X/Y-Zähler), wie ein Karussell -
+// eigener eigener Index-State pro Nachricht, da jede MessageMedia-Instanz
+// unabhängig durchgeblättert werden soll.
+function MessageMediaCarousel({ media, mediaProxyUrl }: { media: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string }) {
+  const [index, setIndex] = useState(0);
+  const safeIndex = Math.min(index, media.length - 1);
+  const m = media[safeIndex];
+  const url = m.files?.full?.url || m.files?.preview?.url;
+  const proxied = url ? mediaProxyUrl(url) : null;
+
   return (
-    <div className="flex flex-col gap-2 mb-2">
-      {media.map((m, i) => {
-        const url = m.files?.full?.url || m.files?.preview?.url;
-        if (!url) return null;
-        const proxied = mediaProxyUrl(url);
-        if (m.type === "photo" || m.type === "gif") {
-          // eslint-disable-next-line @next/next/no-img-element
-          return <img key={i} src={proxied} alt="" className="max-w-full rounded-lg max-h-80 object-contain" />;
-        }
-        if (m.type === "video") {
-          return <video key={i} src={proxied} controls className="max-w-full rounded-lg max-h-80" />;
-        }
-        if (m.type === "audio") {
-          return <audio key={i} src={proxied} controls className="max-w-full" />;
-        }
-        return null;
-      })}
+    <div className="relative mb-2">
+      {proxied && (m.type === "photo" || m.type === "gif") ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={proxied} alt="" className="max-w-full rounded-lg max-h-80 object-contain" />
+      ) : proxied && m.type === "video" ? (
+        <video src={proxied} controls className="max-w-full rounded-lg max-h-80" />
+      ) : proxied && m.type === "audio" ? (
+        <audio src={proxied} controls className="max-w-full" />
+      ) : null}
+      {media.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setIndex((i) => (Math.min(i, media.length - 1) - 1 + media.length) % media.length)}
+            className="absolute left-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={() => setIndex((i) => (Math.min(i, media.length - 1) + 1) % media.length)}
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+          >
+            ›
+          </button>
+          <div className="absolute bottom-1 right-1 text-[10px] font-bold bg-black/70 text-white px-1.5 py-0.5 rounded">
+            {safeIndex + 1}/{media.length}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1891,7 +1920,12 @@ export default function OfInboxClient({ connectedModels, isAdmin, chatterId, use
                             ) : (
                               <>
                                 {isOwn && Number(m.price) > 0 && (
-                                  <div className="flex items-center gap-1 text-[10px] text-[#C9A86A] mb-1"><PriceTagIcon size={12} /> PPV ${m.price}</div>
+                                  // Wie im echten OnlyFans: Preis-Zeile zeigt direkt, ob
+                                  // der Fan schon bezahlt hat (m.canPurchase bei eigener
+                                  // PPV = Fan noch nicht bezahlt, siehe Kommentar oben).
+                                  <div className={`flex items-center gap-1 text-[10px] font-semibold mb-1 ${m.canPurchase ? "text-slate-400" : "text-emerald-400"}`}>
+                                    <PriceTagIcon size={12} /> ${m.price} {m.canPurchase ? "noch nicht bezahlt" : "bezahlt ✓"}
+                                  </div>
                                 )}
                                 <MessageMedia media={m.media} mediaProxyUrl={mediaProxyUrl} />
                               </>
