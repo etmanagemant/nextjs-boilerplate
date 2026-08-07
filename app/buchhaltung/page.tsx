@@ -107,7 +107,16 @@ export default async function BuchhaltungPage({ searchParams }: { searchParams: 
                     <div className="truncate"><span>🔑</span> <span className="text-[#C9A86A] font-semibold">Details:</span> {chatter.zahlungs_details || "Keine Daten"}</div>
                   </div>
                 </div>
-                <button className="w-full mt-4 bg-[#C9A86A]/10 hover:bg-[#C9A86A]/20 border border-[#9C7A3D]/30 text-[#C9A86A] rounded py-1 text-xs font-bold transition cursor-pointer">Abrechnung PDF laden</button>
+                {/* Bugfix (gemeldet 2026-08-07): war ein Button ohne
+                    onClick-Handler, komplett totes Feature. Echter
+                    Download-Link auf die neue PDF-Route, gleicher Monat
+                    wie oben ausgewaehlt. */}
+                <a
+                  href={`/api/buchhaltung/abrechnung-pdf?userId=${chatter.user_id}&monat=${monthOffset}`}
+                  className="w-full mt-4 block text-center bg-[#C9A86A]/10 hover:bg-[#C9A86A]/20 border border-[#9C7A3D]/30 text-[#C9A86A] rounded py-1 text-xs font-bold transition cursor-pointer"
+                >
+                  Abrechnung PDF laden
+                </a>
               </div>
             );
           })}
