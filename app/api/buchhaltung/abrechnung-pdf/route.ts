@@ -4,11 +4,24 @@ import { hasFeatureAccess } from "@/lib/roles";
 import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
 import { createSupabaseAdminClient } from "@/lib/supabaseServerClient";
 import PDFDocument from "pdfkit";
+import fs from "fs";
+import path from "path";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const TEST_MODEL_ID = "d7976e92-434e-488a-8ec4-bba92eb31dcf";
+
+// Explizit gewuenscht (2026-08-07): Agentur-Logo auf jeder Rechnung/
+// Abrechnung. Fehler beim Laden darf das PDF nie zum Absturz bringen -
+// lieber ohne Logo als HTTP 500 (wie beim pdfkit-Font-Bug eben).
+function loadLogoBuffer(): Buffer | null {
+  try {
+    return fs.readFileSync(path.join(process.cwd(), "public", "images", "logo.png"));
+  } catch {
+    return null;
+  }
+}
 
 function streamToBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -109,6 +122,9 @@ export async function GET(req: NextRequest) {
 
   const doc = new PDFDocument({ size: "A4", margin: 50 });
   const bufferPromise = streamToBuffer(doc);
+
+  const logoBuffer = loadLogoBuffer();
+  if (logoBuffer) doc.image(logoBuffer, doc.page.width - 50 - 60, 50, { width: 60 });
 
   doc.fontSize(18).fillColor("#1a1a1a").text(String(agency.agency_name || "ET Management"), { align: "left" });
   if (agency.address) doc.fontSize(9).fillColor("#555").text(String(agency.address));

@@ -12,9 +12,14 @@ const nextConfig = {
   // Zusaetzliche Absicherung fuer denselben Bug: garantiert, dass pdfkits
   // eigene Font-Datendateien (.afm) im deployten Funktions-Paket landen,
   // falls Next.js' automatische Datei-Erkennung sie sonst uebersieht.
+  // Explizit gewuenscht (2026-08-07): Agentur-Logo auf den PDFs - wird per
+  // fs.readFileSync direkt aus der Funktion gelesen (nicht per HTTP), public/
+  // ist sonst nicht automatisch im Funktions-Bundle enthalten (nur ueber
+  // Vercels eigenes CDN erreichbar, nicht ueber das lokale Dateisystem der
+  // Funktion) - gleicher Absicherungs-Grund wie bei pdfkit oben.
   outputFileTracingIncludes: {
-    "/api/buchhaltung/abrechnung-pdf": ["./node_modules/pdfkit/**/*"],
-    "/api/abrechnung/rechnung-pdf": ["./node_modules/pdfkit/**/*"],
+    "/api/buchhaltung/abrechnung-pdf": ["./node_modules/pdfkit/**/*", "./public/images/logo.png"],
+    "/api/abrechnung/rechnung-pdf": ["./node_modules/pdfkit/**/*", "./public/images/logo.png"],
   },
 };
 
