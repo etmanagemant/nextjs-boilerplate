@@ -3,28 +3,49 @@ import { redirect } from "next/navigation";
 import { updateAgencySettings } from "@/app/abrechnung/actions";
 import { hasFeatureAccess } from "@/lib/roles";
 import { fetchRolePermissionMap } from "@/lib/getRolePermissions";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-export default async function BuchhaltungPage() {
+const TEST_MODEL_ID = "d7976e92-434e-488a-8ec4-bba92eb31dcf";
+
+export default async function BuchhaltungPage({ searchParams }: { searchParams: Promise<{ monat?: string }> }) {
   const { supabase, user } = await getCurrentUser();
 
   // Harte Absicherung: Chatter fliegen sofort raus!
   if (!user) { redirect("/login"); }
   const adminCheck = await getCurrentProfile(user.id);
   const grantedBuchhaltung = await fetchRolePermissionMap(supabase, adminCheck?.role);
-  if (user.email !== "etmanagement@gmail.com" && !hasFeatureAccess(adminCheck?.role, "buchhaltung", grantedBuchhaltung)) { redirect("/"); }
+  if (user.email !== "etmanagement@gmail.com" && user.email !== "etmanagemant@gmail.com" && !hasFeatureAccess(adminCheck?.role, "buchhaltung", grantedBuchhaltung)) { redirect("/"); }
+
+  // Explizit gewuenscht (2026-08-07): Abrechnungsmonat statt "seit
+  // Projektbeginn fuer immer" - ?monat=0 aktueller Monat, hoeher = weiter
+  // zurueck. Server-Component, deshalb ueber die URL statt useState.
+  const monthOffset = Math.max(0, Number((await searchParams).monat) || 0);
+  const now = new Date();
+  const monthDate = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+  const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+  const monthLabel = monthDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
 
   // Daten parallel laden
   const [agencyRes, profilesRes, shiftsRes, revenueRes] = await Promise.all([
     supabase.from("agency_settings").select("*").eq("id", 1).single(),
     supabase.from("profiles").select("*"),
-    supabase.from("shift_assignments").select("*"),
+    supabase.from("shift_assignments").select("*")
+      .gte("started_at", monthStart.toISOString()).lt("started_at", monthEnd.toISOString()),
+    // Bugfix (gemeldet 2026-08-07): Testmodel-Umsaetze flossen bisher
+    // ungefiltert mit ein, und es gab ueberhaupt keinen Zeitraum - beides
+    // verfaelscht die echte Auszahlungssumme.
     supabase.from("chatter_revenues").select("*")
+      .gte("created_at", monthStart.toISOString()).lt("created_at", monthEnd.toISOString())
+      .neq("model_id", TEST_MODEL_ID),
   ]);
 
   const agency = agencyRes.data || { agency_name: "ET Management" };
-  const chatterProfile = profilesRes.data || [];
+  // Bugfix (gemeldet 2026-08-07): Model-Rollen-Accounts (nur zum Content-
+  // Hochladen da) tauchten hier als Mitarbeiter-Kachel auf.
+  const chatterProfile = (profilesRes.data || []).filter((p) => p.role !== "model");
   const assignments = shiftsRes.data || [];
   const revenues = revenueRes.data || [];
   return (
@@ -32,6 +53,18 @@ export default async function BuchhaltungPage() {
       <div className="mb-6 border-b border-white/5 pb-4">
         <h1 className="text-2xl font-black tracking-wide bg-gradient-to-r from-[#E2C48A] to-[#C9A86A] bg-clip-text text-transparent uppercase">FINANZ-BUCHHALTUNG</h1>
         <p className="text-xs text-slate-400 mt-1">Hier verwaltest du deine Agenturdaten und ziehst alle Abrechnungen gesammelt ab.</p>
+      </div>
+
+      <div className="flex items-center justify-between mb-6 bg-black/40 p-3 rounded-xl border border-[#9C7A3D]/10">
+        <span className="text-sm font-bold text-[#C9A86A]">{monthLabel}</span>
+        <div className="flex items-center gap-1">
+          <Link href={`/buchhaltung?monat=${monthOffset + 1}`} title="Vorheriger Monat" className="w-7 h-7 flex items-center justify-center rounded-md border border-white/10 text-slate-400 hover:text-[#E2C48A] hover:border-[#C9A86A]/40">←</Link>
+          {monthOffset > 0 ? (
+            <Link href={`/buchhaltung?monat=${monthOffset - 1}`} title="Nächster Monat" className="w-7 h-7 flex items-center justify-center rounded-md border border-white/10 text-slate-400 hover:text-[#E2C48A] hover:border-[#C9A86A]/40">→</Link>
+          ) : (
+            <span className="w-7 h-7 flex items-center justify-center rounded-md border border-white/10 text-slate-700">→</span>
+          )}
+        </div>
       </div>
 
       {/* 1. SEKTION: Optionale Agentur-Stammdaten einstellen */}

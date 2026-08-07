@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabaseClient";
 
+const TEST_MODEL_ID = "d7976e92-434e-488a-8ec4-bba92eb31dcf";
+
 export default function AbrechnungPage() {
   const supabase = createClient();
   const [loading, setLoading] = useState<boolean>(true);
@@ -11,6 +13,11 @@ export default function AbrechnungPage() {
   const [currentUserRole, setCurrentUserRole] = useState<string>("chatter");
   const [abrechnungsDaten, setAbrechnungsDaten] = useState<any[]>([]);
   const [moderatorStriptchatData, setModeratorStriptchatData] = useState<any>(null);
+  // Explizit gewuenscht (2026-08-07): Abrechnung monatlich statt seit
+  // Projektbeginn fuer immer zusammengerechnet - gleiches Muster wie das
+  // Dashboard-Diagramm (0 = aktueller Monat, hoeher = weiter zurueck).
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [monthLabel, setMonthLabel] = useState("");
   
   const [address, setAddress] = useState("");
   const [iban, setIban] = useState("");
@@ -25,7 +32,10 @@ export default function AbrechnungPage() {
         if (!user) return;
 
         setCurrentUserId(user.id);
-        const adminCheck = user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com";
+        // Bugfix (gemeldet 2026-08-07): fehlte hier die "etmanagemant"-
+        // Tippfehler-Variante, die ueberall sonst im Code mitgeprueft wird -
+        // die echte Admin-Mail hat genau diesen Tippfehler.
+        const adminCheck = user.id === "35498c92-2c4d-4720-a6f7-cc187a4c5fc4" || user.email === "etmanagement@gmail.com" || user.email === "etmanagemant@gmail.com";
         setIsAdmin(adminCheck);
         
         const { data: userProfile } = await supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
@@ -46,19 +56,38 @@ export default function AbrechnungPage() {
   async function ladeAbrechnungsZentrale() {
     if (!currentUserId) return;
     try {
+      // Explizit gewuenscht (2026-08-07): Abrechnungsmonat statt "seit
+      // Projektbeginn fuer immer" - monthOffset 0 = aktueller Monat.
+      const now = new Date();
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+      const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+      const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+      setMonthLabel(monthDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" }));
+
       const [profilesRes, revenueRes, shiftsRes] = await Promise.all([
         supabase.from("profiles").select("*"),
-        supabase.from("chatter_revenues").select("*"),
+        // Bugfix (gemeldet 2026-08-07): Testmodel-Umsaetze (Live-Tests
+        // dieser Session) flossen bisher ungefiltert in die echte
+        // Provisionsberechnung mit ein - bei Auszahlungslogik der
+        // schwerwiegendste der beiden Bugs hier.
+        supabase.from("chatter_revenues").select("*")
+          .gte("created_at", monthStart.toISOString()).lt("created_at", monthEnd.toISOString())
+          .neq("model_id", TEST_MODEL_ID),
         supabase.from("shift_assignments").select("*")
+          .gte("started_at", monthStart.toISOString()).lt("started_at", monthEnd.toISOString()),
       ]);
 
       const profiles = profilesRes.data || [];
       const revenues = revenueRes.data || [];
       const shifts = shiftsRes.data || [];
 
-      const erlaubteProfile = isAdmin 
-        ? profiles.filter(p => p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4")
-        : profiles.filter(p => p.user_id === currentUserId);
+      // Bugfix (gemeldet 2026-08-07): Model-Rollen-Accounts (nur zum
+      // Content-Hochladen da) tauchten hier als Zeile mit $0 auf - gleicher
+      // Fehler wie vorhin bei der Dashboard-Rangliste.
+      const staffProfiles = profiles.filter((p) => p.role !== "model");
+      const erlaubteProfile = isAdmin
+        ? staffProfiles.filter(p => p.user_id !== "35498c92-2c4d-4720-a6f7-cc187a4c5fc4")
+        : staffProfiles.filter(p => p.user_id === currentUserId);
 
       const berechneteListe = erlaubteProfile.map(p => {
         let stunden = 0;
@@ -164,7 +193,8 @@ export default function AbrechnungPage() {
       const interval = setInterval(ladeAbrechnungsZentrale, 5000);
       return () => clearInterval(interval);
     }
-  }, [currentUserId, isAdmin]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId, isAdmin, monthOffset]);
 
   async function handleSaveProfile() {
     setSaveStatus("Speichert...");
@@ -198,6 +228,14 @@ export default function AbrechnungPage() {
           </span>
         </h1>
         <p className="text-xs text-slate-400 mt-1">Übersicht deiner Einnahmen, Schichtstunden und Provisionsberechnungen</p>
+      </div>
+
+      <div className="flex items-center justify-between mb-6 bg-black/40 p-3 rounded-xl border border-[#9C7A3D]/10">
+        <span className="text-sm font-bold text-[#C9A86A]">{monthLabel}</span>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setMonthOffset((o) => o + 1)} title="Vorheriger Monat" className="w-7 h-7 flex items-center justify-center rounded-md border border-white/10 text-slate-400 hover:text-[#E2C48A] hover:border-[#C9A86A]/40">←</button>
+          <button onClick={() => setMonthOffset((o) => Math.max(0, o - 1))} disabled={monthOffset === 0} title="Nächster Monat" className="w-7 h-7 flex items-center justify-center rounded-md border border-white/10 text-slate-400 hover:text-[#E2C48A] hover:border-[#C9A86A]/40 disabled:opacity-30">→</button>
+        </div>
       </div>
 
       {!isAdmin && (

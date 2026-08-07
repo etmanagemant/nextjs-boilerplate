@@ -12,9 +12,12 @@ const TEST_MODEL_ID = "d7976e92-434e-488a-8ec4-bba92eb31dcf";
 // matching this app's convention elsewhere (see app/chatter/page.tsx).
 function formatDashboardDateTime(iso: string | null) {
   if (!iso) return "—";
+  // Bugfix (gemeldet 2026-08-07): Jahr fehlte komplett - bei Schichten aus
+  // unterschiedlichen Jahren nicht mehr unterscheidbar.
   return new Date(iso).toLocaleString("de-DE", {
     day: "2-digit",
     month: "2-digit",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -496,20 +499,31 @@ export default function DashboardPage() {
 
       {/* Ranglisten-Platz-Kachel (reine "heute"-Zahl-Kachel wurde durch den
           RevenueChart oben ersetzt, 2026-08-07) */}
-      <div className="mb-8">
-        <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 flex items-center justify-center gap-5 max-w-md">
-          <CircularProgress
-            value={userStatsArray.length - (userStatsArray.findIndex(u => u.brutto === chatterBrutto))}
-            max={userStatsArray.length || 1}
-            label={`#${userStatsArray.findIndex(u => u.brutto === chatterBrutto) + 1}`}
-            sublabel={`von ${userStatsArray.length}`}
-          />
-          <div>
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Agentur Ranglisten-Platz</div>
-            <div className="text-xl font-black text-[#C9A86A] mt-1">🏆 Live-Position</div>
+      {/* Bugfix (gemeldet 2026-08-07): fand den eigenen Rang bisher ueber
+          findIndex(brutto === chatterBrutto) - bei mehreren Nutzern mit
+          gleichem Brutto (z.B. mehrere bei $0) traf das immer den ERSTEN
+          Treffer in der sortierten Liste, nicht den eigenen - jeder sah
+          "Platz 1". Jetzt ueber die echte user_id gesucht statt ueber den
+          zufaellig gleichen Betrag. */}
+      {(() => {
+        const myIdx = userStatsArray.findIndex((u: any) => u.user_id === currentUserId);
+        return (
+          <div className="mb-8">
+            <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl shadow-black/20 hover:border-[#C9A86A]/30 transition-colors duration-300 flex items-center justify-center gap-5 max-w-md">
+              <CircularProgress
+                value={myIdx === -1 ? 0 : userStatsArray.length - myIdx}
+                max={userStatsArray.length || 1}
+                label={myIdx === -1 ? "—" : `#${myIdx + 1}`}
+                sublabel={`von ${userStatsArray.length}`}
+              />
+              <div>
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Agentur Ranglisten-Platz</div>
+                <div className="text-xl font-black text-[#C9A86A] mt-1">🏆 Live-Position</div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Rangliste Mitarbeiter - explizit gewuenscht (2026-08-07): Monat
           fuer Monat durchblaetterbar, auch fuer Chatter (kein Admin-Gate

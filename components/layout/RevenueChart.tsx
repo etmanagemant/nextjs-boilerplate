@@ -132,8 +132,13 @@ export function RevenueChart({ userId, isAdmin }: { userId?: string; isAdmin: bo
 
       {granularity === "custom" && (
         <div className="flex items-center gap-2 mb-4 text-xs">
+          {/* Bugfix (gemeldet 2026-08-07): native Datums-Eingabe zeigte
+              Monat/Tag statt Tag.Monat.Jahr - der Browser richtet sich
+              dabei nach dem lang-Attribut des Feldes selbst, nicht nach
+              unseren toLocaleDateString("de-DE")-Aufrufen anderswo. */}
           <input
             type="date"
+            lang="de-DE"
             value={customStart}
             onChange={(e) => setCustomStart(e.target.value)}
             max={customEnd}
@@ -143,6 +148,7 @@ export function RevenueChart({ userId, isAdmin }: { userId?: string; isAdmin: bo
           <span className="text-slate-500">bis</span>
           <input
             type="date"
+            lang="de-DE"
             value={customEnd}
             onChange={(e) => setCustomEnd(e.target.value)}
             min={customStart}
