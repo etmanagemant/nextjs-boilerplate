@@ -132,9 +132,9 @@ const AttachedMediaPreview = memo(function AttachedMediaPreview({ media, onRemov
 // stable regardless of what triggers a parent re-render. Task #44's
 // media-proxy comment (CDN urls IP-locked to the VPS, not the browser)
 // still applies unchanged.
-function MessageMedia({ media, mediaProxyUrl, onMediaLoad }: { media?: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string; onMediaLoad?: () => void }) {
+function MessageMedia({ media, mediaProxyUrl, onMediaLoad, onOpenLightbox }: { media?: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string; onMediaLoad?: () => void; onOpenLightbox?: (m: MediaItem) => void }) {
   if (!media || media.length === 0) return null;
-  return <MessageMediaCarousel media={media} mediaProxyUrl={mediaProxyUrl} onMediaLoad={onMediaLoad} />;
+  return <MessageMediaCarousel media={media} mediaProxyUrl={mediaProxyUrl} onMediaLoad={onMediaLoad} onOpenLightbox={onOpenLightbox} />;
 }
 
 // Bugfix (gemeldet 2026-08-06): mehrere Dateien in einer Nachricht wurden
@@ -143,7 +143,7 @@ function MessageMedia({ media, mediaProxyUrl, onMediaLoad }: { media?: MediaItem
 // sichtbar mit Pfeilen zum Durchblättern (X/Y-Zähler), wie ein Karussell -
 // eigener eigener Index-State pro Nachricht, da jede MessageMedia-Instanz
 // unabhängig durchgeblättert werden soll.
-function MessageMediaCarousel({ media, mediaProxyUrl, onMediaLoad }: { media: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string; onMediaLoad?: () => void }) {
+function MessageMediaCarousel({ media, mediaProxyUrl, onMediaLoad, onOpenLightbox }: { media: MediaItem[]; mediaProxyUrl: (url: string, kind?: "media" | "thumbnail") => string; onMediaLoad?: () => void; onOpenLightbox?: (m: MediaItem) => void }) {
   const [index, setIndex] = useState(0);
   const safeIndex = Math.min(index, media.length - 1);
   const m = media[safeIndex];
@@ -152,9 +152,20 @@ function MessageMediaCarousel({ media, mediaProxyUrl, onMediaLoad }: { media: Me
 
   return (
     <div className="relative mb-2">
+      {/* Bugfix (gemeldet 2026-08-07): Fotos/GIFs in Chat-Nachrichten (auch
+          von Fans geschickte) liessen sich nicht anklicken/vergroessern -
+          derselbe Lightbox wie schon in der Galerie, nur bisher hier nicht
+          verdrahtet. Video/Audio behalten ihre eigenen nativen Controls
+          (Video hat schon einen Vollbild-Button eingebaut). */}
       {proxied && (m.type === "photo" || m.type === "gif") ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={proxied} alt="" className="max-w-full rounded-lg max-h-80 object-contain" onLoad={onMediaLoad} />
+        <img
+          src={proxied}
+          alt=""
+          className="max-w-full rounded-lg max-h-80 object-contain cursor-zoom-in"
+          onLoad={onMediaLoad}
+          onClick={() => onOpenLightbox?.(m)}
+        />
       ) : proxied && m.type === "video" ? (
         <video src={proxied} controls className="max-w-full rounded-lg max-h-80" onLoadedMetadata={onMediaLoad} />
       ) : proxied && m.type === "audio" ? (
@@ -2454,7 +2465,7 @@ export default function OfInboxClient({
                                     </div>
                                   );
                                 })()}
-                                <MessageMedia media={m.media} mediaProxyUrl={mediaProxyUrl} onMediaLoad={stickMessagesToBottom} />
+                                <MessageMedia media={m.media} mediaProxyUrl={mediaProxyUrl} onMediaLoad={stickMessagesToBottom} onOpenLightbox={setLightboxMedia} />
                               </>
                             )}
                             {!m.isTip && m.text && <div dangerouslySetInnerHTML={{ __html: m.text }} />}
