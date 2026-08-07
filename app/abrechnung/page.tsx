@@ -205,17 +205,20 @@ export default function AbrechnungPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId, isAdmin, monthOffset]);
 
-  // Explizit gewuenscht (2026-08-07): Admin darf jede Schicht bearbeiten/
-  // loeschen, jeder Mitarbeiter seine eigenen (erlaubteProfile filtert oben
-  // schon auf "nur eigene Zeile" fuer Nicht-Admins - dieselbe Absicherung
-  // gilt hier implizit, da nur die eigenen shiftRows angezeigt werden).
+  // Bugfix (gemeldet 2026-08-07): NUR Admin darf Zeiten aendern/loeschen,
+  // nicht der Chatter selbst - UI zeigt die Controls schon nur fuer Admin
+  // an, dieser Guard hier ist die zweite Absicherung direkt in der
+  // Funktion (die RLS deckt DELETE serverseitig ohnehin schon ab, UPDATE
+  // bewusst nicht, da normales Ausstechen dieselbe Spalte schreibt).
   async function updateShiftTime(shiftId: number, field: "started_at" | "ended_at", value: string) {
+    if (!isAdmin) return;
     const iso = value ? new Date(value).toISOString() : null;
     const { error } = await supabase.from("shift_assignments").update({ [field]: iso }).eq("id", shiftId);
     if (!error) ladeAbrechnungsZentrale();
   }
 
   async function deleteShift(shiftId: number) {
+    if (!isAdmin) return;
     if (!window.confirm("Diese Schicht wirklich löschen?")) return;
     const { error } = await supabase.from("shift_assignments").delete().eq("id", shiftId);
     if (!error) ladeAbrechnungsZentrale();
@@ -334,10 +337,13 @@ export default function AbrechnungPage() {
               )}
             </div>
 
-            {/* Explizit gewuenscht (2026-08-07): einzelne Schichten
-                bearbeiten/loeschen koennen, falls beim Einstechen ein
-                Fehler passiert ist - Admin fuer alle, jeder fuer sich
-                selbst (erlaubteProfile filtert oben schon entsprechend). */}
+            {/* Bugfix (gemeldet 2026-08-07): Zeiten aendern/loeschen soll
+                NUR Admin duerfen, nicht der Chatter selbst (Missbrauchs-
+                Risiko - eigene Stunden nachtraeglich aufblaehen). DELETE
+                war serverseitig (RLS) schon admin-only, UPDATE mit Absicht
+                nicht (normales Ausstechen braucht das) - Sperre deshalb
+                hier in der UI: Chatter sehen ihre Schichten nur read-only,
+                Admin kriegt die editierbaren Felder. */}
             <button
               onClick={() =>
                 setExpandedShifts((prev) => {
@@ -348,34 +354,42 @@ export default function AbrechnungPage() {
               }
               className="text-[10px] text-slate-500 hover:text-[#E2C48A] mt-3 font-bold uppercase tracking-wide"
             >
-              {expandedShifts.has(daten.userId) ? "▲ Schichten ausblenden" : `▼ ${daten.shiftRows.length} Schicht(en) anzeigen/bearbeiten`}
+              {expandedShifts.has(daten.userId) ? "▲ Schichten ausblenden" : `▼ ${daten.shiftRows.length} Schicht(en) anzeigen${isAdmin ? "/bearbeiten" : ""}`}
             </button>
             {expandedShifts.has(daten.userId) && (
               <div className="mt-2 space-y-1.5">
                 {daten.shiftRows.length === 0 && <div className="text-[10px] text-slate-600">Keine Schichten in diesem Monat</div>}
-                {daten.shiftRows.map((s: any) => (
-                  <div key={s.id} className="flex items-center gap-2 bg-[#050505]/60 p-2 rounded border border-[#9C7A3D]/10 text-[10px]">
-                    <input
-                      type="datetime-local"
-                      defaultValue={toDatetimeLocal(s.started_at)}
-                      onBlur={(e) => e.target.value && updateShiftTime(s.id, "started_at", e.target.value)}
-                      style={{ colorScheme: "dark" }}
-                      className="bg-black/60 border border-white/10 rounded px-1.5 py-1 text-[#E2C48A] outline-none focus:border-[#C9A86A]/40"
-                    />
-                    <span className="text-slate-600">bis</span>
-                    <input
-                      type="datetime-local"
-                      defaultValue={toDatetimeLocal(s.ended_at)}
-                      onBlur={(e) => updateShiftTime(s.id, "ended_at", e.target.value)}
-                      style={{ colorScheme: "dark" }}
-                      className="bg-black/60 border border-white/10 rounded px-1.5 py-1 text-[#E2C48A] outline-none focus:border-[#C9A86A]/40"
-                    />
-                    {!s.ended_at && <span className="text-emerald-400 font-bold">läuft noch</span>}
-                    <button onClick={() => deleteShift(s.id)} className="ml-auto text-red-400 hover:text-red-300 font-bold px-2">
-                      Löschen
-                    </button>
-                  </div>
-                ))}
+                {daten.shiftRows.map((s: any) =>
+                  isAdmin ? (
+                    <div key={s.id} className="flex items-center gap-2 bg-[#050505]/60 p-2 rounded border border-[#9C7A3D]/10 text-[10px]">
+                      <input
+                        type="datetime-local"
+                        defaultValue={toDatetimeLocal(s.started_at)}
+                        onBlur={(e) => e.target.value && updateShiftTime(s.id, "started_at", e.target.value)}
+                        style={{ colorScheme: "dark" }}
+                        className="bg-black/60 border border-white/10 rounded px-1.5 py-1 text-[#E2C48A] outline-none focus:border-[#C9A86A]/40"
+                      />
+                      <span className="text-slate-600">bis</span>
+                      <input
+                        type="datetime-local"
+                        defaultValue={toDatetimeLocal(s.ended_at)}
+                        onBlur={(e) => updateShiftTime(s.id, "ended_at", e.target.value)}
+                        style={{ colorScheme: "dark" }}
+                        className="bg-black/60 border border-white/10 rounded px-1.5 py-1 text-[#E2C48A] outline-none focus:border-[#C9A86A]/40"
+                      />
+                      {!s.ended_at && <span className="text-emerald-400 font-bold">läuft noch</span>}
+                      <button onClick={() => deleteShift(s.id)} className="ml-auto text-red-400 hover:text-red-300 font-bold px-2">
+                        Löschen
+                      </button>
+                    </div>
+                  ) : (
+                    <div key={s.id} className="flex items-center gap-2 bg-[#050505]/60 p-2 rounded border border-[#9C7A3D]/10 text-[10px] text-slate-300">
+                      <span>{new Date(s.started_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="text-slate-600">bis</span>
+                      <span>{s.ended_at ? new Date(s.ended_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : <span className="text-emerald-400 font-bold">läuft noch</span>}</span>
+                    </div>
+                  )
+                )}
               </div>
             )}
           </div>
