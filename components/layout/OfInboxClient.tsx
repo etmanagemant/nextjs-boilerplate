@@ -1076,14 +1076,25 @@ export default function OfInboxClient({
   // Aufrufstellen). Bricht ab, sobald der Chatter selbst hochgescrollt
   // hat (>150px vom Ende weg), damit kein absichtliches Lesen alter
   // Nachrichten mitten im Zeitfenster weggerissen wird.
-  function stickMessagesToBottom() {
+  // Bugfix (gemeldet 2026-08-07): der eigentliche Grund fuer "lande ganz
+  // oben bei der ersten Nachricht" - diese Funktion hat nur gescrollt WENN
+  // man schon nah am Ende war (distanceFromBottom < 150). Bei einem frisch
+  // geoeffneten Chat steht scrollTop aber IMMER auf 0, also ist
+  // distanceFromBottom riesig (== fast die ganze Konversationshoehe) - die
+  // Bedingung hat den Scroll beim ersten Laden also NIE ausgeloest, nur
+  // beim stillen Nachladen neuer Nachrichten waehrend man schon unten war.
+  // force=true erzwingt den Scroll unabhaengig von der aktuellen Position
+  // (fuers erste Laden), force=false bleibt beim alten "nur wenn eh schon
+  // unten" Verhalten (fuers stille Nachladen, damit man beim Lesen alter
+  // Nachrichten nicht weggerissen wird).
+  function stickMessagesToBottom(force = false) {
     const delays = [0, 150, 400, 900, 1800, 3500];
     delays.forEach((ms) => {
       setTimeout(() => {
         const el = messagesContainerRef.current;
         if (!el) return;
         const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-        if (distanceFromBottom < 150) el.scrollTop = el.scrollHeight;
+        if (force || distanceFromBottom < 150) el.scrollTop = el.scrollHeight;
       }, ms);
     });
   }
@@ -1126,8 +1137,10 @@ export default function OfInboxClient({
         // dann die Container-Höhe nachträglich, und der einmalige Scroll
         // landet vor diesem Wachstum irgendwo in der Mitte statt unten.
         // Mehrere zeitversetzte Nach-Scrolls fangen das ab, ohne ein
-        // eigenes Höhen-Beobachtungssystem zu brauchen.
-        stickMessagesToBottom();
+        // eigenes Höhen-Beobachtungssystem zu brauchen. force:true, weil
+        // scrollTop beim frischen Laden immer 0 ist (siehe Kommentar an
+        // der Funktion selbst).
+        stickMessagesToBottom(true);
       }
     } catch (e: any) {
       if (opts.more || latestFanIdRef.current === fanId) setSendError(e.message || "Fehler beim Laden der Nachrichten");
