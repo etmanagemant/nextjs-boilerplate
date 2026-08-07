@@ -35,6 +35,7 @@ export function RevenueChart({ userId, isAdmin }: { userId?: string; isAdmin: bo
   const [customEnd, setCustomEnd] = useState(todayIso());
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [isAgencyTotal, setIsAgencyTotal] = useState(false);
+  const [isModelTotal, setIsModelTotal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -55,6 +56,7 @@ export function RevenueChart({ userId, isAdmin }: { userId?: string; isAdmin: bo
       .then((d) => {
         setBuckets(d.buckets || []);
         setIsAgencyTotal(!!d.isAgencyTotal);
+        setIsModelTotal(!!d.isModelTotal);
       })
       .catch(() => setBuckets([]))
       .finally(() => setLoading(false));
@@ -88,7 +90,7 @@ export function RevenueChart({ userId, isAdmin }: { userId?: string; isAdmin: bo
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-sm font-bold text-[#C9A86A] uppercase tracking-wider">
-            {isAgencyTotal ? "Agentur-Umsatz" : "Dein Umsatz"}
+            {isAgencyTotal ? "Agentur-Umsatz" : isModelTotal ? "Dein Model-Umsatz" : "Dein Umsatz"}
           </h2>
           <div className="text-2xl font-black text-[#E2C48A] font-mono mt-1">${total.toFixed(2)}</div>
         </div>

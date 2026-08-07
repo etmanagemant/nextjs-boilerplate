@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabaseClient";
-import { isAdminTierRole } from "../../lib/roles";
+import { isAdminTierRole, PERMISSION_GRID_ROLES } from "../../lib/roles";
 import { CircularProgress, MiniBarChart } from "@/components/layout/StatViz";
 import { RevenueChart } from "@/components/layout/RevenueChart";
 
@@ -87,14 +87,17 @@ export default function DashboardPage() {
       const todayStartIso = todayStart.toISOString();
 
       const [profilesRes, assignmentsRes, revenueRes, modelsRes, abandonedLeadsRes] = await Promise.all([
-        supabase.from("profiles").select("user_id, full_name, email"),
+        supabase.from("profiles").select("user_id, full_name, email, role"),
         supabase.from("shift_assignments").select("*").gte("started_at", todayStartIso),
         supabase.from("chatter_revenues").select("*").gte("created_at", todayStartIso).neq("model_id", TEST_MODEL_ID),
         supabase.from("models").select("id, name, platform_type"),
         supabase.from("abandoned_leads").select("*").order("abandoned_at", { ascending: false }).limit(50)
       ]);
 
-      const profiles = profilesRes.data || [];
+      // Explizit gewuenscht (2026-08-07): Model-Rollen-Accounts (nur zum
+      // Content-Hochladen da, chatten/moderieren nicht) gehoeren nicht in
+      // die Mitarbeiter-Rangliste - nur die vier Staff-Rollen zaehlen.
+      const profiles = (profilesRes.data || []).filter((p: any) => (PERMISSION_GRID_ROLES as readonly string[]).includes(p.role));
       const assignments = assignmentsRes.data || [];
       const revenues = revenueRes.data || [];
       // Explizit gewuenscht (2026-08-07): Testmodel dient nur zum
@@ -276,7 +279,7 @@ export default function DashboardPage() {
       setRankingMonthLabel(monthDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" }));
 
       const [profilesRes, revenueRes, modelsRes, assignmentsRes] = await Promise.all([
-        supabase.from("profiles").select("user_id, full_name"),
+        supabase.from("profiles").select("user_id, full_name, role"),
         supabase.from("chatter_revenues").select("user_id, model_id, amount, gross_amount, platform")
           .gte("created_at", monthStart.toISOString()).lt("created_at", monthEnd.toISOString()).neq("model_id", TEST_MODEL_ID),
         supabase.from("models").select("id, name"),
@@ -284,7 +287,9 @@ export default function DashboardPage() {
           .gte("started_at", monthStart.toISOString()).lt("started_at", monthEnd.toISOString()),
       ]);
 
-      const profiles = profilesRes.data || [];
+      // Gleicher Ausschluss wie oben in ladeLiveDaten - Model-Rollen-Accounts
+      // gehoeren nicht in die Mitarbeiter-Rangliste.
+      const profiles = (profilesRes.data || []).filter((p: any) => (PERMISSION_GRID_ROLES as readonly string[]).includes(p.role));
       const revenues = revenueRes.data || [];
       const models = (modelsRes.data || []).filter((m: any) => m.id !== TEST_MODEL_ID);
       const assignments = assignmentsRes.data || [];

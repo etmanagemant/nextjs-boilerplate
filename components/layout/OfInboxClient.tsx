@@ -2058,6 +2058,9 @@ export default function OfInboxClient({
                     <>
                       {stats?.overview?.massMessages && (
                         <>
+                          {/* Bugfix (gemeldet 2026-08-07): Einnahmen gehoeren nicht
+                              hierher - dieses Panel ist nur zum Loeschen von
+                              Massnachrichten und Sehen von Gesendet/Betrachtet da. */}
                           <div className="p-3 grid grid-cols-2 gap-3">
                             <div>
                               <div className="text-[10px] text-slate-500 uppercase">Massnachrichten (30 Tage)</div>
@@ -2066,10 +2069,6 @@ export default function OfInboxClient({
                             <div>
                               <div className="text-[10px] text-slate-500 uppercase">Views</div>
                               <div className="text-lg font-black text-[#C9A86A]">{stats.overview.massMessages.views?.total ?? 0}</div>
-                            </div>
-                            <div className="col-span-2">
-                              <div className="text-[10px] text-slate-500 uppercase">Einnahmen</div>
-                              <div className="text-lg font-black text-[#C9A86A]">${stats.overview.massMessages.earnings?.total ?? 0}</div>
                             </div>
                           </div>
                           {Array.isArray(stats.top?.purchases) && stats.top.purchases.length > 0 && (
@@ -2134,7 +2133,7 @@ export default function OfInboxClient({
               {chats.map((c) => (
                 <div
                   key={c.withUser.id}
-                  className={`group relative w-full flex items-center gap-3 transition ${activeFanId === c.withUser.id ? "bg-[#C9A86A]/10" : "hover:bg-black/30"}`}
+                  className={`group w-full flex items-center transition ${activeFanId === c.withUser.id ? "bg-[#C9A86A]/10" : "hover:bg-black/30"}`}
                 >
                   <button onClick={() => openChat(c.withUser.id)} className="flex-1 min-w-0 text-left p-3.5 flex items-center gap-3">
                     <Avatar fanId={c.withUser.id} size={52} />
@@ -2155,16 +2154,19 @@ export default function OfInboxClient({
                         )}
                       </div>
                       {c.lastMessage && (
-                        <div className="text-sm text-slate-400 mt-0.5 truncate pr-5">
+                        <div className="text-sm text-slate-400 mt-0.5 truncate">
                           {stripHtmlPreview(c.lastMessage.text)}
                         </div>
                       )}
                     </div>
                   </button>
+                  {/* Bugfix (gemeldet 2026-08-07): war absolut ueber der
+                      "ungelesen"-Zahl positioniert, ueberlappte sie. Jetzt
+                      ein eigenes Flex-Feld am Zeilenende statt Overlay. */}
                   <button
                     onClick={() => deleteChat(c.withUser.id)}
                     title="Chat löschen"
-                    className="absolute top-3 right-3 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                    className="flex-shrink-0 pr-3 pl-1 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
                   >
                     <CloseIcon size={14} />
                   </button>

@@ -59,10 +59,21 @@ export async function GET(req: NextRequest) {
   const offset = Math.max(0, Number(searchParams.get("offset")) || 0);
   const requestedUserId = searchParams.get("userId");
 
-  // Chatter darf nur die eigene ID sehen - egal was im Query steht.
-  const targetUserId = adminTier ? requestedUserId || null : user.id;
-
   const supabase = createSupabaseAdminClient();
+
+  // Model-Rolle (2026-08-07): eigener Umsatz nach ModelID statt UserID
+  // gefiltert - modelId wird wie bei /api/crm/model-onlyfans-stats NIE vom
+  // Client uebernommen, sondern server-seitig ueber owner_user_id aufgeloest,
+  // sonst koennte ein Model fremde Umsaetze abfragen.
+  let ownModelId: string | null = null;
+  if (profile?.role === "model") {
+    const { data: ownModel } = await supabase.from("models").select("id").eq("owner_user_id", user.id).maybeSingle();
+    if (!ownModel) return NextResponse.json({ error: "Kein Model-Profil verknüpft" }, { status: 404 });
+    ownModelId = ownModel.id;
+  }
+
+  // Chatter darf nur die eigene ID sehen - egal was im Query steht.
+  const targetUserId = ownModelId ? null : adminTier ? requestedUserId || null : user.id;
 
   let bucketStarts: Date[] = [];
   let bucketEnd: Date;
@@ -129,7 +140,8 @@ export async function GET(req: NextRequest) {
     .gte("created_at", rangeStart.toISOString())
     .lt("created_at", bucketEnd.toISOString())
     .neq("model_id", TEST_MODEL_ID);
-  if (targetUserId) query = query.eq("user_id", targetUserId);
+  if (ownModelId) query = query.eq("model_id", ownModelId);
+  else if (targetUserId) query = query.eq("user_id", targetUserId);
   const { data: rows, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -147,5 +159,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ buckets, isAgencyTotal: adminTier && !targetUserId });
+  return NextResponse.json({ buckets, isAgencyTotal: adminTier && !targetUserId, isModelTotal: !!ownModelId });
 }
