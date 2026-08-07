@@ -29,7 +29,7 @@ export default async function BuchhaltungPage({ searchParams }: { searchParams: 
   const monthLabel = monthDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
 
   // Daten parallel laden
-  const [agencyRes, profilesRes, shiftsRes, revenueRes] = await Promise.all([
+  const [agencyRes, profilesRes, shiftsRes, revenueRes, invoicesRes] = await Promise.all([
     supabase.from("agency_settings").select("*").eq("id", 1).single(),
     supabase.from("profiles").select("*"),
     supabase.from("shift_assignments").select("*")
@@ -40,6 +40,9 @@ export default async function BuchhaltungPage({ searchParams }: { searchParams: 
     supabase.from("chatter_revenues").select("*")
       .gte("created_at", monthStart.toISOString()).lt("created_at", monthEnd.toISOString())
       .neq("model_id", TEST_MODEL_ID),
+    // Explizit gewuenscht (2026-08-07): Chatter-selbst-generierte Rechnungen
+    // fuer den Admin einsehbar machen.
+    supabase.from("crm_invoices").select("*").eq("month_start", monthStart.toISOString().slice(0, 10)),
   ]);
 
   const agency = agencyRes.data || { agency_name: "ET Management" };
@@ -48,6 +51,7 @@ export default async function BuchhaltungPage({ searchParams }: { searchParams: 
   const chatterProfile = (profilesRes.data || []).filter((p) => p.role !== "model");
   const assignments = shiftsRes.data || [];
   const revenues = revenueRes.data || [];
+  const invoices = invoicesRes.data || [];
   return (
     <main className="p-6 max-w-5xl mx-auto min-h-screen bg-[#0A0A0A] text-[#E2C48A] rounded-2xl my-6 border border-white/5 shadow-2xl">
       <div className="mb-6 border-b border-white/5 pb-4">
@@ -121,6 +125,44 @@ export default async function BuchhaltungPage({ searchParams }: { searchParams: 
             );
           })}
         </div>
+      </section>
+
+      {/* 3. SEKTION: Von Mitarbeitern selbst generierte Rechnungen (2026-08-07) */}
+      <section className="mt-8">
+        <h2 className="text-xs font-bold text-[#C9A86A] mb-4 uppercase tracking-wider">Eingereichte Rechnungen der Mitarbeiter — {monthLabel}</h2>
+        {invoices.length === 0 ? (
+          <div className="text-xs text-slate-500 bg-black/30 p-4 rounded-xl border border-white/5">Noch keine Rechnung für diesen Monat generiert.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#9C7A3D]/10 bg-[#050505] text-[#C9A86A] font-semibold text-xs uppercase tracking-wider">
+                  <th className="p-3">Mitarbeiter</th>
+                  <th className="p-3">Rechnungsnummer</th>
+                  <th className="p-3">Betrag</th>
+                  <th className="p-3">Erstellt am</th>
+                  <th className="p-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv) => {
+                  const p = chatterProfile.find((c) => c.user_id === inv.user_id);
+                  return (
+                    <tr key={inv.id} className="border-b border-[#9C7A3D]/5 hover:bg-black/20 transition text-xs">
+                      <td className="p-3 font-semibold text-white">{p?.full_name || "Unbekannt"}</td>
+                      <td className="p-3 font-mono text-slate-400">{inv.invoice_number}</td>
+                      <td className="p-3 font-mono font-bold text-emerald-400">${Number(inv.amount).toFixed(2)}</td>
+                      <td className="p-3 text-slate-400">{new Date(inv.generated_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+                      <td className="p-3">
+                        <a href={`/api/abrechnung/rechnung-pdf?userId=${inv.user_id}&monat=${monthOffset}`} className="text-[#C9A86A] hover:text-[#E2C48A] font-bold">Ansehen</a>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </main>
   );

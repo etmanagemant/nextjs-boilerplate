@@ -2,8 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabaseClient";
+import { updateChatterBillingDetails } from "./actions";
+import AbrechnungFormClient from "@/components/layout/AbrechnungFormClient";
 
 const TEST_MODEL_ID = "d7976e92-434e-488a-8ec4-bba92eb31dcf";
+
+// Fuer <input type="datetime-local">: braucht lokale Zeit ohne Zeitzonen-
+// Suffix, nicht toISOString()'s UTC-"Z"-Format.
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function AbrechnungPage() {
   const supabase = createClient();
@@ -18,12 +29,9 @@ export default function AbrechnungPage() {
   // Dashboard-Diagramm (0 = aktueller Monat, hoeher = weiter zurueck).
   const [monthOffset, setMonthOffset] = useState(0);
   const [monthLabel, setMonthLabel] = useState("");
-  
-  const [address, setAddress] = useState("");
-  const [iban, setIban] = useState("");
-  const [cryptoNetwork, setCryptoNetwork] = useState("");
-  const [cryptoWallet, setCryptoWallet] = useState("");
-  const [saveStatus, setSaveStatus] = useState("");
+  const [myProfile, setMyProfile] = useState<any>(null);
+  const [invoiceStatus, setInvoiceStatus] = useState<Record<string, string>>({});
+  const [expandedShifts, setExpandedShifts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     async function ladeEinmaligeStammdaten() {
@@ -42,12 +50,7 @@ export default function AbrechnungPage() {
         if (userProfile?.role) {
           setCurrentUserRole(userProfile.role);
         }
-        if (userProfile) {
-          setAddress(userProfile.chatter_address || "");
-          setIban(userProfile.chatter_iban || "");
-          setCryptoNetwork(userProfile.chatter_crypto_network || "");
-          setCryptoWallet(userProfile.chatter_crypto_wallet || "");
-        }
+        setMyProfile(userProfile || null);
       } catch (err) { console.error(err); }
     }
     ladeEinmaligeStammdaten();
@@ -93,7 +96,12 @@ export default function AbrechnungPage() {
         let stunden = 0;
         let privatShowStunden = 0;
         let privatShowCount = 0; // 🎭 NEUE METRIK für Prämien
-        
+        // Explizit gewuenscht (2026-08-07): einzelne Schichten muessen
+        // bearbeitet/geloescht werden koennen (Tippfehler beim Einstechen).
+        const eigeneSchichten = shifts
+          .filter((s: any) => (s.chatter_id || s.user_id) === p.user_id)
+          .sort((a: any, b: any) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+
         shifts.forEach((s: any) => {
           if ((s.chatter_id || s.user_id) === p.user_id && s.started_at) {
             const von = new Date(s.started_at).getTime();
@@ -174,7 +182,8 @@ export default function AbrechnungPage() {
           rate: provisionsSatz,
           hourlyRate: hourlyRate, // 💰 Neu
           auszahlung: auszahlung,
-          auszahlungStripchat: auszahlungStripchat
+          auszahlungStripchat: auszahlungStripchat,
+          shiftRows: eigeneSchichten
         };
       });
       
@@ -196,23 +205,40 @@ export default function AbrechnungPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId, isAdmin, monthOffset]);
 
-  async function handleSaveProfile() {
-    setSaveStatus("Speichert...");
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        chatter_address: address,
-        chatter_iban: iban,
-        chatter_crypto_network: cryptoNetwork,
-        chatter_crypto_wallet: cryptoWallet
-      })
-      .eq("user_id", currentUserId);
+  // Explizit gewuenscht (2026-08-07): Admin darf jede Schicht bearbeiten/
+  // loeschen, jeder Mitarbeiter seine eigenen (erlaubteProfile filtert oben
+  // schon auf "nur eigene Zeile" fuer Nicht-Admins - dieselbe Absicherung
+  // gilt hier implizit, da nur die eigenen shiftRows angezeigt werden).
+  async function updateShiftTime(shiftId: number, field: "started_at" | "ended_at", value: string) {
+    const iso = value ? new Date(value).toISOString() : null;
+    const { error } = await supabase.from("shift_assignments").update({ [field]: iso }).eq("id", shiftId);
+    if (!error) ladeAbrechnungsZentrale();
+  }
 
-    if (!error) {
-      setSaveStatus("✅ Erfolgreich gespeichert!");
-      setTimeout(() => setSaveStatus(""), 2000);
-    } else {
-      setSaveStatus("❌ Fehler beim Speichern");
+  async function deleteShift(shiftId: number) {
+    if (!window.confirm("Diese Schicht wirklich löschen?")) return;
+    const { error } = await supabase.from("shift_assignments").delete().eq("id", shiftId);
+    if (!error) ladeAbrechnungsZentrale();
+  }
+
+  // Explizit gewuenscht (2026-08-07): Chatter/Moderator generieren sich
+  // selbst eine Rechnung fuer den aktuell ausgewaehlten Monat - Admin sieht
+  // sie danach in der Buchhaltung (siehe crm_invoices-Log in der Route).
+  async function ladeEigeneRechnung() {
+    setInvoiceStatus((s) => ({ ...s, self: "Wird erstellt…" }));
+    try {
+      const res = await fetch(`/api/abrechnung/rechnung-pdf?monat=${monthOffset}`);
+      if (!res.ok) throw new Error("Fehler beim Erstellen");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Rechnung_${monthLabel.replace(/\s/g, "_")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setInvoiceStatus((s) => ({ ...s, self: "" }));
+    } catch {
+      setInvoiceStatus((s) => ({ ...s, self: "❌ Fehlgeschlagen" }));
     }
   }
 
@@ -240,29 +266,21 @@ export default function AbrechnungPage() {
 
       {!isAdmin && (
         <section className="mb-8 bg-black/50 p-5 rounded-xl border border-[#9C7A3D]/20 shadow-xl">
-          <h2 className="text-xs font-black text-[#C9A86A] uppercase tracking-widest mb-4"><span>📝</span> <span>Deine Zahlungsdaten hinterlegen</span></h2>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Adresse</label>
-              <textarea value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="off" placeholder="Straße, PLZ, Ort" className="w-full h-16 bg-black border border-[#9C7A3D]/20 rounded p-2 text-white outline-none focus:border-[#C9A86A]" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">IBAN</label>
-                <input type="text" value={iban} onChange={(e) => setIban(e.target.value)} autoComplete="off" placeholder="DE..." className="w-full bg-black border border-[#9C7A3D]/20 rounded p-2 text-white outline-none focus:border-[#C9A86A]" />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Crypto Netz</label>
-                <input type="text" value={cryptoNetwork} onChange={(e) => setCryptoNetwork(e.target.value)} autoComplete="off" placeholder="z.B. TRC20" className="w-full bg-black border border-[#9C7A3D]/20 rounded p-2 text-white outline-none focus:border-[#C9A86A]" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Crypto Wallet</label>
-              <input type="text" value={cryptoWallet} onChange={(e) => setCryptoWallet(e.target.value)} autoComplete="off" placeholder="Wallet Adresse..." className="w-full bg-black border border-[#9C7A3D]/20 rounded p-2 text-white outline-none focus:border-[#C9A86A]" />
-            </div>
-            <button onClick={handleSaveProfile} className="w-full bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black text-xs font-bold px-3 py-2 rounded uppercase cursor-pointer"><span>💾</span> Daten speichern</button>
-            {saveStatus && <div className="text-center text-xs font-mono text-emerald-400">{saveStatus}</div>}
-          </div>
+          <h2 className="text-xs font-black text-[#C9A86A] uppercase tracking-widest mb-4"><span>📝</span> <span>Deine Rechnungs- & Zahlungsdaten hinterlegen</span></h2>
+          {/* Bugfix (gemeldet 2026-08-07): dieses fertige Formular gab es
+              schon (AbrechnungFormClient + updateChatterBillingDetails),
+              war aber nirgends eingebunden - stattdessen ein simpleres Ad-
+              hoc-Formular mit anderen Feldern, das nicht zur PDF-Route
+              passte. Jetzt das eigentlich vorgesehene Formular verdrahtet. */}
+          <AbrechnungFormClient profile={myProfile} actionTarget={updateChatterBillingDetails} />
+          <button
+            onClick={ladeEigeneRechnung}
+            disabled={invoiceStatus.self === "Wird erstellt…"}
+            className="w-full mt-4 bg-gradient-to-b from-[#C9A86A] to-[#9C7A3D] hover:from-[#E5C158] text-black text-xs font-bold px-3 py-2 rounded uppercase cursor-pointer disabled:opacity-50"
+          >
+            📄 Rechnung für {monthLabel} generieren & herunterladen
+          </button>
+          {invoiceStatus.self && <div className="text-center text-xs font-mono text-red-400 mt-2">{invoiceStatus.self}</div>}
         </section>
       )}
 
@@ -315,6 +333,51 @@ export default function AbrechnungPage() {
                 </>
               )}
             </div>
+
+            {/* Explizit gewuenscht (2026-08-07): einzelne Schichten
+                bearbeiten/loeschen koennen, falls beim Einstechen ein
+                Fehler passiert ist - Admin fuer alle, jeder fuer sich
+                selbst (erlaubteProfile filtert oben schon entsprechend). */}
+            <button
+              onClick={() =>
+                setExpandedShifts((prev) => {
+                  const next = new Set(prev);
+                  next.has(daten.userId) ? next.delete(daten.userId) : next.add(daten.userId);
+                  return next;
+                })
+              }
+              className="text-[10px] text-slate-500 hover:text-[#E2C48A] mt-3 font-bold uppercase tracking-wide"
+            >
+              {expandedShifts.has(daten.userId) ? "▲ Schichten ausblenden" : `▼ ${daten.shiftRows.length} Schicht(en) anzeigen/bearbeiten`}
+            </button>
+            {expandedShifts.has(daten.userId) && (
+              <div className="mt-2 space-y-1.5">
+                {daten.shiftRows.length === 0 && <div className="text-[10px] text-slate-600">Keine Schichten in diesem Monat</div>}
+                {daten.shiftRows.map((s: any) => (
+                  <div key={s.id} className="flex items-center gap-2 bg-[#050505]/60 p-2 rounded border border-[#9C7A3D]/10 text-[10px]">
+                    <input
+                      type="datetime-local"
+                      defaultValue={toDatetimeLocal(s.started_at)}
+                      onBlur={(e) => e.target.value && updateShiftTime(s.id, "started_at", e.target.value)}
+                      style={{ colorScheme: "dark" }}
+                      className="bg-black/60 border border-white/10 rounded px-1.5 py-1 text-[#E2C48A] outline-none focus:border-[#C9A86A]/40"
+                    />
+                    <span className="text-slate-600">bis</span>
+                    <input
+                      type="datetime-local"
+                      defaultValue={toDatetimeLocal(s.ended_at)}
+                      onBlur={(e) => updateShiftTime(s.id, "ended_at", e.target.value)}
+                      style={{ colorScheme: "dark" }}
+                      className="bg-black/60 border border-white/10 rounded px-1.5 py-1 text-[#E2C48A] outline-none focus:border-[#C9A86A]/40"
+                    />
+                    {!s.ended_at && <span className="text-emerald-400 font-bold">läuft noch</span>}
+                    <button onClick={() => deleteShift(s.id)} className="ml-auto text-red-400 hover:text-red-300 font-bold px-2">
+                      Löschen
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
